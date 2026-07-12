@@ -19,7 +19,7 @@ import { athletes, type Athlete } from "@/lib/demo/data";
 import { isStaff } from "@/lib/rbac";
 
 import { programDueMeta } from "./program-due";
-import { RosterFilter } from "./roster-filter";
+import { RosterBoard } from "./roster-board";
 
 export default async function StaffAthletesPage() {
   const user = await requireUserWithProfile();
@@ -43,7 +43,7 @@ export default async function StaffAthletesPage() {
       <PageHeader
         eyebrow="Staff Workspace · Athletes"
         title="Roster"
-        description="Run the room off due dates — who needs programming next, then the full member board by bucket. Open a profile to manage the athlete."
+        description="Run the room off due dates — who needs programming next, then the member board exactly like the Trello workflow. Click a card to see the athlete's record and CAP notes."
       />
 
       {/* KPI tiles */}
@@ -107,7 +107,8 @@ export default async function StaffAthletesPage() {
         </CardContent>
       </Card>
 
-      <RosterFilter athletes={athletes} />
+      {/* The member board — Trello-style bucket columns, cards open in place */}
+      <RosterBoard athletes={athletes} />
     </div>
   );
 }

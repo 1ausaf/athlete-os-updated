@@ -27,6 +27,7 @@ import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import {
   athleteById,
+  athleteGoals,
   bucketLabel,
   fmtRange,
   money2,
@@ -39,21 +40,6 @@ import { isStaff } from "@/lib/rbac";
 
 import { programDueLong } from "../program-due";
 import { CapNotesPanel } from "./cap-notes-panel";
-
-/** Sport-specific training goal per athlete (Trello-card "goal" line). */
-const athleteGoals: Record<string, string> = {
-  "ath-jordan": "Improve explosiveness and top-end speed for pro tryouts.",
-  "ath-maya":
-    "Return to full-court play post-ankle and add 2 inches to the vertical.",
-  "ath-dre": "Break a 4.5s 40 and add lean mass before senior season.",
-  "ath-sofia":
-    "Hold match-day power output through the full season — zero soft-tissue flags.",
-  "ath-ty": "Build rotational power while keeping the throwing arm healthy.",
-  "ath-ren": "Hit a 295 kg total at the national qualifier.",
-  "ath-priya":
-    "Rebuild training consistency and add 2 inches to the approach jump before club season.",
-  "ath-leo": "Add 10 yards of driver carry without low-back flare-ups.",
-};
 
 export default async function StaffAthleteProfilePage({
   params,
