@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ===== Light theme — premium, high-contrast, wolf-monochrome ===== */
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 9%;
+
+    --surface: 0 0% 100%;
+    --surface-muted: 210 20% 96%;
+    --surface-raised: 0 0% 100%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 9%;
+
+    /* In light mode the primary action is confident charcoal. */
+    --primary: 222 47% 11%;
+    --primary-foreground: 60 100% 98%;
+
+    --secondary: 214 16% 93%;
+    --secondary-foreground: 222 40% 14%;
+
+    --muted: 214 16% 94%;
+    --muted-foreground: 220 12% 40%;
+
+    --accent: 214 16% 93%;
+    --accent-foreground: 222 40% 14%;
+
+    --destructive: 0 74% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 58% 34%;
+    --success-foreground: 0 0% 100%;
+    --warning: 33 92% 42%;
+    --warning-foreground: 0 0% 100%;
+    --info: 212 78% 44%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 220 16% 88%;
+    --input: 220 16% 86%;
+    --ring: 222 47% 11%;
+
+    /* Signature volt — used as accent shape/fill, never as text on white. */
+    --brand: 74 84% 46%;
+    --brand-foreground: 100 40% 8%;
+    --brand-soft: 74 70% 92%;
+    --brand-ink: 90 60% 22%;
+
+    --shadow-color: 222 47% 30%;
+    --radius: 0.75rem;
+  }
+
+  /* ===== Dark theme — athletic, graphite + volt ===== */
+  .dark {
+    --background: 222 22% 6%;
+    --foreground: 210 24% 96%;
+
+    --surface: 222 18% 9%;
+    --surface-muted: 222 16% 12%;
+    --surface-raised: 222 16% 13%;
+
+    --card: 222 18% 9.5%;
+    --card-foreground: 210 24% 96%;
+
+    --popover: 222 20% 8%;
+    --popover-foreground: 210 24% 96%;
+
+    /* In dark mode the primary action is the volt — pure energy on black. */
+    --primary: 74 90% 57%;
+    --primary-foreground: 100 60% 7%;
+
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 20% 94%;
+
+    --muted: 220 14% 15%;
+    --muted-foreground: 218 14% 64%;
+
+    --accent: 220 14% 17%;
+    --accent-foreground: 210 20% 96%;
+
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 150 62% 46%;
+    --success-foreground: 150 60% 7%;
+    --warning: 38 94% 56%;
+    --warning-foreground: 36 60% 8%;
+    --info: 205 90% 60%;
+    --info-foreground: 210 60% 8%;
+
+    --border: 220 14% 18%;
+    --input: 220 14% 20%;
+    --ring: 74 90% 57%;
+
+    --brand: 74 90% 57%;
+    --brand-foreground: 100 60% 7%;
+    --brand-soft: 74 30% 16%;
+    --brand-ink: 74 90% 62%;
+
+    --shadow-color: 222 60% 2%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground text-sm leading-normal antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Numeric UI (stats, weights, money) reads as tabular. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  h1 {
+    @apply font-display scroll-m-20 text-3xl font-extrabold tracking-tight md:text-4xl;
+  }
+  h2 {
+    @apply font-display scroll-m-20 text-2xl font-bold tracking-tight;
+  }
+  h3 {
+    @apply font-display scroll-m-20 text-lg font-bold tracking-tight;
+  }
+  h4 {
+    @apply scroll-m-20 text-base font-semibold tracking-tight;
+  }
+  p {
+    @apply leading-relaxed;
+  }
+  ::selection {
+    background: hsl(var(--brand) / 0.85);
+    color: hsl(var(--brand-foreground));
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Uppercase micro-label used above headings ("eyebrow"). */
+  .eyebrow {
+    @apply font-mono text-[0.68rem] font-medium uppercase tracking-[0.22em] text-muted-foreground;
+  }
+
+  /* Glass surface for floating panels and the app chrome. */
+  .glass {
+    background: hsl(var(--surface) / 0.72);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  }
+
+  /* Subtle graph-paper grid used behind hero + empty states. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, #000 55%, transparent 100%);
+    mask-image: radial-gradient(ellipse 75% 65% at 50% 0%, #000 55%, transparent 100%);
+  }
+
+  /* Ambient volt glow blob for hero sections. */
+  .volt-halo {
+    background: radial-gradient(
+      50% 50% at 50% 50%,
+      hsl(var(--brand) / 0.28) 0%,
+      transparent 70%
+    );
+  }
+
+  /* Thin brand rule used on marketing sections. */
+  .rule-brand {
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--brand)) 30%,
+      hsl(var(--brand)) 70%,
+      transparent
+    );
+  }
+}
+
+@layer utilities {
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
+
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+  }
+}
