@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { EnterDemoButton } from "@/components/app/enter-demo";
 import { BrandLockup } from "@/components/brand/logo";
+import { AccentToggle } from "@/components/theme/accent-toggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 
@@ -36,6 +37,7 @@ export default function MarketingLayout({
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
+            <AccentToggle />
             <ThemeToggle />
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>

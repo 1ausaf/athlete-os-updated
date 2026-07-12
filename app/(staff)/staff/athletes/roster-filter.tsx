@@ -9,49 +9,115 @@ import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Progress } from "@/components/app/progress";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
-import type { Athlete } from "@/lib/demo/data";
+import { cn } from "@/lib/utils";
+import { bucketLabel, type Athlete, type MemberBucket } from "@/lib/demo/data";
 import { billingMeta, seasonMeta } from "@/lib/demo/status";
 
+import { programDueMeta } from "./program-due";
+
+/** Trello list order from the client's board. */
+const BUCKET_ORDER: MemberBucket[] = [
+  "in-gym",
+  "private",
+  "program-only",
+  "online",
+  "away",
+];
+
+type BucketFilter = MemberBucket | "all";
+
 /**
- * Client-side roster with a name/sport search box. Filtering is local state
- * only — the full roster is passed down from the server component.
+ * Client-side roster board: bucket chip filters (the client's Trello lists)
+ * plus a name/sport/coach search. All filtering is local state — the full
+ * roster is passed down from the server component.
  */
 export function RosterFilter({ athletes }: { athletes: Athlete[] }) {
   const [query, setQuery] = useState("");
+  const [bucket, setBucket] = useState<BucketFilter>("all");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return athletes;
-    return athletes.filter(
-      (a) =>
+    return athletes.filter((a) => {
+      if (bucket !== "all" && a.bucket !== bucket) return false;
+      if (!q) return true;
+      return (
         a.name.toLowerCase().includes(q) ||
         a.sport.toLowerCase().includes(q) ||
-        a.coach.toLowerCase().includes(q),
-    );
-  }, [athletes, query]);
+        a.coach.toLowerCase().includes(q)
+      );
+    });
+  }, [athletes, query, bucket]);
+
+  // Group the filtered roster by bucket, in board order (Trello lists).
+  const groups = useMemo(
+    () =>
+      BUCKET_ORDER.map((b) => ({
+        bucket: b,
+        rows: filtered.filter((a) => a.bucket === b),
+      })).filter((g) => g.rows.length > 0),
+    [filtered],
+  );
+
+  const countFor = (b: BucketFilter) =>
+    b === "all"
+      ? athletes.length
+      : athletes.filter((a) => a.bucket === b).length;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search athletes, sport, or coach…"
-          className="pl-9"
-          aria-label="Search roster"
-        />
+      {/* Search + bucket chips */}
+      <div className="flex flex-col gap-3">
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search athletes, sport, or coach…"
+            className="pl-9"
+            aria-label="Search roster"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <BucketChip
+            active={bucket === "all"}
+            label="All"
+            count={countFor("all")}
+            onClick={() => setBucket("all")}
+          />
+          {BUCKET_ORDER.map((b) => (
+            <BucketChip
+              key={b}
+              active={bucket === b}
+              label={bucketLabel[b]}
+              count={countFor(b)}
+              onClick={() => setBucket(b)}
+            />
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface/30 p-6 text-center text-sm text-muted-foreground">
-          No athletes match “{query}”.
+          No athletes match{query.trim() ? <> “{query}”</> : null}
+          {bucket !== "all" ? <> in {bucketLabel[bucket]}</> : null}.
         </p>
       ) : (
-        <div className="flex flex-col gap-3">
-          {filtered.map((a) => (
-            <RosterRow key={a.id} athlete={a} />
+        <div className="flex flex-col gap-5">
+          {groups.map((g) => (
+            <section key={g.bucket} className="flex flex-col gap-3">
+              <div className="flex items-baseline gap-2">
+                <h2 className="eyebrow">{bucketLabel[g.bucket]}</h2>
+                <span className="tnum text-xs text-muted-foreground">
+                  {g.rows.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {g.rows.map((a) => (
+                  <RosterRow key={a.id} athlete={a} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
@@ -59,9 +125,39 @@ export function RosterFilter({ athletes }: { athletes: Athlete[] }) {
   );
 }
 
+function BucketChip({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-brand/40 bg-brand/10 text-brand-ink"
+          : "border-border bg-surface/50 text-muted-foreground hover:border-brand/30 hover:text-foreground",
+      )}
+    >
+      {label}
+      <span className="tnum opacity-70">{count}</span>
+    </button>
+  );
+}
+
 function RosterRow({ athlete }: { athlete: Athlete }) {
   const billing = billingMeta[athlete.billing.state];
   const season = seasonMeta[athlete.season];
+  const due = programDueMeta(athlete.programDueInDays);
   const progressPct = Math.round(
     (athlete.program.day / athlete.program.totalDays) * 100,
   );
@@ -73,7 +169,7 @@ function RosterRow({ athlete }: { athlete: Athlete }) {
       href={href}
       className="group grid items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-soft transition-colors hover:border-brand/40 hover:bg-accent/40 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_auto]"
     >
-      {/* Identity */}
+      {/* Identity — card-title format: NAME [Sport, Sex, YOB] */}
       <div className="flex items-center gap-3">
         <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="lg" />
         <div className="min-w-0">
@@ -82,9 +178,15 @@ function RosterRow({ athlete }: { athlete: Athlete }) {
             {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
           </div>
           <p className="text-sm text-muted-foreground">
-            {athlete.sport} · {athlete.planName}
+            [{athlete.sport}, {athlete.gender}, {athlete.yearOfBirth}] ·{" "}
+            {athlete.planName}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {due.tone !== "neutral" ? (
+              <Pill tone={due.tone} dot>
+                {due.label}
+              </Pill>
+            ) : null}
             <Pill tone={billing.tone} dot>
               {billing.label}
             </Pill>

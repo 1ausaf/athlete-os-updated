@@ -1,0 +1,500 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Plus, Search, Video, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Pill } from "@/components/ui/pill";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  exerciseLibrary,
+  LIBRARY_TOTALS,
+  LOAD_MODE_LABEL,
+  REP_MODE_LABEL,
+  type LibraryExercise,
+  type LoadMode,
+  type RepMode,
+} from "@/lib/demo/training";
+import { cn } from "@/lib/utils";
+
+const LOAD_MODES = Object.keys(LOAD_MODE_LABEL) as LoadMode[];
+const REP_MODES = Object.keys(REP_MODE_LABEL) as RepMode[];
+
+/** Editor form state — "none" stands in for a null reference max. */
+interface Draft {
+  id: string | null;
+  name: string;
+  videoUrl: string;
+  pointsOfPerformance: string;
+  tags: string;
+  referenceMax: string;
+  repMode: RepMode;
+  loadMode: LoadMode;
+}
+
+const EMPTY_DRAFT: Draft = {
+  id: null,
+  name: "",
+  videoUrl: "",
+  pointsOfPerformance: "",
+  tags: "",
+  referenceMax: "none",
+  repMode: "reps",
+  loadMode: "lb",
+};
+
+/**
+ * Searchable, tag-filterable exercise library with a full exercise editor
+ * (title, video, points of performance, tags, reference max, track-as).
+ * All edits are local state — demo only.
+ */
+export function ExerciseLibrary() {
+  const [list, setList] = useState<LibraryExercise[]>(exerciseLibrary);
+  const [query, setQuery] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+
+  function announce(message: string) {
+    setFlash(message);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 2600);
+  }
+
+  const bySearch = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (ex) =>
+        ex.name.toLowerCase().includes(q) ||
+        ex.tags.some((t) => t.toLowerCase().includes(q)),
+    );
+  }, [list, query]);
+
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const ex of bySearch)
+      for (const t of ex.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return counts;
+  }, [bySearch]);
+
+  const allTags = useMemo(
+    () => Array.from(new Set(list.flatMap((ex) => ex.tags))).sort(),
+    [list],
+  );
+
+  const filtered =
+    activeTags.length === 0
+      ? bySearch
+      : bySearch.filter((ex) => ex.tags.some((t) => activeTags.includes(t)));
+
+  const referenceOptions = useMemo(
+    () =>
+      Array.from(new Set(list.map((ex) => ex.name)))
+        .filter((name) => name !== draft?.name)
+        .sort(),
+    [list, draft?.name],
+  );
+
+  function toggleTag(tag: string) {
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  }
+
+  function openEditor(ex?: LibraryExercise) {
+    setDraft(
+      ex
+        ? {
+            id: ex.id,
+            name: ex.name,
+            videoUrl: ex.videoUrl ?? "",
+            pointsOfPerformance: ex.pointsOfPerformance.join("\n"),
+            tags: ex.tags.join(", "),
+            referenceMax: ex.referenceMax ?? "none",
+            repMode: ex.defaultRepMode,
+            loadMode: ex.defaultLoadMode,
+          }
+        : EMPTY_DRAFT,
+    );
+  }
+
+  function saveDraft() {
+    if (!draft || !draft.name.trim()) return;
+    const tags = draft.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const patch = {
+      name: draft.name.trim(),
+      videoUrl: draft.videoUrl.trim() || null,
+      pointsOfPerformance: draft.pointsOfPerformance
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+      tags: tags.length > 0 ? tags : ["Uncategorized"],
+      referenceMax: draft.referenceMax === "none" ? null : draft.referenceMax,
+      defaultRepMode: draft.repMode,
+      defaultLoadMode: draft.loadMode,
+    };
+    if (draft.id) {
+      setList((prev) =>
+        prev.map((ex) => (ex.id === draft.id ? { ...ex, ...patch } : ex)),
+      );
+      announce(`"${patch.name}" updated in the library`);
+    } else {
+      setList((prev) => [
+        { id: `ex-custom-${Date.now()}`, createdBy: "You", ...patch },
+        ...prev,
+      ]);
+      announce(`"${patch.name}" added to the library`);
+    }
+    setDraft(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          <span className="tnum font-semibold text-foreground">
+            {LIBRARY_TOTALS.exercises}
+          </span>{" "}
+          exercises in the library · showing {filtered.length} of {list.length}{" "}
+          samples
+        </p>
+        <Button variant="brand" size="sm" onClick={() => openEditor()}>
+          <Plus className="h-4 w-4" />
+          New exercise
+        </Button>
+      </div>
+
+      {/* Search + tag filters */}
+      <div className="flex flex-col gap-3">
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search exercises or tags…"
+            className="pl-9"
+            aria-label="Search exercise library"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {allTags.map((tag) => {
+            const count = tagCounts.get(tag) ?? 0;
+            const active = activeTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleTag(tag)}
+                aria-pressed={active}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                  active
+                    ? "border-brand/40 bg-brand/10 text-brand-ink"
+                    : "border-border bg-surface/50 text-muted-foreground hover:bg-accent",
+                  count === 0 && !active && "opacity-45",
+                )}
+              >
+                {tag}
+                <span className="tnum text-[0.65rem] opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Library table */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Exercise</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead className="w-16 text-center">Video</TableHead>
+                <TableHead className="w-20 text-center">Points</TableHead>
+                <TableHead className="w-40">Reference max</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((ex) => (
+                <TableRow
+                  key={ex.id}
+                  onClick={() => openEditor(ex)}
+                  className="cursor-pointer"
+                >
+                  <TableCell className="font-medium">
+                    {ex.name}
+                    <span className="block text-xs text-muted-foreground">
+                      {ex.createdBy}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="flex flex-wrap gap-1">
+                      {ex.tags.slice(0, 3).map((t) => (
+                        <Pill key={t} tone="neutral">
+                          {t}
+                        </Pill>
+                      ))}
+                      {ex.tags.length > 3 ? (
+                        <Pill tone="neutral">+{ex.tags.length - 3}</Pill>
+                      ) : null}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {ex.videoUrl ? (
+                      <a
+                        href={ex.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex text-muted-foreground transition-colors hover:text-brand-ink"
+                        aria-label={`Watch ${ex.name} demo video`}
+                      >
+                        <Video className="h-4 w-4" />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="tnum text-center">
+                    {ex.pointsOfPerformance.length}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {ex.referenceMax ?? (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    No exercises match — clear the search or tag filters.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Click an exercise to edit its video, points of performance, tags and
+        reference max — the mother lift a percentage prescription points at
+        (e.g. Hip Snatch = 60% of Snatch).
+      </p>
+
+      {/* Exercise editor */}
+      {draft ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label={draft.id ? "Edit exercise" : "New exercise"}
+        >
+          <button
+            type="button"
+            aria-label="Close editor"
+            onClick={() => setDraft(null)}
+            className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+          />
+          <Card className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden">
+            <CardContent className="flex flex-col gap-4 overflow-y-auto p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="eyebrow">Exercise editor</span>
+                  <h3 className="text-lg">
+                    {draft.id ? draft.name || "Edit exercise" : "New exercise"}
+                  </h3>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setDraft(null)}
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ex-title">Title</Label>
+                <Input
+                  id="ex-title"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  placeholder="e.g. Hip Snatch"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ex-video">Video (YouTube link)</Label>
+                <Input
+                  id="ex-video"
+                  value={draft.videoUrl}
+                  onChange={(e) =>
+                    setDraft({ ...draft, videoUrl: e.target.value })
+                  }
+                  placeholder="https://youtu.be/…"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ex-pop">Points of performance</Label>
+                <Textarea
+                  id="ex-pop"
+                  rows={4}
+                  value={draft.pointsOfPerformance}
+                  onChange={(e) =>
+                    setDraft({ ...draft, pointsOfPerformance: e.target.value })
+                  }
+                  placeholder={"One per line, e.g.\nBar close to the body.\nFinish the pull tall."}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown to the athlete under the demo video.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ex-tags">Tags</Label>
+                <Input
+                  id="ex-tags"
+                  value={draft.tags}
+                  onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
+                  placeholder="Olympic Lifts, Barbell"
+                />
+                <p className="text-xs text-muted-foreground">Comma-separated.</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Reference max</Label>
+                <Select
+                  value={draft.referenceMax}
+                  onValueChange={(v) => setDraft({ ...draft, referenceMax: v })}
+                >
+                  <SelectTrigger aria-label="Reference max">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No reference max</SelectItem>
+                    {referenceOptions.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  The mother lift a % prescription points at — e.g. Hip Snatch
+                  = 60% of Snatch.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Track as</Label>
+                  <Select
+                    value={draft.repMode}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, repMode: v as RepMode })
+                    }
+                  >
+                    <SelectTrigger aria-label="Track reps as">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REP_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {REP_MODE_LABEL[mode]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Default load unit</Label>
+                  <Select
+                    value={draft.loadMode}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, loadMode: v as LoadMode })
+                    }
+                  >
+                    <SelectTrigger aria-label="Default load unit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LOAD_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {LOAD_MODE_LABEL[mode]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-border pt-4">
+                <Button variant="ghost" size="sm" onClick={() => setDraft(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={saveDraft}
+                  disabled={!draft.name.trim()}
+                >
+                  Save exercise
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {/* Success flash */}
+      {flash ? (
+        <div
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-success/30 bg-card px-4 py-2 text-sm font-medium shadow-soft"
+        >
+          <CheckCircle2 className="h-4 w-4 text-success" />
+          {flash}
+        </div>
+      ) : null}
+    </div>
+  );
+}

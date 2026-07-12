@@ -54,6 +54,17 @@ export interface Guardian {
   email: string;
 }
 
+/** Trello-style member-ops bucket (mirrors the client's board lists). */
+export type MemberBucket = "in-gym" | "private" | "program-only" | "online" | "away";
+
+export const bucketLabel: Record<MemberBucket, string> = {
+  "in-gym": "In-gym",
+  private: "Private 1-on-1",
+  "program-only": "Program only",
+  online: "Online",
+  away: "At-risk / Away",
+};
+
 export interface Athlete {
   id: string;
   slug: string;
@@ -63,6 +74,14 @@ export interface Athlete {
   sport: string;
   age: number;
   isMinor: boolean;
+  yearOfBirth: number;
+  gender: "M" | "F";
+  /** Member-ops bucket (Trello board list equivalent). */
+  bucket: MemberBucket;
+  /** Days of published program remaining — 0 means a program update is due now. */
+  programDueInDays: number;
+  /** Nutrition protocol tier. */
+  nutrition: "pro" | "none";
   coach: string;
   planName: string;
   frequency: string;
@@ -185,6 +204,11 @@ export const athletes: Athlete[] = [
     sport: "Hockey",
     age: 19,
     isMinor: false,
+    yearOfBirth: 2007,
+    gender: "M",
+    bucket: "in-gym",
+    programDueInDays: 6,
+    nutrition: "pro",
     coach: "Coach Ellis",
     planName: "Pro Track — 3×/week",
     frequency: "3×/week",
@@ -246,6 +270,11 @@ export const athletes: Athlete[] = [
     sport: "Basketball",
     age: 16,
     isMinor: true,
+    yearOfBirth: 2010,
+    gender: "F",
+    bucket: "in-gym",
+    programDueInDays: 18,
+    nutrition: "none",
     coach: "Coach Ellis",
     planName: "Academy — 4×/week",
     frequency: "4×/week",
@@ -300,6 +329,11 @@ export const athletes: Athlete[] = [
     sport: "Football",
     age: 17,
     isMinor: true,
+    yearOfBirth: 2009,
+    gender: "M",
+    bucket: "in-gym",
+    programDueInDays: 0,
+    nutrition: "none",
     coach: "Coach Ellis",
     planName: "Academy — 4×/week",
     frequency: "4×/week",
@@ -346,6 +380,11 @@ export const athletes: Athlete[] = [
     sport: "Soccer",
     age: 22,
     isMinor: false,
+    yearOfBirth: 2004,
+    gender: "F",
+    bucket: "online",
+    programDueInDays: 5,
+    nutrition: "none",
     coach: "Coach Nadia",
     planName: "Pro Track — 3×/week",
     frequency: "3×/week",
@@ -390,6 +429,11 @@ export const athletes: Athlete[] = [
     sport: "Baseball",
     age: 15,
     isMinor: true,
+    yearOfBirth: 2011,
+    gender: "M",
+    bucket: "in-gym",
+    programDueInDays: 16,
+    nutrition: "none",
     coach: "Coach Ellis",
     planName: "Academy — 2×/week",
     frequency: "2×/week",
@@ -435,6 +479,11 @@ export const athletes: Athlete[] = [
     sport: "Olympic WL",
     age: 24,
     isMinor: false,
+    yearOfBirth: 2002,
+    gender: "M",
+    bucket: "private",
+    programDueInDays: 4,
+    nutrition: "pro",
     coach: "Coach Nadia",
     planName: "Elite — Unlimited",
     frequency: "5×/week",
@@ -479,6 +528,11 @@ export const athletes: Athlete[] = [
     sport: "Volleyball",
     age: 18,
     isMinor: false,
+    yearOfBirth: 2008,
+    gender: "F",
+    bucket: "away",
+    programDueInDays: 21,
+    nutrition: "none",
     coach: "Coach Ellis",
     planName: "Pro Track — 3×/week",
     frequency: "3×/week",
@@ -522,6 +576,11 @@ export const athletes: Athlete[] = [
     sport: "Golf",
     age: 29,
     isMinor: false,
+    yearOfBirth: 1997,
+    gender: "M",
+    bucket: "program-only",
+    programDueInDays: 10,
+    nutrition: "pro",
     coach: "Coach Nadia",
     planName: "Executive — 2×/week",
     frequency: "2×/week",

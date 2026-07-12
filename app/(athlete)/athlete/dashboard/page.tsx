@@ -7,12 +7,14 @@ import {
   CalendarDays,
   CreditCard,
   Dumbbell,
+  Home,
+  Megaphone,
   MessagesSquare,
   Trophy,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
-import { Progress, ProgressRing } from "@/components/app/progress";
+import { Progress } from "@/components/app/progress";
 import { Pill } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,11 +22,13 @@ import { requireUserWithProfile } from "@/lib/auth";
 import {
   athleteById,
   fmtRange,
-  money2,
+  money,
+  plans,
   relTime,
   sessions,
   threads,
 } from "@/lib/demo/data";
+import { announcements, jordanProgramDays } from "@/lib/demo/training";
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteDashboardPage() {
@@ -42,11 +46,25 @@ export default async function AthleteDashboardPage() {
     t.participants.some((p) => p.id === athlete.id),
   );
   const unread = myThreads.reduce((n, t) => n + t.unread, 0);
-  const latestThread = myThreads
+  const coachChat = myThreads
     .slice()
     .sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : -1))[0];
+  const latestAnnouncement = announcements[0];
 
   const billing = billingMeta[athlete.billing.state];
+  const plan = plans.find((p) => athlete.planName.startsWith(p.name));
+  const nextInvoiceAmount =
+    athlete.billing.amountDueCents > 0
+      ? athlete.billing.amountDueCents
+      : (plan?.priceCents ?? 0);
+  const nextInvoiceDay = new Date(
+    athlete.billing.nextInvoice,
+  ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  // Programs run as a numbered sequence, not a calendar — surface the next
+  // three days so athletes always know which one to start (and which at-home
+  // day to skip when they make it into the gym).
+  const nextDays = jordanProgramDays.slice(0, 3);
   const progressPct = Math.round(
     (athlete.program.day / athlete.program.totalDays) * 100,
   );
@@ -57,44 +75,88 @@ export default async function AthleteDashboardPage() {
         eyebrow="Athlete Portal"
         title={`Good to see you, ${firstName}.`}
         description="Your program comes first — then sessions, messages, billing and your latest wins."
-        actions={
-          <Pill tone={athlete.season === "in-season" ? "brand" : "neutral"} dot>
-            {athlete.sport} · {athlete.season}
-          </Pill>
-        }
       />
 
       {/* Program hero (primary content — FR-02) */}
       <Card className="overflow-hidden">
-        <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
-                <Dumbbell className="h-5 w-5" />
-              </span>
-              <span className="eyebrow">Today&apos;s training</span>
-            </div>
-            <div>
-              <h2 className="text-2xl">{athlete.program.name}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Day {athlete.program.day} of {athlete.program.totalDays} ·{" "}
-                {athlete.program.phase} phase. You advance when completed sessions
-                are logged — not by the calendar.
-              </p>
-            </div>
-            <div className="max-w-md">
+        <div className="flex flex-col gap-5 p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
+              <Dumbbell className="h-5 w-5" />
+            </span>
+            <span className="eyebrow">Your next sessions</span>
+            <span className="ml-auto tnum text-xs text-muted-foreground">
+              Day {athlete.program.day} of {athlete.program.totalDays} ·{" "}
+              {athlete.program.phase}
+            </span>
+          </div>
+          <div>
+            <h2 className="text-2xl">{athlete.program.name}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty">
+              Your program runs in sequence — Day 1, Day 2, Day 3 — not by the
+              calendar. Start with the day marked up next; if you&apos;re at the
+              gym, skip the at-home day and jump ahead.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {nextDays.map((day, i) => (
+              <Link
+                key={day.id}
+                href={"/athlete/training" as Route}
+                className={
+                  i === 0
+                    ? "group flex flex-col gap-2 rounded-xl border border-brand/30 bg-brand/5 p-4 transition-colors hover:bg-brand/10"
+                    : "group flex flex-col gap-2 rounded-xl border border-border bg-surface/50 p-4 transition-colors hover:bg-accent/50"
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <span className="tnum text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Day {day.dayNumber}
+                  </span>
+                  {i === 0 ? (
+                    <Pill tone="brand" dot className="ml-auto">
+                      Up next
+                    </Pill>
+                  ) : day.location === "home" ? (
+                    <Pill
+                      tone="neutral"
+                      icon={<Home className="h-3 w-3" aria-hidden />}
+                      className="ml-auto"
+                    >
+                      At-home
+                    </Pill>
+                  ) : null}
+                </div>
+                <div className="text-sm font-semibold leading-snug">
+                  {day.title}
+                </div>
+                <p className="line-clamp-2 text-xs text-muted-foreground text-pretty">
+                  {day.focus}
+                </p>
+                <span className="mt-auto inline-flex items-center gap-1 pt-1 text-xs font-medium text-brand-ink opacity-0 transition-opacity group-hover:opacity-100">
+                  Open <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-48 max-w-sm flex-1">
               <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-                <span>Block progress</span>
+                <span>
+                  Day {athlete.program.day} of {athlete.program.totalDays}
+                </span>
                 <span className="tnum font-semibold text-foreground">
                   {progressPct}%
                 </span>
               </div>
               <Progress value={progressPct} />
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="ml-auto flex flex-wrap gap-2">
               <Button asChild variant="brand">
                 <Link href={"/athlete/training" as Route}>
-                  Open today&apos;s session
+                  Start Day {nextDays[0]?.dayNumber ?? athlete.program.day}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -102,14 +164,6 @@ export default async function AthleteDashboardPage() {
                 <Link href={"/athlete/sessions" as Route}>View schedule</Link>
               </Button>
             </div>
-          </div>
-          <div className="flex items-center justify-center md:pl-6">
-            <ProgressRing
-              value={athlete.program.compliancePct}
-              size={132}
-              stroke={10}
-              label="log rate"
-            />
           </div>
         </div>
       </Card>
@@ -150,7 +204,7 @@ export default async function AthleteDashboardPage() {
                           {s.title}
                         </div>
                         <div className="truncate text-xs text-muted-foreground">
-                          {fmtRange(s.startsAt, s.endsAt)} · {s.coach}
+                          {fmtRange(s.startsAt, s.endsAt)}
                         </div>
                       </div>
                       <Pill
@@ -172,39 +226,61 @@ export default async function AthleteDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Messages */}
+        {/* Coach chat + announcements */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
               icon={MessagesSquare}
-              title="Messages"
+              title="Coach chat"
               href={"/athlete/messages" as Route}
-              cta="Inbox"
+              cta="Open"
               badge={unread}
             />
-            {latestThread ? (
+            {coachChat ? (
               <Link
-                href={`/athlete/messages/${latestThread.id}` as Route}
+                href={`/athlete/messages/${coachChat.id}` as Route}
                 className="flex flex-col gap-2 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:bg-accent/50"
               >
                 <div className="flex items-center gap-2 text-sm font-semibold">
-                  {latestThread.subject}
-                  {latestThread.involvesMinor ? (
+                  {coachChat.participants.find((p) => p.role === "coach")
+                    ?.name ?? coachChat.subject}
+                  {coachChat.involvesMinor ? (
                     <Pill tone="success" className="ml-auto">
                       Rule of Two
                     </Pill>
                   ) : null}
                 </div>
                 <p className="line-clamp-2 text-xs text-muted-foreground">
-                  {latestThread.messages[latestThread.messages.length - 1]?.body}
+                  {coachChat.messages[coachChat.messages.length - 1]?.body}
                 </p>
                 <span className="text-[0.7rem] text-muted-foreground">
-                  {relTime(latestThread.updatedAt)}
+                  {relTime(coachChat.updatedAt)}
                 </span>
               </Link>
             ) : (
               <Empty>You&apos;re all caught up.</Empty>
             )}
+            {latestAnnouncement ? (
+              <Link
+                href={"/athlete/messages" as Route}
+                className="flex items-center gap-2.5 rounded-lg border border-border bg-surface/30 px-3 py-2.5 transition-colors hover:bg-accent/50"
+              >
+                <Megaphone
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-xs">
+                  <span className="font-semibold">Announcement</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {latestAnnouncement.title}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[0.7rem] text-muted-foreground">
+                  {relTime(latestAnnouncement.at)}
+                </span>
+              </Link>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -213,7 +289,7 @@ export default async function AthleteDashboardPage() {
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
               icon={CreditCard}
-              title="Billing status"
+              title="Billing"
               href={"/athlete/billing" as Route}
               cta="Details"
             />
@@ -223,19 +299,11 @@ export default async function AthleteDashboardPage() {
                   {billing.label}
                 </Pill>
                 <p className="mt-2 text-sm font-semibold">{athlete.planName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {athlete.billing.amountDueCents > 0
-                    ? `${money2(athlete.billing.amountDueCents)} due`
-                    : "No balance due"}
-                </p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Next invoice</p>
                 <p className="tnum text-sm font-semibold">
-                  {new Date(athlete.billing.nextInvoice).toLocaleDateString(
-                    "en-US",
-                    { month: "short", day: "numeric" },
-                  )}
+                  {nextInvoiceDay} · {money(nextInvoiceAmount)}
                 </p>
               </div>
             </div>

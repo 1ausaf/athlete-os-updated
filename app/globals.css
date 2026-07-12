@@ -45,11 +45,11 @@
     --input: 220 16% 86%;
     --ring: 222 47% 11%;
 
-    /* Signature volt — used as accent shape/fill, never as text on white. */
-    --brand: 74 84% 46%;
-    --brand-foreground: 100 40% 8%;
-    --brand-soft: 74 70% 92%;
-    --brand-ink: 90 60% 22%;
+    /* Signature accent — LPS red by default (white/black/red brand system). */
+    --brand: 353 78% 44%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 353 75% 94%;
+    --brand-ink: 353 78% 38%;
 
     --shadow-color: 222 47% 30%;
     --radius: 0.75rem;
@@ -70,9 +70,9 @@
     --popover: 222 20% 8%;
     --popover-foreground: 210 24% 96%;
 
-    /* In dark mode the primary action is the volt — pure energy on black. */
-    --primary: 74 90% 57%;
-    --primary-foreground: 100 60% 7%;
+    /* In dark mode the primary action carries the brand accent. */
+    --primary: 353 82% 54%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 220 14% 16%;
     --secondary-foreground: 210 20% 94%;
@@ -95,14 +95,32 @@
 
     --border: 220 14% 18%;
     --input: 220 14% 20%;
-    --ring: 74 90% 57%;
+    --ring: 353 82% 54%;
 
+    --brand: 353 82% 54%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 353 45% 15%;
+    --brand-ink: 353 88% 68%;
+
+    --shadow-color: 222 60% 2%;
+  }
+
+  /* ===== Alternate accent: the original volt (electric-lime) ===== */
+  :root[data-accent="volt"] {
+    --brand: 74 84% 46%;
+    --brand-foreground: 100 40% 8%;
+    --brand-soft: 74 70% 92%;
+    --brand-ink: 90 60% 22%;
+  }
+
+  .dark[data-accent="volt"] {
+    --primary: 74 90% 57%;
+    --primary-foreground: 100 60% 7%;
+    --ring: 74 90% 57%;
     --brand: 74 90% 57%;
     --brand-foreground: 100 60% 7%;
     --brand-soft: 74 30% 16%;
     --brand-ink: 74 90% 62%;
-
-    --shadow-color: 222 60% 2%;
   }
 }
 

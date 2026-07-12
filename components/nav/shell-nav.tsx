@@ -13,6 +13,10 @@ export interface ShellNavItem {
   icon?: LucideIcon;
   description?: string;
   badge?: number;
+  /** Small text pill next to the label (e.g. "Pro", "New"). */
+  tag?: string;
+  /** Grayed-out upsell state (e.g. Nutrition before upgrading). */
+  locked?: boolean;
 }
 
 export interface ShellNavProps {
@@ -68,7 +72,14 @@ export function ShellNav({ title, subtitle, items }: ShellNavProps) {
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                 ) : null}
-                <span className="flex-1">{item.label}</span>
+                <span className={cn("flex-1", item.locked && "opacity-50")}>
+                  {item.label}
+                </span>
+                {item.tag ? (
+                  <span className="rounded-full border border-brand/30 bg-brand/10 px-1.5 py-px text-[0.6rem] font-bold uppercase tracking-wide text-brand-ink">
+                    {item.tag}
+                  </span>
+                ) : null}
                 {item.badge ? (
                   <span className="tnum flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand px-1.5 text-[0.65rem] font-bold text-brand-foreground">
                     {item.badge}

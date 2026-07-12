@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { BrandLockup, WolfMark } from "@/components/brand/logo";
+import { AccentToggle } from "@/components/theme/accent-toggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
@@ -39,7 +40,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <Link href="/" className="lg:hidden">
             <BrandLockup subtitle={null} />
           </Link>
-          <ThemeToggle />
+          <span className="flex items-center gap-1">
+            <AccentToggle />
+            <ThemeToggle />
+          </span>
         </div>
         <main className="flex flex-1 items-center justify-center px-4 pb-16">
           <div className="w-full max-w-md">{children}</div>

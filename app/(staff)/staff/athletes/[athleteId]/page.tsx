@@ -5,13 +5,16 @@ import {
   AlertTriangle,
   BellRing,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   CreditCard,
   Dumbbell,
+  HardDrive,
+  IdCard,
   MessagesSquare,
   ShieldCheck,
+  Target,
   Trophy,
-  Users,
 } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
@@ -24,14 +27,33 @@ import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import {
   athleteById,
+  bucketLabel,
   fmtRange,
   money2,
   relTime,
   sessions,
-  type CapNote,
+  type Athlete,
 } from "@/lib/demo/data";
 import { billingMeta, seasonMeta } from "@/lib/demo/status";
 import { isStaff } from "@/lib/rbac";
+
+import { programDueLong } from "../program-due";
+import { CapNotesPanel } from "./cap-notes-panel";
+
+/** Sport-specific training goal per athlete (Trello-card "goal" line). */
+const athleteGoals: Record<string, string> = {
+  "ath-jordan": "Improve explosiveness and top-end speed for pro tryouts.",
+  "ath-maya":
+    "Return to full-court play post-ankle and add 2 inches to the vertical.",
+  "ath-dre": "Break a 4.5s 40 and add lean mass before senior season.",
+  "ath-sofia":
+    "Hold match-day power output through the full season — zero soft-tissue flags.",
+  "ath-ty": "Build rotational power while keeping the throwing arm healthy.",
+  "ath-ren": "Hit a 295 kg total at the national qualifier.",
+  "ath-priya":
+    "Rebuild training consistency and add 2 inches to the approach jump before club season.",
+  "ath-leo": "Add 10 yards of driver carry without low-back flare-ups.",
+};
 
 export default async function StaffAthleteProfilePage({
   params,
@@ -72,7 +94,9 @@ export default async function StaffAthleteProfilePage({
         }
         description={
           <span className="flex flex-wrap items-center gap-2 pt-1">
-            <Pill tone="neutral">{athlete.sport}</Pill>
+            <Pill tone="neutral">
+              {athlete.sport} · {athlete.gender} · {athlete.yearOfBirth}
+            </Pill>
             {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
             <Pill tone={season.tone}>{season.label}</Pill>
             <Pill tone={billing.tone} dot>
@@ -114,7 +138,7 @@ export default async function StaffAthleteProfilePage({
           value={athlete.program.compliancePct}
           unit="%"
           icon={ClipboardList}
-          hint="Sessions logged"
+          hint="Sessions logged — not just completed"
         />
         <StatTile
           label="Program day"
@@ -156,24 +180,13 @@ export default async function StaffAthleteProfilePage({
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        {/* Left column */}
+        {/* Left column — CAP notes are the centerpiece */}
         <div className="flex flex-col gap-6">
-          {/* CAP notes */}
-          <Section
-            icon={ClipboardList}
-            title="CAP notes"
-            hint={`${athlete.capNotes.length} on file`}
-          >
-            {athlete.capNotes.length === 0 ? (
-              <Empty>No CAP note yet — flagged for follow-up.</Empty>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {athlete.capNotes.map((note) => (
-                  <CapCard key={note.id} note={note} />
-                ))}
-              </div>
-            )}
-          </Section>
+          <CapNotesPanel
+            athleteFirstName={athlete.name.split(" ")[0] ?? athlete.name}
+            authorName={user.fullName}
+            initialNotes={athlete.capNotes}
+          />
 
           {/* PRs */}
           <Section icon={Trophy} title="Personal records">
@@ -209,6 +222,8 @@ export default async function StaffAthleteProfilePage({
 
         {/* Right column */}
         <div className="flex flex-col gap-6">
+          <MemberRecord athlete={athlete} programHref={programHref} />
+
           {/* Injury flags */}
           {athlete.injuryFlags.length > 0 ? (
             <Section icon={AlertTriangle} title="Injury flags">
@@ -223,38 +238,6 @@ export default async function StaffAthleteProfilePage({
                   </div>
                 ))}
               </div>
-            </Section>
-          ) : null}
-
-          {/* Guardians */}
-          {athlete.isMinor ? (
-            <Section icon={Users} title="Guardians">
-              {athlete.guardians.length === 0 ? (
-                <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    Minor with no guardian on file — add one to satisfy Rule of
-                    Two before messaging.
-                  </span>
-                </div>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {athlete.guardians.map((g) => (
-                    <li
-                      key={g.email}
-                      className="rounded-lg border border-border bg-surface/50 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold">{g.name}</span>
-                        <Pill tone="success">{g.relation}</Pill>
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {g.email}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </Section>
           ) : null}
 
@@ -333,6 +316,113 @@ export default async function StaffAthleteProfilePage({
   );
 }
 
+/* ---- member record (the Trello-card mirror) ---- */
+
+function MemberRecord({
+  athlete,
+  programHref,
+}: {
+  athlete: Athlete;
+  programHref: Route;
+}) {
+  const due = programDueLong(athlete.programDueInDays);
+  const goal =
+    athleteGoals[athlete.id] ??
+    `Build toward the next ${athlete.sport} season with a full, healthy block.`;
+
+  return (
+    <Section icon={IdCard} title="Member record">
+      <div className="flex flex-col gap-4">
+        {/* Card title line + status chips */}
+        <div>
+          <p className="font-display text-lg font-bold">
+            {athlete.sport} · {athlete.gender} · {athlete.yearOfBirth}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Pill tone="brand">{bucketLabel[athlete.bucket]}</Pill>
+            <Pill tone={due.tone} dot>
+              {due.label}
+            </Pill>
+            <Pill tone={athlete.nutrition === "pro" ? "success" : "neutral"}>
+              Nutrition · {athlete.nutrition === "pro" ? "Pro" : "None"}
+            </Pill>
+          </div>
+        </div>
+
+        {/* Goal */}
+        <div className="rounded-lg border border-border bg-surface/50 p-3">
+          <span className="flex items-center gap-1.5">
+            <Target className="h-3.5 w-3.5 text-brand-ink" aria-hidden />
+            <span className="eyebrow">Goal</span>
+          </span>
+          <p className="mt-1 text-sm text-foreground/90">{goal}</p>
+        </div>
+
+        {/* Guardians / contacts */}
+        <div>
+          <span className="eyebrow">Guardians & contacts</span>
+          {athlete.guardians.length === 0 ? (
+            athlete.isMinor ? (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Minor with no guardian on file — add one to satisfy Rule of
+                  Two before messaging.
+                </span>
+              </div>
+            ) : (
+              <p className="mt-2 rounded-lg border border-dashed border-border bg-surface/30 p-3 text-sm text-muted-foreground">
+                Adult athlete — no guardian required.
+              </p>
+            )
+          ) : (
+            <ul className="mt-2 flex flex-col gap-2">
+              {athlete.guardians.map((g) => (
+                <li
+                  key={g.email}
+                  className="rounded-lg border border-border bg-surface/50 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">{g.name}</span>
+                    <Pill tone="success">{g.relation}</Pill>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {g.email}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Links */}
+        <div>
+          <span className="eyebrow">Links</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={programHref}>
+                <Dumbbell className="h-4 w-4" />
+                Program
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              <ClipboardCheck className="h-4 w-4" />
+              Assessment
+            </Button>
+            <Button variant="outline" size="sm" disabled>
+              <HardDrive className="h-4 w-4" />
+              Drive
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
+            Assessment & Drive links are stubbed in the demo.
+          </p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 /* ---- local helpers ---- */
 
 function Section({
@@ -361,35 +451,6 @@ function Section({
         {children}
       </CardContent>
     </Card>
-  );
-}
-
-function CapCard({ note }: { note: CapNote }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface/50 p-4">
-      <div className="mb-2.5 flex items-center justify-between">
-        <span className="text-xs font-semibold">{note.coach}</span>
-        <span className="text-xs text-muted-foreground">
-          {relTime(note.date)}
-        </span>
-      </div>
-      <dl className="flex flex-col gap-2.5 text-sm">
-        <CapLine label="C" text={note.context} />
-        <CapLine label="A" text={note.action} />
-        <CapLine label="P" text={note.plan} />
-      </dl>
-    </div>
-  );
-}
-
-function CapLine({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="flex gap-2.5">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted font-mono text-[0.65rem] font-bold text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-foreground/90">{text}</span>
-    </div>
   );
 }
 

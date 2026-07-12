@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import { BrandLockup } from "@/components/brand/logo";
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PersonaSwitcher } from "@/components/app/persona-switcher";
+import { AccentToggle } from "@/components/theme/accent-toggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -104,6 +105,7 @@ export function AppShell({
 
           <div className="ml-auto flex items-center gap-2">
             <PersonaSwitcher current={role} options={personaOptions} />
+            <AccentToggle />
             <ThemeToggle />
             <div className="hidden items-center gap-2.5 border-l border-border pl-3 sm:flex">
               <div className="flex min-w-0 flex-col text-right">

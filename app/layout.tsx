@@ -41,6 +41,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${inter.variable} ${archivo.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Apply the saved accent before paint (red is the no-attribute default). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(localStorage.getItem('aos-accent')==='volt')document.documentElement.setAttribute('data-accent','volt')}catch(e){}",
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-background font-sans antialiased scrollbar-slim">
         <ThemeProvider
           attribute="class"
