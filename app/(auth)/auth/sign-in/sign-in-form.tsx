@@ -37,7 +37,7 @@ export function SignInForm() {
     startTransition(() => setPersona(account.role));
   }
 
-  function useAccount(accountEmail: string) {
+  function prefillAccount(accountEmail: string) {
     setEmail(accountEmail);
     setPassword(DEMO_PASSWORD);
     setError(null);
@@ -106,7 +106,7 @@ export function SignInForm() {
             key={a.email}
             type="button"
             disabled={pending}
-            onClick={() => useAccount(a.email)}
+            onClick={() => prefillAccount(a.email)}
             className={cn(
               "flex items-center gap-3 rounded-lg border border-border bg-surface/40 px-3 py-2 text-left transition-colors hover:bg-accent",
               email.toLowerCase() === a.email.toLowerCase() &&
