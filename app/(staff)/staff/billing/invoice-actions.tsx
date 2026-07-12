@@ -41,14 +41,14 @@ export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      <Table className="min-w-[760px]">
+      <Table>
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <TableHead>Athlete</TableHead>
-            <TableHead>Plan</TableHead>
+            <TableHead className="hidden md:table-cell">Plan</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead>Due</TableHead>
-            <TableHead>Method</TableHead>
+            <TableHead className="hidden md:table-cell">Method</TableHead>
             <TableHead className="text-right">Status</TableHead>
           </TableRow>
         </TableHeader>
@@ -66,7 +66,7 @@ export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {
                 }
               >
                 <TableCell className="font-medium">{inv.athleteName}</TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="hidden text-muted-foreground md:table-cell">
                   {inv.plan}
                 </TableCell>
                 <TableCell className="tnum text-right font-semibold">
@@ -75,7 +75,7 @@ export function InvoicesTable({ invoices }: { invoices: Invoice[] }) {
                 <TableCell className="text-muted-foreground">
                   {fmtDay(inv.dueDate)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="hidden text-muted-foreground md:table-cell">
                   {inv.method}
                 </TableCell>
                 <TableCell className="text-right">

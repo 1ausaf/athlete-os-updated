@@ -469,7 +469,7 @@ export function SessionBooking({
         </div>
 
         {/* Calendar affordance: week-jump strip */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-slim">
           <CalendarDays
             className="h-4 w-4 shrink-0 text-muted-foreground"
             aria-hidden

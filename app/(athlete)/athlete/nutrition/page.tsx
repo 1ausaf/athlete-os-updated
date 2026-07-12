@@ -234,7 +234,7 @@ export default async function NutritionPage() {
               {protocol.supplements.length} approved
             </Pill>
           </div>
-          <Table className="min-w-[480px]">
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Supplement</TableHead>

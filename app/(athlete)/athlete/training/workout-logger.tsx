@@ -47,6 +47,8 @@ type Mark = "hit" | "miss" | null;
 interface SetLog {
   /** Logged weight, in the unit it was entered/prescribed. Null = BW / %-computed. */
   weight: { value: number; unit: Unit } | null;
+  /** Entry/display unit for THIS row — kg on set 1 and lb on set 2 is fine. */
+  unit: Unit;
   /** What the athlete actually did (reps, time, distance…). */
   result: string;
   mark: Mark;
@@ -71,6 +73,7 @@ function buildInitialLogs(days: ProgramDay[]): Record<string, SetLog[]> {
             (s.loadMode === "lb" || s.loadMode === "kg") && s.load != null
               ? { value: s.load, unit: s.loadMode }
               : null,
+          unit: s.loadMode === "kg" ? "kg" : "lb",
           result: "",
           mark: null,
         }));
@@ -190,6 +193,18 @@ export function WorkoutLogger({
         i === idx ? { ...row, ...patch } : row,
       ),
     }));
+  }
+
+  /** Global lb⇄kg applies to every row; rows can still be flipped one by one. */
+  function applyUnitToAll(u: Unit) {
+    setUnit(u);
+    setLogs((prev) => {
+      const next: Record<string, SetLog[]> = {};
+      for (const [k, rows] of Object.entries(prev)) {
+        next[k] = rows.map((r) => ({ ...r, unit: u }));
+      }
+      return next;
+    });
   }
 
   function toggleMark(key: string, idx: number, mark: "hit" | "miss", target: string) {
@@ -327,7 +342,8 @@ export function WorkoutLogger({
               {/* Global lb ⇄ kg swap — Olympic lifts in kilos, gym lifts in pounds. */}
               <div
                 role="group"
-                aria-label="Weight unit"
+                aria-label="Weight unit — applies to all sets"
+                title="Sets all rows — each set also has its own lb/kg flip"
                 className="no-print flex items-center rounded-lg border border-border bg-surface/60 p-0.5"
               >
                 {(["lb", "kg"] as const).map((u) => (
@@ -335,7 +351,7 @@ export function WorkoutLogger({
                     key={u}
                     type="button"
                     aria-pressed={unit === u}
-                    onClick={() => setUnit(u)}
+                    onClick={() => applyUnitToAll(u)}
                     className={cn(
                       "rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition-colors",
                       unit === u
@@ -530,10 +546,10 @@ function ExerciseBlock({
   const firstMode = ex.sets[0]?.loadMode ?? "lb";
   const weightHeader =
     firstMode === "lb" || firstMode === "kg"
-      ? `Weight (${unit})`
+      ? "Weight"
       : LOAD_MODE_LABEL[firstMode];
   const resultHeader =
-    ex.repMode === "reps" ? "Reps done" : REP_MODE_LABEL[ex.repMode];
+    ex.repMode === "reps" ? "Done" : REP_MODE_LABEL[ex.repMode];
 
   const usesPct = ex.sets.some((s) => s.loadMode === "pct");
   const refEntry = lib?.referenceMax ? maxes[lib.referenceMax] : undefined;
@@ -625,37 +641,41 @@ function ExerciseBlock({
         </button>
       </div>
 
-      {/* Per-set table: row = set, columns = target / weight / result / hit */}
-      <div className="mt-3 overflow-x-auto">
-        <div className="min-w-[24rem]">
-          <div className="grid grid-cols-[2rem_1fr_1.5fr_1.2fr_4.5rem] items-center gap-x-3 px-1 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-            <span>Set</span>
-            <span>Target</span>
-            <span>{weightHeader}</span>
-            <span>{resultHeader}</span>
-            <span className="text-center">Hit?</span>
-          </div>
-          {ex.sets.map((set, i) => {
-            const row = rows[i] ?? { weight: null, result: "", mark: null };
-            return (
-              <div
-                key={i}
-                className="grid grid-cols-[2rem_1fr_1.5fr_1.2fr_4.5rem] items-center gap-x-3 border-t border-border/60 px-1 py-1.5"
-              >
-                <span className="tnum text-xs font-semibold text-muted-foreground">
-                  {i + 1}
-                </span>
-                <span className="tnum text-sm font-semibold">{set.target}</span>
+      {/* Per-set rows: target / weight (own unit per set) / result / hit —
+          fits without horizontal scrolling, phones included. */}
+      <div className="mt-3">
+        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.25rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+          <span>Set</span>
+          <span>Target</span>
+          <span>{weightHeader}</span>
+          <span>{resultHeader}</span>
+          <span className="text-center">Hit?</span>
+        </div>
+        {ex.sets.map((set, i) => {
+          const row: SetLog =
+            rows[i] ?? { weight: null, unit: "lb", result: "", mark: null };
+          return (
+            <div
+              key={i}
+              className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.25rem] items-center gap-x-2 border-t border-border/60 py-1.5"
+            >
+              <span className="tnum text-xs font-semibold text-muted-foreground">
+                {i + 1}
+              </span>
+              <span className="tnum truncate text-xs font-semibold">
+                {set.target}
+              </span>
 
-                {/* Weight cell — lb/kg editable, % resolved, BW fixed */}
-                {set.loadMode === "lb" || set.loadMode === "kg" ? (
+              {/* Weight cell — editable with a PER-SET lb/kg flip, % resolved, BW fixed */}
+              {set.loadMode === "lb" || set.loadMode === "kg" ? (
+                <span className="flex min-w-0 items-center gap-1">
                   <Input
                     type="number"
                     inputMode="decimal"
                     min={0}
-                    aria-label={`Set ${i + 1} weight for ${name} in ${unit}`}
-                    className="tnum h-8 w-full max-w-24 px-2 text-sm font-semibold"
-                    value={weightInUnit(row.weight, unit)}
+                    aria-label={`Set ${i + 1} weight for ${name} in ${row.unit}`}
+                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                    value={weightInUnit(row.weight, row.unit)}
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === "") {
@@ -664,70 +684,81 @@ function ExerciseBlock({
                       }
                       const n = Number(v);
                       if (!Number.isNaN(n)) {
-                        onUpdateSet(i, { weight: { value: n, unit } });
+                        onUpdateSet(i, { weight: { value: n, unit: row.unit } });
                       }
                     }}
                   />
-                ) : set.loadMode === "pct" && set.load != null ? (
-                  <span className="flex flex-wrap items-baseline gap-x-1.5">
-                    <span className="tnum text-xs text-muted-foreground">
-                      {set.load}%
-                    </span>
-                    <span className="tnum text-sm font-semibold">
-                      {resolvePct(set.load, lib, maxes, unit) ?? "—"}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    BW
-                  </span>
-                )}
-
-                {/* Result cell */}
-                <Input
-                  type="text"
-                  aria-label={`Set ${i + 1} result for ${name}`}
-                  placeholder={set.target}
-                  className="tnum h-8 w-full max-w-24 px-2 text-sm"
-                  value={row.result}
-                  onChange={(e) => onUpdateSet(i, { result: e.target.value })}
-                />
-
-                {/* Hit / miss */}
-                <span className="flex items-center justify-center gap-1">
                   <button
                     type="button"
-                    aria-label={`Set ${i + 1}: hit target`}
-                    aria-pressed={row.mark === "hit"}
-                    onClick={() => onToggleMark(i, "hit", set.target)}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
-                      row.mark === "hit"
-                        ? "border-success/50 bg-success/15 text-success"
-                        : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
-                    )}
+                    aria-label={`Set ${i + 1}: switch unit (now ${row.unit})`}
+                    title="Flip this set between lb and kg"
+                    onClick={() =>
+                      onUpdateSet(i, { unit: row.unit === "lb" ? "kg" : "lb" })
+                    }
+                    className="no-print flex h-8 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-[0.6rem] font-bold uppercase text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Set ${i + 1}: missed target`}
-                    aria-pressed={row.mark === "miss"}
-                    onClick={() => onToggleMark(i, "miss", set.target)}
-                    className={cn(
-                      "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
-                      row.mark === "miss"
-                        ? "border-destructive/50 bg-destructive/10 text-destructive"
-                        : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <X className="h-3.5 w-3.5" />
+                    {row.unit}
                   </button>
                 </span>
-              </div>
-            );
-          })}
-        </div>
+              ) : set.loadMode === "pct" && set.load != null ? (
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+                  <span className="tnum text-xs text-muted-foreground">
+                    {set.load}%
+                  </span>
+                  <span className="tnum truncate text-sm font-semibold">
+                    {resolvePct(set.load, lib, maxes, row.unit) ?? "—"}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-muted-foreground">
+                  BW
+                </span>
+              )}
+
+              {/* Result cell */}
+              <Input
+                type="text"
+                aria-label={`Set ${i + 1} result for ${name}`}
+                placeholder={set.target}
+                className="tnum h-8 w-full min-w-0 px-1.5 text-sm"
+                value={row.result}
+                onChange={(e) => onUpdateSet(i, { result: e.target.value })}
+              />
+
+              {/* Hit / miss */}
+              <span className="flex items-center justify-center gap-1">
+                <button
+                  type="button"
+                  aria-label={`Set ${i + 1}: hit target`}
+                  aria-pressed={row.mark === "hit"}
+                  onClick={() => onToggleMark(i, "hit", set.target)}
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
+                    row.mark === "hit"
+                      ? "border-success/50 bg-success/15 text-success"
+                      : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <Check className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Set ${i + 1}: missed target`}
+                  aria-pressed={row.mark === "miss"}
+                  onClick={() => onToggleMark(i, "miss", set.target)}
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
+                    row.mark === "miss"
+                      ? "border-destructive/50 bg-destructive/10 text-destructive"
+                      : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

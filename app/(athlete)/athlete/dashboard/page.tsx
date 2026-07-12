@@ -25,10 +25,9 @@ import {
   money,
   plans,
   relTime,
-  sessions,
   threads,
 } from "@/lib/demo/data";
-import { announcements, jordanProgramDays } from "@/lib/demo/training";
+import { announcements, jordanProgramDays, myBookings } from "@/lib/demo/training";
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteDashboardPage() {
@@ -38,9 +37,8 @@ export default async function AthleteDashboardPage() {
   const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
   const firstName = athlete.name.split(" ")[0];
 
-  const upcoming = sessions
-    .filter((s) => s.roster.some((r) => r.athleteId === athlete.id))
-    .slice(0, 3);
+  // Plain "Coaching" bookings — no coach names or session-type jargon.
+  const upcoming = myBookings.slice(0, 3);
 
   const myThreads = threads.filter((t) =>
     t.participants.some((p) => p.id === athlete.id),
@@ -182,45 +180,32 @@ export default async function AthleteDashboardPage() {
               <Empty>No upcoming bookings yet.</Empty>
             ) : (
               <ul className="flex flex-col gap-2">
-                {upcoming.map((s) => {
-                  const entry = s.roster.find((r) => r.athleteId === athlete.id);
-                  return (
-                    <li
-                      key={s.id}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
-                    >
-                      <div className="flex h-10 w-10 flex-col items-center justify-center rounded-md bg-muted text-center">
-                        <span className="text-[0.6rem] uppercase text-muted-foreground">
-                          {new Date(s.startsAt).toLocaleDateString("en-US", {
-                            month: "short",
-                          })}
-                        </span>
-                        <span className="tnum text-sm font-bold leading-none">
-                          {new Date(s.startsAt).getDate()}
-                        </span>
+                {upcoming.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                  >
+                    <div className="flex h-10 w-10 flex-col items-center justify-center rounded-md bg-muted text-center">
+                      <span className="text-[0.6rem] uppercase text-muted-foreground">
+                        {new Date(s.startsAt).toLocaleDateString("en-US", {
+                          month: "short",
+                        })}
+                      </span>
+                      <span className="tnum text-sm font-bold leading-none">
+                        {new Date(s.startsAt).getDate()}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{s.label}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {fmtRange(s.startsAt, s.endsAt)}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">
-                          {s.title}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {fmtRange(s.startsAt, s.endsAt)}
-                        </div>
-                      </div>
-                      <Pill
-                        tone={
-                          entry?.state === "confirmed"
-                            ? "success"
-                            : entry?.state === "waitlisted"
-                              ? "info"
-                              : "warning"
-                        }
-                      >
-                        {entry?.state ?? "—"}
-                      </Pill>
-                    </li>
-                  );
-                })}
+                    </div>
+                    <Pill tone={s.status === "confirmed" ? "success" : "info"}>
+                      {s.status}
+                    </Pill>
+                  </li>
+                ))}
               </ul>
             )}
           </CardContent>

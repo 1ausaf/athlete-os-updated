@@ -251,7 +251,7 @@ function LiftProgression({
 
       {/* Tested-set history */}
       <div className="overflow-hidden rounded-lg border border-border">
-        <Table className="min-w-[380px]">
+        <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead>Date</TableHead>
@@ -317,15 +317,15 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
 
       {/* Per-session table */}
       <div className="overflow-hidden rounded-lg border border-border">
-        <Table className="min-w-[620px]">
+        <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead>Date</TableHead>
               <TableHead>Session</TableHead>
-              <TableHead className="text-right">Reps</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Reps</TableHead>
               <TableHead className="text-right">Volume (kg)</TableHead>
               <TableHead className="text-right">Duration</TableHead>
-              <TableHead className="text-right">Blocks</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Blocks</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -338,7 +338,7 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
                     {fmtDay(s.date)}
                   </TableCell>
                   <TableCell className="font-medium">{s.title}</TableCell>
-                  <TableCell className="tnum text-right">{s.reps}</TableCell>
+                  <TableCell className="tnum hidden text-right sm:table-cell">{s.reps}</TableCell>
                   <TableCell className="tnum text-right font-semibold">
                     {s.volumeKg.toLocaleString("en-US")}
                   </TableCell>
@@ -348,8 +348,8 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
                   <TableCell
                     className={
                       partial
-                        ? "tnum text-right font-medium text-warning"
-                        : "tnum text-right text-muted-foreground"
+                        ? "tnum hidden text-right font-medium text-warning sm:table-cell"
+                        : "tnum hidden text-right text-muted-foreground sm:table-cell"
                     }
                   >
                     {s.blocksCompleted}

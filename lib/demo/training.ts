@@ -28,7 +28,14 @@ function at(dayOffset: number, hour?: number, minute = 0): string {
 export type LoadMode = "lb" | "kg" | "pct" | "bw";
 
 /** What the "reps" column measures. */
-export type RepMode = "reps" | "time" | "distance" | "height" | "cal";
+export type RepMode =
+  | "reps"
+  | "time"
+  | "distance"
+  | "height"
+  | "cal"
+  | "watts"
+  | "velocity";
 
 export const LOAD_MODE_LABEL: Record<LoadMode, string> = {
   lb: "Weight (lb)",
@@ -43,6 +50,8 @@ export const REP_MODE_LABEL: Record<RepMode, string> = {
   distance: "Distance",
   height: "Height",
   cal: "Calories",
+  watts: "Watts",
+  velocity: "Velocity",
 };
 
 export const LB_PER_KG = 2.2046;

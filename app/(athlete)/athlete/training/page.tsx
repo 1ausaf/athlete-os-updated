@@ -16,7 +16,6 @@ import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { athleteById, relTime } from "@/lib/demo/data";
-import { seasonMeta } from "@/lib/demo/status";
 import {
   athleteMaxes,
   exerciseById,
@@ -33,7 +32,6 @@ export default async function AthleteTrainingPage() {
 
   const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
   const { program } = athlete;
-  const season = seasonMeta[athlete.season];
 
   // Assemble serializable props for the client logger.
   const days = jordanProgramDays;
@@ -56,9 +54,6 @@ export default async function AthleteTrainingPage() {
         description="Programs run in sequence — finish a day to unlock the next, not by the calendar. Pick the session that fits where you are today."
         actions={
           <>
-            <Pill tone={season.tone} dot>
-              {athlete.sport} · {season.label}
-            </Pill>
             <Button asChild variant="ghost" size="sm" className="no-print">
               <Link href={"/athlete/dashboard" as Route}>
                 <LayoutDashboard className="h-4 w-4" />

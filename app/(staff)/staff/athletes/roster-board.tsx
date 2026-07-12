@@ -89,64 +89,63 @@ export function RosterBoard({ athletes }: { athletes: Athlete[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            placeholder="Search athletes, sport, or coach…"
-            className="pl-8"
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      {/* Board surface — the tinted backdrop makes it read like the Trello board */}
+      <div className="rounded-2xl border border-border bg-brand-soft/60 p-3 dark:bg-brand-soft/50">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              placeholder="Search athletes, sport, or coach…"
+              className="border-border/60 bg-surface pl-8"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
-        <span className="text-xs text-muted-foreground">
-          The member board — same lists as the Trello workflow, cards sorted by
-          programming due date. Click a card to open it.
-        </span>
-      </div>
 
-      {/* Columns span horizontally, like the Trello board */}
-      <div className="-mx-1 flex items-start gap-3 overflow-x-auto px-1 pb-2 scrollbar-slim">
-        {COLUMNS.map(({ bucket, title }) => {
-          const cards = filtered
-            .filter((a) => a.bucket === bucket)
-            .sort((a, b) => a.programDueInDays - b.programDueInDays);
-          return (
-            <div
-              key={bucket}
-              className="flex w-[290px] shrink-0 flex-col rounded-xl border border-border bg-surface-muted/70"
-            >
-              <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-                <span className="font-mono text-[0.66rem] font-bold uppercase tracking-wider text-muted-foreground">
-                  {title}
-                </span>
-                <span className="tnum ml-auto rounded-full bg-muted px-2 py-0.5 text-[0.65rem] font-bold text-muted-foreground">
-                  {cards.length}
-                </span>
-              </div>
-
-              <div className="flex max-h-[58vh] flex-col gap-2 overflow-y-auto px-2 pb-2 scrollbar-slim">
-                {cards.map((a) => (
-                  <BoardCard key={a.id} athlete={a} onOpen={() => setOpenId(a.id)} />
-                ))}
-                {cards.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border/70 p-3 text-center text-xs text-muted-foreground">
-                    No members here{query ? " for this search" : ""}.
-                  </p>
-                ) : null}
-              </div>
-
-              <button
-                type="button"
-                className="mx-2 mb-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                title="Demo — onboarding creates cards here"
+        {/* Columns span horizontally — swipe/scroll sideways like Trello */}
+        <div className="flex snap-x items-start gap-3 overflow-x-auto pb-1 scrollbar-slim">
+          {COLUMNS.map(({ bucket, title }) => {
+            const cards = filtered
+              .filter((a) => a.bucket === bucket)
+              .sort((a, b) => a.programDueInDays - b.programDueInDays);
+            return (
+              <div
+                key={bucket}
+                className="flex w-[272px] shrink-0 snap-start flex-col rounded-xl bg-surface shadow-soft"
               >
-                <Plus className="h-3.5 w-3.5" />
-                Add a card
-              </button>
-            </div>
-          );
-        })}
+                <div className="flex items-center gap-2 px-3 pb-1.5 pt-2.5">
+                  <span className="truncate font-mono text-[0.65rem] font-bold uppercase tracking-wide text-foreground/80">
+                    {title}
+                  </span>
+                  <span className="tnum ml-auto text-[0.68rem] font-semibold text-muted-foreground">
+                    {cards.length}
+                  </span>
+                </div>
+
+                <div className="flex max-h-[62vh] flex-col gap-1.5 overflow-y-auto px-1.5 pb-1 scrollbar-slim">
+                  {cards.map((a) => (
+                    <BoardCard key={a.id} athlete={a} onOpen={() => setOpenId(a.id)} />
+                  ))}
+                  {cards.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-border/70 p-3 text-center text-xs text-muted-foreground">
+                      No members{query ? " match" : ""}.
+                    </p>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  className="mx-1.5 mb-1.5 mt-0.5 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  title="Demo — onboarding creates cards here"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add a card
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {open ? <CardModal athlete={open} onClose={() => setOpenId(null)} /> : null}
@@ -173,36 +172,37 @@ function BoardCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex flex-col gap-2 rounded-lg border border-border bg-card p-3 text-left shadow-soft transition-colors hover:border-brand/40"
+      className="group flex flex-col gap-1.5 rounded-lg border border-transparent bg-card p-2.5 text-left shadow-soft transition-colors hover:border-brand/50"
     >
       {/* Label strips (Trello labels: Finance red / injury amber / PR brand) */}
       {(overdueBilling || hasInjury || athlete.prs.some((p) => p.isNew)) && (
         <span className="flex gap-1">
           {overdueBilling ? (
-            <span className="h-1.5 w-8 rounded-full bg-destructive" title="Finance" />
+            <span className="h-2 w-9 rounded-sm bg-destructive" title="Finance" />
           ) : null}
           {hasInjury ? (
-            <span className="h-1.5 w-8 rounded-full bg-warning" title="Injury flag" />
+            <span className="h-2 w-9 rounded-sm bg-warning" title="Injury flag" />
           ) : null}
           {athlete.prs.some((p) => p.isNew) ? (
-            <span className="h-1.5 w-8 rounded-full bg-brand" title="New PR" />
+            <span className="h-2 w-9 rounded-sm bg-brand" title="New PR" />
           ) : null}
         </span>
       )}
 
-      <span className="text-sm font-semibold leading-snug">
+      {/* Trello card title: NAME [Sport, Sex, YOB] */}
+      <span className="text-[0.8rem] font-semibold uppercase leading-snug tracking-tight">
         {cardTitle(athlete)}
       </span>
 
-      {/* Chips row: due date · CAP count · program checklist */}
-      <span className="flex flex-wrap items-center gap-1.5">
+      {/* Badge row: due chip + counters, avatar pinned right like Trello */}
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.68rem] font-semibold",
+            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.66rem] font-semibold",
             due.tone === "danger"
               ? "bg-destructive text-destructive-foreground"
               : due.tone === "warning"
-                ? "bg-warning/15 text-warning"
+                ? "bg-warning/20 text-warning"
                 : "bg-muted text-muted-foreground",
           )}
         >
@@ -210,28 +210,32 @@ function BoardCard({
           {fmtDay(dueDate(athlete).toISOString()).replace(/^\w+, /, "")}
           {athlete.programDueInDays === 0 ? " · Overdue" : ""}
         </span>
-        <span className="inline-flex items-center gap-1 text-[0.68rem] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 text-[0.66rem] text-muted-foreground">
           <MessageSquare className="h-3 w-3" />
           {athlete.capNotes.length}
         </span>
-        <span className="inline-flex items-center gap-1 text-[0.68rem] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 text-[0.66rem] text-muted-foreground">
           <CheckSquare className="h-3 w-3" />
           {athlete.program.day}/{athlete.program.totalDays}
         </span>
       </span>
 
-      {/* Custom fields line */}
-      <span className="text-[0.7rem] text-muted-foreground">
-        {trainingField(athlete)}
-        {athlete.nutrition === "pro" ? "  ·  Nutrition: Pro" : ""}
-      </span>
-
-      <span className="flex items-center justify-end">
+      {/* Custom fields + member avatar, Trello-style footer */}
+      <span className="flex items-end justify-between gap-2">
+        <span className="text-[0.68rem] leading-snug text-muted-foreground">
+          {trainingField(athlete)}
+          {athlete.nutrition === "pro" ? (
+            <>
+              <br />
+              Nutrition: Pro
+            </>
+          ) : null}
+        </span>
         <AthleteAvatar
           initials={athlete.initials}
           hue={athlete.hue}
           size="sm"
-          className="h-6 w-6 text-[0.55rem]"
+          className="h-6 w-6 shrink-0 text-[0.55rem]"
         />
       </span>
     </button>

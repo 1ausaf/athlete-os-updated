@@ -139,11 +139,11 @@ export default async function StaffCompliancePage() {
           </div>
 
           <div className="overflow-hidden rounded-lg border border-border">
-            <Table className="min-w-[720px]">
+            <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead>Athlete</TableHead>
-                  <TableHead>Adults present</TableHead>
+                  <TableHead className="hidden md:table-cell">Adults present</TableHead>
                   <TableHead className="text-center">Guardian</TableHead>
                   <TableHead className="text-center">2nd coach</TableHead>
                   <TableHead className="text-right">Status</TableHead>
@@ -172,7 +172,7 @@ export default async function StaffCompliancePage() {
                           <Pill tone="info">Minor</Pill>
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex flex-wrap gap-1.5">
                           {row.adults.map((name) => (
                             <Pill key={name} tone="neutral">
