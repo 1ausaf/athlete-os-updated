@@ -103,14 +103,6 @@ export default async function AthleteDashboardPage() {
               {athlete.program.phase}
             </span>
           </div>
-          <div>
-            <h2 className="text-2xl">{athlete.program.name}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty">
-              Your program runs in sequence — Day 1, Day 2, Day 3 — not by the
-              calendar. Start with the day marked up next; if you&apos;re at
-              LPS, skip the remote day and jump ahead.
-            </p>
-          </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             {nextDays.map((day, i) => (
