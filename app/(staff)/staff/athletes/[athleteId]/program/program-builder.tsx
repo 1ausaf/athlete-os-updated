@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import {
+  LOCATION_LABEL,
   kgToLb,
   lbToKg,
   type LibraryExercise,
@@ -432,7 +433,7 @@ export function ProgramBuilder({
           Day {active.dayNumber} — {active.title}
         </h2>
         <Pill tone={active.location === "home" ? "info" : "brand"}>
-          {active.location === "home" ? "At-home" : "In-gym"}
+          {LOCATION_LABEL[active.location]}
         </Pill>
         <span className="text-sm text-muted-foreground">{active.focus}</span>
       </div>

@@ -228,5 +228,18 @@
     .no-print {
       display: none !important;
     }
+    /* Compact print: the workout sheet should aim for one page the athlete
+       can write on — small type, no app chrome, no card shadows. */
+    body {
+      font-size: 11px;
+    }
+    main > div {
+      padding: 0 !important;
+      max-width: none !important;
+    }
+    .print-flat {
+      border: none !important;
+      box-shadow: none !important;
+    }
   }
 }

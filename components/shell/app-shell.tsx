@@ -55,7 +55,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-surface md:flex">
+      <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-surface md:flex">
         <div className="flex h-16 items-center border-b border-border px-5">
           <Link href="/" aria-label="LPS Athletic home">
             <BrandLockup subtitle={workspaceLabel} />
@@ -73,8 +73,8 @@ export function AppShell({
       </aside>
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col md:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 md:px-8">
+      <div className="flex min-w-0 flex-1 flex-col md:pl-64 print:pl-0">
+        <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 md:px-8">
           {/* Mobile nav trigger */}
           <Sheet>
             <SheetTrigger asChild>

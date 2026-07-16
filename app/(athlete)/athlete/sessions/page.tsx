@@ -15,14 +15,14 @@ export default async function AthleteSessionsPage() {
   if (user.role !== "athlete") redirect("/staff/athletes");
 
   const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
-  const slots = generateBookableSlots(5);
+  const slots = generateBookableSlots(12);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Athlete Portal · Schedule"
         title="Sessions"
-        description="Check every time you want across the next five weeks, then book them all in one go. Your plan cadence and billing status are enforced automatically."
+        description="Check every time you want across the next 12 weeks, then book them all in one go. Your plan cadence and billing status are enforced automatically."
         actions={
           <Pill tone="brand" dot>
             {athlete.planName}

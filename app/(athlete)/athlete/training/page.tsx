@@ -1,17 +1,7 @@
-import Link from "next/link";
-import type { Route } from "next";
 import { redirect } from "next/navigation";
-import {
-  CalendarDays,
-  ChevronDown,
-  Dumbbell,
-  LayoutDashboard,
-  Trophy,
-} from "lucide-react";
+import { ChevronDown, Trophy } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
-import { ProgressRing } from "@/components/app/progress";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
@@ -48,55 +38,13 @@ export default async function AthleteTrainingPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Athlete Portal · Training"
-        title="Your next sessions"
-        description="Programs run in sequence — finish a day to unlock the next, not by the calendar. Pick the session that fits where you are today."
-        actions={
-          <>
-            <Button asChild variant="ghost" size="sm" className="no-print">
-              <Link href={"/athlete/dashboard" as Route}>
-                <LayoutDashboard className="h-4 w-4" />
-                Dashboard
-              </Link>
-            </Button>
-            <Button asChild variant="ghost" size="sm" className="no-print">
-              <Link href={"/athlete/sessions" as Route}>
-                <CalendarDays className="h-4 w-4" />
-                Schedule
-              </Link>
-            </Button>
-          </>
-        }
-      />
-
-      {/* Compact program strip — the day picker below is the star. */}
-      <Card>
-        <div className="flex flex-wrap items-center gap-4 p-4 sm:px-5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
-            <Dumbbell className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate font-semibold">{program.name}</span>
-              <Pill tone="neutral">{program.phase} phase</Pill>
-              <Pill tone="brand">
-                Day {program.day} of {program.totalDays}
-              </Pill>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {athlete.planName} · advance a day when the completed session is
-              logged
-            </p>
-          </div>
-          <ProgressRing
-            value={program.compliancePct}
-            size={72}
-            stroke={7}
-            label="log rate"
-          />
-        </div>
-      </Card>
+      <div className="no-print">
+        <PageHeader
+          eyebrow="Athlete Portal · Training"
+          title="Your next sessions"
+          description="Programs run in sequence — finish a day to unlock the next, not by the calendar. Pick the session that fits where you are today."
+        />
+      </div>
 
       {/* Day picker + interactive logger (client) */}
       <WorkoutLogger
@@ -107,7 +55,7 @@ export default async function AthleteTrainingPage() {
       />
 
       {/* PR history — secondary, collapsed by default */}
-      <Card>
+      <Card className="no-print">
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center gap-2 p-5 [&::-webkit-details-marker]:hidden">
             <Trophy className="h-5 w-5 text-brand-ink" aria-hidden />

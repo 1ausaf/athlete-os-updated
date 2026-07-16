@@ -8,8 +8,11 @@ import {
   CreditCard,
   Dumbbell,
   Home,
+  Lock,
+  MapPin,
   Megaphone,
   MessagesSquare,
+  Salad,
   Trophy,
 } from "lucide-react";
 
@@ -27,7 +30,13 @@ import {
   relTime,
   threads,
 } from "@/lib/demo/data";
-import { announcements, jordanProgramDays, myBookings } from "@/lib/demo/training";
+import {
+  announcements,
+  jordanProgramDays,
+  LOCATION_LABEL,
+  myBookings,
+  nutritionProtocols,
+} from "@/lib/demo/training";
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteDashboardPage() {
@@ -59,9 +68,15 @@ export default async function AthleteDashboardPage() {
     athlete.billing.nextInvoice,
   ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
+  // Nutrition tier — Pro athletes see their protocol; everyone else gets a
+  // locked teaser (client: "if they want to unlock, just talk to your coach").
+  const hasNutrition = athlete.nutrition === "pro";
+  const protocol =
+    nutritionProtocols[athlete.id] ?? nutritionProtocols["ath-jordan"];
+
   // Programs run as a numbered sequence, not a calendar — surface the next
-  // three days so athletes always know which one to start (and which at-home
-  // day to skip when they make it into the gym).
+  // three days so athletes always know which one to start (and which remote
+  // day to skip when they make it into LPS).
   const nextDays = jordanProgramDays.slice(0, 3);
   const progressPct = Math.round(
     (athlete.program.day / athlete.program.totalDays) * 100,
@@ -92,8 +107,8 @@ export default async function AthleteDashboardPage() {
             <h2 className="text-2xl">{athlete.program.name}</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty">
               Your program runs in sequence — Day 1, Day 2, Day 3 — not by the
-              calendar. Start with the day marked up next; if you&apos;re at the
-              gym, skip the at-home day and jump ahead.
+              calendar. Start with the day marked up next; if you&apos;re at
+              LPS, skip the remote day and jump ahead.
             </p>
           </div>
 
@@ -116,15 +131,21 @@ export default async function AthleteDashboardPage() {
                     <Pill tone="brand" dot className="ml-auto">
                       Up next
                     </Pill>
-                  ) : day.location === "home" ? (
+                  ) : (
                     <Pill
                       tone="neutral"
-                      icon={<Home className="h-3 w-3" aria-hidden />}
+                      icon={
+                        day.location === "home" ? (
+                          <Home className="h-3 w-3" aria-hidden />
+                        ) : (
+                          <MapPin className="h-3 w-3" aria-hidden />
+                        )
+                      }
                       className="ml-auto"
                     >
-                      At-home
+                      {LOCATION_LABEL[day.location]}
                     </Pill>
-                  ) : null}
+                  )}
                 </div>
                 <div className="text-sm font-semibold leading-snug">
                   {day.title}
@@ -211,12 +232,12 @@ export default async function AthleteDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Coach chat + announcements */}
+        {/* Chat + announcements */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
               icon={MessagesSquare}
-              title="Coach chat"
+              title="Chat"
               href={"/athlete/messages" as Route}
               cta="Open"
               badge={unread}
@@ -329,6 +350,60 @@ export default async function AthleteDashboardPage() {
                 </li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+
+        {/* Nutrition — Pro protocol, or a locked teaser (FR round 2) */}
+        <Card className="lg:col-span-2">
+          <CardContent className="flex flex-col gap-4 p-5">
+            <TileHeader
+              icon={Salad}
+              title="Nutrition"
+              href={"/athlete/nutrition" as Route}
+              cta="Open"
+            />
+            {hasNutrition ? (
+              <Link
+                href={"/athlete/nutrition" as Route}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-4 transition-colors hover:bg-accent/50"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">
+                      {protocol.title}
+                    </span>
+                    <Pill tone="brand" dot>
+                      Pro
+                    </Pill>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Weigh-in Mondays, fasted · Updated{" "}
+                    {relTime(protocol.updatedAt)}
+                  </p>
+                </div>
+                <ArrowRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+              </Link>
+            ) : (
+              <Link
+                href={"/athlete/nutrition" as Route}
+                className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-surface/30 p-4 transition-colors hover:bg-accent/50"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Lock className="h-4 w-4" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    Nutrition coaching
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Talk to your coach to unlock nutrition coaching.
+                  </p>
+                </div>
+              </Link>
+            )}
           </CardContent>
         </Card>
       </div>

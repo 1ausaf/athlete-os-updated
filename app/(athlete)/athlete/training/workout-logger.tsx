@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   CheckCircle2,
-  Dumbbell,
-  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
   History,
   Home,
   Link2,
   ListOrdered,
+  MapPin,
   Play,
   Printer,
   Trophy,
@@ -24,11 +25,13 @@ import { Pill } from "@/components/ui/pill";
 import {
   LB_PER_KG,
   LOAD_MODE_LABEL,
+  LOCATION_LABEL,
   REP_MODE_LABEL,
   isSupersetSlot,
   kgToLb,
   lbToKg,
   slotGroup,
+  type CircuitItem,
   type ExerciseHistory,
   type LibraryExercise,
   type ProgramDay,
@@ -156,19 +159,41 @@ export function WorkoutLogger({
     buildInitialLogs(days),
   );
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
-  const [video, setVideo] = useState<LibraryExercise | null>(null);
+  const [video, setVideo] = useState<{ lib: LibraryExercise; index: number } | null>(
+    null,
+  );
+  /** Per-movement completion for circuit blocks (the warm-up). */
+  const [circuitDone, setCircuitDone] = useState<Record<string, boolean[]>>({});
+  /** "Everything saves automatically" — flashes on each logged change. */
+  const [savedFlash, setSavedFlash] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeDay = days.find((d) => d.id === activeDayId) ?? days[0];
 
-  const isDone = (key: string): boolean => {
+  function flashSaved() {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    setSavedFlash(true);
+    savedTimer.current = setTimeout(() => setSavedFlash(false), 1800);
+  }
+
+  const circuitFor = (ex: ProgramExercise): CircuitItem[] | undefined =>
+    exercises[ex.exerciseId]?.circuit;
+
+  const isDone = (key: string, circuitLen?: number): boolean => {
+    if (doneOverride[key] != null) return doneOverride[key];
+    if (circuitLen) {
+      const items = circuitDone[key] ?? [];
+      return items.length >= circuitLen && items.slice(0, circuitLen).every(Boolean);
+    }
     const rows = logs[key] ?? [];
-    const allMarked = rows.length > 0 && rows.every((r) => r.mark !== null);
-    return doneOverride[key] ?? allMarked;
+    return rows.length > 0 && rows.every((r) => r.mark !== null);
   };
 
   const dayProgress = (day: ProgramDay) => {
     const all = day.sections.flatMap((s) => s.exercises);
-    const done = all.filter((ex) => isDone(exKey(day.id, ex.slot))).length;
+    const done = all.filter((ex) =>
+      isDone(exKey(day.id, ex.slot), circuitFor(ex)?.length),
+    ).length;
     return { done, total: all.length };
   };
 
@@ -193,6 +218,16 @@ export function WorkoutLogger({
         i === idx ? { ...row, ...patch } : row,
       ),
     }));
+    flashSaved();
+  }
+
+  function toggleCircuitItem(key: string, idx: number, len: number) {
+    setCircuitDone((prev) => {
+      const items = [...(prev[key] ?? Array.from({ length: len }, () => false))];
+      items[idx] = !items[idx];
+      return { ...prev, [key]: items };
+    });
+    flashSaved();
   }
 
   /** Global lb⇄kg applies to every row; rows can still be flipped one by one. */
@@ -208,6 +243,7 @@ export function WorkoutLogger({
   }
 
   function toggleMark(key: string, idx: number, mark: "hit" | "miss", target: string) {
+    flashSaved();
     setLogs((prev) => {
       const rows = prev[key] ?? [];
       return {
@@ -224,9 +260,10 @@ export function WorkoutLogger({
     });
   }
 
-  function toggleDone(key: string) {
-    const next = !isDone(key);
+  function toggleDone(key: string, circuitLen?: number) {
+    const next = !isDone(key, circuitLen);
     setDoneOverride((prev) => ({ ...prev, [key]: next }));
+    flashSaved();
   }
 
   if (!activeDay) return null;
@@ -234,18 +271,18 @@ export function WorkoutLogger({
   return (
     <>
       {/* -------------------------------------------------- Day picker */}
-      <Card>
+      <Card className="no-print">
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
                 <ListOrdered className="h-5 w-5 text-brand-ink" aria-hidden />
-                <h3 className="text-base">Up next in your program</h3>
+                <h3 className="text-base">Program</h3>
               </div>
               <p className="mt-1 text-xs text-muted-foreground text-pretty">
-                Sessions run in order — day one, day two, day three. At the
-                facility on an at-home day? Skip ahead and do the next in-gym
-                session instead.
+                Sessions run in order — day one, day two, day three, restarting
+                each week. At LPS on a remote day? Skip ahead and do the next
+                LPS session instead.
               </p>
             </div>
           </div>
@@ -280,14 +317,14 @@ export function WorkoutLogger({
                       tone={day.location === "gym" ? "neutral" : "info"}
                       icon={
                         day.location === "gym" ? (
-                          <Dumbbell className="h-3 w-3" />
+                          <MapPin className="h-3 w-3" />
                         ) : (
                           <Home className="h-3 w-3" />
                         )
                       }
                       className="ml-auto"
                     >
-                      {day.location === "gym" ? "In-gym" : "At-home"}
+                      {LOCATION_LABEL[day.location]}
                     </Pill>
                   </div>
                   <span className="text-sm font-semibold leading-snug">
@@ -314,7 +351,7 @@ export function WorkoutLogger({
       </Card>
 
       {/* -------------------------------------------------- Session logger */}
-      <Card className="overflow-hidden">
+      <Card className="print-flat overflow-hidden">
         <CardContent className="flex flex-col gap-5 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -324,14 +361,24 @@ export function WorkoutLogger({
                   tone={activeDay.location === "gym" ? "neutral" : "info"}
                   icon={
                     activeDay.location === "gym" ? (
-                      <Dumbbell className="h-3 w-3" />
+                      <MapPin className="h-3 w-3" />
                     ) : (
                       <Home className="h-3 w-3" />
                     )
                   }
                 >
-                  {activeDay.location === "gym" ? "In-gym" : "At-home"}
+                  {LOCATION_LABEL[activeDay.location]}
                 </Pill>
+                <span
+                  className={cn(
+                    "no-print inline-flex items-center gap-1 text-[0.68rem] font-medium transition-opacity",
+                    savedFlash ? "text-success opacity-100" : "text-muted-foreground/70 opacity-80",
+                  )}
+                  aria-live="polite"
+                >
+                  <CheckCircle2 className="h-3 w-3" aria-hidden />
+                  {savedFlash ? "Saved" : "Saves automatically"}
+                </span>
               </div>
               <h3 className="mt-1 text-lg">
                 Day {activeDay.dayNumber} — {activeDay.title}
@@ -434,13 +481,25 @@ export function WorkoutLogger({
                             lib={exercises[ex.exerciseId]}
                             hist={history[ex.exerciseId]}
                             rows={logs[exKey(activeDay.id, ex.slot)] ?? []}
-                            done={isDone(exKey(activeDay.id, ex.slot))}
+                            done={isDone(
+                              exKey(activeDay.id, ex.slot),
+                              circuitFor(ex)?.length,
+                            )}
                             unit={unit}
                             maxes={maxes}
                             inSuperset
                             isLastInGroup={i === group.exercises.length - 1}
+                            circuitState={
+                              circuitDone[exKey(activeDay.id, ex.slot)] ?? []
+                            }
+                            onToggleCircuitItem={(idx, len) =>
+                              toggleCircuitItem(exKey(activeDay.id, ex.slot), idx, len)
+                            }
                             onToggleDone={() =>
-                              toggleDone(exKey(activeDay.id, ex.slot))
+                              toggleDone(
+                                exKey(activeDay.id, ex.slot),
+                                circuitFor(ex)?.length,
+                              )
                             }
                             onUpdateSet={(idx, patch) =>
                               updateSet(exKey(activeDay.id, ex.slot), idx, patch)
@@ -453,7 +512,7 @@ export function WorkoutLogger({
                                 target,
                               )
                             }
-                            onOpenVideo={setVideo}
+                            onOpenVideo={(lib, index) => setVideo({ lib, index })}
                           />
                         ))}
                       </div>
@@ -467,11 +526,28 @@ export function WorkoutLogger({
                       rows={
                         logs[exKey(activeDay.id, group.exercises[0]!.slot)] ?? []
                       }
-                      done={isDone(exKey(activeDay.id, group.exercises[0]!.slot))}
+                      done={isDone(
+                        exKey(activeDay.id, group.exercises[0]!.slot),
+                        circuitFor(group.exercises[0]!)?.length,
+                      )}
                       unit={unit}
                       maxes={maxes}
+                      circuitState={
+                        circuitDone[exKey(activeDay.id, group.exercises[0]!.slot)] ??
+                        []
+                      }
+                      onToggleCircuitItem={(idx, len) =>
+                        toggleCircuitItem(
+                          exKey(activeDay.id, group.exercises[0]!.slot),
+                          idx,
+                          len,
+                        )
+                      }
                       onToggleDone={() =>
-                        toggleDone(exKey(activeDay.id, group.exercises[0]!.slot))
+                        toggleDone(
+                          exKey(activeDay.id, group.exercises[0]!.slot),
+                          circuitFor(group.exercises[0]!)?.length,
+                        )
                       }
                       onUpdateSet={(idx, patch) =>
                         updateSet(
@@ -488,7 +564,7 @@ export function WorkoutLogger({
                           target,
                         )
                       }
-                      onOpenVideo={setVideo}
+                      onOpenVideo={(lib, index) => setVideo({ lib, index })}
                     />
                   ),
                 )}
@@ -504,7 +580,18 @@ export function WorkoutLogger({
         </CardContent>
       </Card>
 
-      {video ? <VideoModal lib={video} onClose={() => setVideo(null)} /> : null}
+      {video ? (
+        <VideoModal
+          lib={video.lib}
+          index={video.index}
+          onNavigate={(i) => {
+            const max = (video.lib.circuit?.length ?? 1) - 1;
+            if (i < 0 || i > max) return;
+            setVideo({ lib: video.lib, index: i });
+          }}
+          onClose={() => setVideo(null)}
+        />
+      ) : null}
     </>
   );
 }
@@ -523,6 +610,8 @@ function ExerciseBlock({
   maxes,
   inSuperset = false,
   isLastInGroup = true,
+  circuitState,
+  onToggleCircuitItem,
   onToggleDone,
   onUpdateSet,
   onToggleMark,
@@ -537,10 +626,12 @@ function ExerciseBlock({
   maxes: Record<string, ReferenceMaxEntry>;
   inSuperset?: boolean;
   isLastInGroup?: boolean;
+  circuitState: boolean[];
+  onToggleCircuitItem: (idx: number, len: number) => void;
   onToggleDone: () => void;
   onUpdateSet: (idx: number, patch: Partial<SetLog>) => void;
   onToggleMark: (idx: number, mark: "hit" | "miss", target: string) => void;
-  onOpenVideo: (lib: LibraryExercise) => void;
+  onOpenVideo: (lib: LibraryExercise, index: number) => void;
 }) {
   const name = lib?.name ?? ex.exerciseId;
   const firstMode = ex.sets[0]?.loadMode ?? "lb";
@@ -563,12 +654,17 @@ function ExerciseBlock({
             {lib?.videoUrl ? (
               <button
                 type="button"
-                onClick={() => onOpenVideo(lib)}
+                onClick={() => onOpenVideo(lib, 0)}
                 aria-label={`Watch ${name} demo video`}
                 className="no-print inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
               >
                 <Play className="h-3 w-3 fill-current" />
               </button>
+            ) : null}
+            {lib?.circuit ? (
+              <Pill tone="neutral" icon={<Play className="h-2.5 w-2.5" />}>
+                {lib.circuit.length} videos
+              </Pill>
             ) : null}
             {hist?.isRecentPr ? (
               <Pill tone="brand" icon={<Trophy className="h-3 w-3" />}>
@@ -641,12 +737,65 @@ function ExerciseBlock({
         </button>
       </div>
 
-      {/* Per-set rows: target / weight (own unit per set) / result / hit —
-          fits without horizontal scrolling, phones included. */}
+      {/* Circuit blocks (warm-up): one row PER MOVEMENT, each with its own
+          video and complete toggle — TrainHeroic's long-list-of-videos model. */}
+      {lib?.circuit ? (
+        <ol className="mt-3 flex flex-col gap-1.5">
+          {lib.circuit.map((item, i) => {
+            const itemDone = circuitState[i] ?? false;
+            return (
+              <li
+                key={item.name}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg border px-2.5 py-2 transition-colors",
+                  itemDone
+                    ? "border-success/40 bg-success/[0.06]"
+                    : "border-border bg-surface/60",
+                )}
+              >
+                <span className="tnum flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[0.62rem] font-bold text-muted-foreground">
+                  {i + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => lib && onOpenVideo(lib, i)}
+                  aria-label={`Watch ${item.name} demo video`}
+                  className="no-print flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+                >
+                  <Play className="h-3 w-3 fill-current" />
+                </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {item.name}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {item.prescription}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  aria-pressed={itemDone}
+                  aria-label={`${item.name}: mark complete`}
+                  onClick={() => lib?.circuit && onToggleCircuitItem(i, lib.circuit.length)}
+                  className={cn(
+                    "flex h-7 w-16 shrink-0 items-center justify-center gap-1 rounded-md border text-[0.65rem] font-semibold transition-colors",
+                    itemDone
+                      ? "border-success/50 bg-success/15 text-success"
+                      : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <Check className="h-3 w-3" />
+                  {itemDone ? "Done" : "Mark"}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
       <div className="mt-3">
         <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.25rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Set</span>
-          <span>Target</span>
+          <span className="text-center">Target</span>
           <span>{weightHeader}</span>
           <span>{resultHeader}</span>
           <span className="text-center">Hit?</span>
@@ -662,7 +811,7 @@ function ExerciseBlock({
               <span className="tnum text-xs font-semibold text-muted-foreground">
                 {i + 1}
               </span>
-              <span className="tnum truncate text-xs font-semibold">
+              <span className="tnum truncate text-center text-xs font-semibold">
                 {set.target}
               </span>
 
@@ -760,6 +909,7 @@ function ExerciseBlock({
           );
         })}
       </div>
+      )}
     </div>
   );
 
@@ -824,62 +974,148 @@ function SlotBadge({
 }
 
 /* ------------------------------------------------------------------ */
-/* Video modal — placeholder player + points of performance            */
+/* Video modal — inline player; circuit blocks get a full playlist     */
+/* (TrainHeroic model: one video per movement, flip through them).     */
 /* ------------------------------------------------------------------ */
 
 function VideoModal({
   lib,
+  index,
+  onNavigate,
   onClose,
 }: {
   lib: LibraryExercise;
+  index: number;
+  onNavigate: (index: number) => void;
   onClose: () => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") onNavigate(index + 1);
+      if (e.key === "ArrowLeft") onNavigate(index - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, onNavigate, index]);
+
+  const playlist = lib.circuit ?? null;
+  const current = playlist ? playlist[Math.min(index, playlist.length - 1)] : null;
+  const title = current ? current.name : lib.name;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${lib.name} demo video`}
+      aria-label={`${title} demo video`}
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-lg flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 overflow-y-auto scrollbar-slim rounded-xl border border-border bg-card p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <span className="eyebrow">Exercise demo</span>
-            <h3 className="mt-1 text-lg">{lib.name}</h3>
+            <h3 className="mt-1 truncate text-lg">{title}</h3>
+            {playlist ? (
+              <p className="text-xs text-muted-foreground">
+                Video {Math.min(index, playlist.length - 1) + 1} of{" "}
+                {playlist.length} — {lib.name}
+                {current ? ` · ${current.prescription}` : ""}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close video"
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:bg-accent"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:bg-accent"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Placeholder player frame */}
+        {/* Inline player — plays right here, no YouTube hand-off. */}
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground">
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-brand-foreground">
               <Play className="h-6 w-6 fill-current pl-0.5" />
             </span>
-            <span className="text-xs">Coach demo — {lib.name}</span>
+            <span className="px-4 text-center text-xs">
+              Coach demo — {title}
+            </span>
+            <span className="px-4 text-center text-[0.65rem] text-muted-foreground/70">
+              Demo build — production streams the clip inline here.
+            </span>
           </div>
+          {playlist ? (
+            <>
+              <button
+                type="button"
+                aria-label="Previous video"
+                disabled={index <= 0}
+                onClick={() => onNavigate(index - 1)}
+                className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface/90 text-foreground transition-colors hover:bg-accent disabled:opacity-30"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                aria-label="Next video"
+                disabled={index >= playlist.length - 1}
+                onClick={() => onNavigate(index + 1)}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface/90 text-foreground transition-colors hover:bg-accent disabled:opacity-30"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </>
+          ) : null}
         </div>
 
-        {lib.pointsOfPerformance.length > 0 ? (
+        {/* Playlist — click through every movement in the block. */}
+        {playlist ? (
+          <ol className="flex flex-col gap-1">
+            {playlist.map((item, i) => {
+              const active = i === index;
+              return (
+                <li key={item.name}>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(i)}
+                    aria-current={active ? "true" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
+                      active
+                        ? "border-brand/40 bg-brand/10"
+                        : "border-border bg-surface/50 hover:bg-accent",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded",
+                        active
+                          ? "bg-brand text-brand-foreground"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      <Play className="h-2.5 w-2.5 fill-current" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {i + 1}. {item.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {item.prescription}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        ) : lib.pointsOfPerformance.length > 0 ? (
           <div>
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Points of performance
@@ -898,18 +1134,10 @@ function VideoModal({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Close
           </Button>
-          {lib.videoUrl ? (
-            <Button asChild variant="brand" size="sm">
-              <a href={lib.videoUrl} target="_blank" rel="noreferrer">
-                Watch on YouTube
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </Button>
-          ) : null}
         </div>
       </div>
     </div>

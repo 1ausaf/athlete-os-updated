@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Bell,
   BellRing,
+  Check,
   Film,
   Link2,
   Megaphone,
   MessagesSquare,
+  Paperclip,
   SendHorizonal,
   UserPlus,
   Users,
@@ -31,18 +34,52 @@ import { cn } from "@/lib/utils";
 
 export type ChatAttachment =
   | { kind: "video"; name: string; duration: string }
-  | { kind: "link"; url: string; label: string };
+  | { kind: "link"; url: string; label: string }
+  | { kind: "file"; name: string };
 
 export interface ChatMessage extends Message {
   attachments?: ChatAttachment[];
 }
 
-/** Canned clips so "attach video" feels like a real file picker in the demo. */
-const DEMO_VIDEOS: { name: string; duration: string }[] = [
-  { name: "set-3-trapbar-375.mp4", duration: "0:21" },
-  { name: "pause-rep-check.mp4", duration: "0:33" },
-  { name: "warmup-hip-flow.mp4", duration: "1:04" },
+/** Canned items so the "Attach" button feels like a real file picker in the demo. */
+const DEMO_ATTACHMENTS: ChatAttachment[] = [
+  { kind: "video", name: "set-3-trapbar-375.mp4", duration: "0:21" },
+  { kind: "file", name: "wk6-warmup-sheet.pdf" },
+  { kind: "video", name: "pause-rep-check.mp4", duration: "0:33" },
+  { kind: "file", name: "meet-day-checklist.docx" },
 ];
+
+/**
+ * WhatsApp-style link detection: http(s)://…, www.…, youtu.be/…, or a bare
+ * domain.tld/path. Matched URLs are lifted out of the composer text and
+ * turned into link-attachment chips automatically.
+ */
+const URL_RE =
+  /\b(?:https?:\/\/\S+|www\.\S+|youtu\.be\/\S+|[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)*\.[a-z]{2,}\/\S*)/gi;
+
+function toLinkAttachment(raw: string): ChatAttachment {
+  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  let label = url;
+  try {
+    label = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    /* keep full string as the label */
+  }
+  return { kind: "link", url, label };
+}
+
+/** Pull URLs out of free text; returns the leftover text + the found URLs. */
+function extractUrls(text: string): { rest: string; urls: string[] } {
+  const urls: string[] = [];
+  const rest = text
+    .replace(URL_RE, (match) => {
+      urls.push(match.replace(/[.,!?;:)\]]+$/, ""));
+      return "";
+    })
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return { rest, urls };
+}
 
 function hueFor(id: string): number {
   let h = 0;
@@ -57,7 +94,7 @@ function initialsFor(name: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Main tabbed portal: coach chat + read-only announcements             */
+/* Main tabbed portal: team chat + read-only announcements              */
 /* ------------------------------------------------------------------ */
 
 export function MessagesClient({
@@ -78,7 +115,7 @@ export function MessagesClient({
       <TabsList className="w-fit">
         <TabsTrigger value="chat" className="gap-1.5">
           <MessagesSquare className="h-4 w-4" />
-          Coach chat
+          Chat
         </TabsTrigger>
         <TabsTrigger value="announcements" className="gap-1.5">
           <Megaphone className="h-4 w-4" />
@@ -120,9 +157,10 @@ function CoachChat({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<ChatAttachment[]>([]);
-  const [videoIdx, setVideoIdx] = useState(0);
+  const [attachIdx, setAttachIdx] = useState(0);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,6 +172,10 @@ function CoachChat({
 
   function send() {
     if (!canSend) return;
+    // Auto-linkify on send: any URL still sitting in the text becomes a
+    // link-attachment chip, WhatsApp-style.
+    const { rest, urls } = extractUrls(draft.trim());
+    const attachments = [...pending, ...urls.map(toLinkAttachment)];
     setMessages((prev) => [
       ...prev,
       {
@@ -141,9 +183,9 @@ function CoachChat({
         senderId: athleteId,
         senderName: athleteName,
         senderRole: "athlete",
-        body: draft.trim(),
+        body: rest,
         at: new Date().toISOString(),
-        attachments: pending.length > 0 ? pending : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       },
     ]);
     setDraft("");
@@ -152,23 +194,26 @@ function CoachChat({
     setLinkDraft("");
   }
 
-  function attachVideo() {
-    const clip = DEMO_VIDEOS[videoIdx % DEMO_VIDEOS.length]!;
-    setPending((prev) => [...prev, { kind: "video", ...clip }]);
-    setVideoIdx((i) => i + 1);
+  /** Auto-linkify on paste: URLs become chips, leftover text stays editable. */
+  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const text = e.clipboardData.getData("text");
+    const { rest, urls } = extractUrls(text);
+    if (urls.length === 0) return;
+    e.preventDefault();
+    setPending((prev) => [...prev, ...urls.map(toLinkAttachment)]);
+    if (rest) setDraft((d) => (d ? `${d} ${rest}` : rest));
+  }
+
+  function attachDemoFile() {
+    const item = DEMO_ATTACHMENTS[attachIdx % DEMO_ATTACHMENTS.length]!;
+    setPending((prev) => [...prev, item]);
+    setAttachIdx((i) => i + 1);
   }
 
   function addLink() {
     const raw = linkDraft.trim();
     if (!raw) return;
-    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    let label = url;
-    try {
-      label = new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      /* keep full string as the label */
-    }
-    setPending((prev) => [...prev, { kind: "link", url, label }]);
+    setPending((prev) => [...prev, toLinkAttachment(raw)]);
     setLinkDraft("");
     setLinkOpen(false);
   }
@@ -177,8 +222,34 @@ function CoachChat({
     setPending((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  /** Drag & drop anywhere on the conversation card attaches the file (demo). */
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files?.[0];
+    setPending((prev) => [
+      ...prev,
+      { kind: "file", name: dropped?.name ?? "dropped-file.pdf" },
+    ]);
+  }
+
   return (
-    <Card>
+    <Card
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setDragOver(false);
+        }
+      }}
+      onDrop={handleDrop}
+      className={cn(
+        "transition-shadow",
+        dragOver && "border-brand/50 ring-2 ring-brand/30",
+      )}
+    >
       <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
         {/* Team-channel header — any coach can message the athlete here */}
         <div className="flex flex-col gap-3 border-b border-border pb-4">
@@ -197,29 +268,7 @@ function CoachChat({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {participants.map((p) => (
-              <span
-                key={p.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/50 py-1 pl-1 pr-2.5 text-xs font-medium"
-              >
-                <AthleteAvatar
-                  initials={initialsFor(p.name)}
-                  hue={hueFor(p.id)}
-                  size="sm"
-                  className="h-5 w-5 text-[0.5rem]"
-                />
-                {p.name}
-                <span className="text-muted-foreground">
-                  · {p.role === "athlete" ? "you" : p.role}
-                </span>
-              </span>
-            ))}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground">
-              <UserPlus className="h-3.5 w-3.5" />
-              Parents/guardians can be added — required for minors
-            </span>
-          </div>
+          <NotificationRoster participants={participants} />
         </div>
 
         {/* Jordan is an adult, so this renders the compact permitted state */}
@@ -290,11 +339,13 @@ function CoachChat({
                 >
                   {a.kind === "video" ? (
                     <Film className="h-3.5 w-3.5" />
+                  ) : a.kind === "file" ? (
+                    <Paperclip className="h-3.5 w-3.5" />
                   ) : (
                     <Link2 className="h-3.5 w-3.5" />
                   )}
                   <span className="max-w-44 truncate">
-                    {a.kind === "video" ? a.name : a.label}
+                    {a.kind === "link" ? a.label : a.name}
                   </span>
                   <button
                     type="button"
@@ -341,11 +392,11 @@ function CoachChat({
               type="button"
               variant="outline"
               size="icon"
-              onClick={attachVideo}
-              title="Attach a video"
-              aria-label="Attach a video"
+              onClick={attachDemoFile}
+              title="Attach a file — or drag & drop into the chat"
+              aria-label="Attach a file — or drag and drop into the chat"
             >
-              <Film className="h-4 w-4" />
+              <Paperclip className="h-4 w-4" />
             </Button>
             <Button
               type="button"
@@ -360,6 +411,7 @@ function CoachChat({
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -380,12 +432,144 @@ function CoachChat({
           </div>
 
           <p className="flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
+            <Link2 className="h-3.5 w-3.5 shrink-0" />
+            Paste any link — it attaches automatically.
+          </p>
+
+          <p className="flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
             <BellRing className="h-3.5 w-3.5 shrink-0" />
             You&apos;ll get an email and push notification when a coach replies.
           </p>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Notification roster — who gets pinged vs. who can merely view        */
+/* ------------------------------------------------------------------ */
+
+const NOTIFY_ORDER: Record<ThreadParticipant["role"], number> = {
+  athlete: 0,
+  admin: 1,
+  coach: 2,
+  guardian: 3,
+};
+
+function notifyRoleLabel(role: ThreadParticipant["role"]): string {
+  switch (role) {
+    case "athlete":
+      return "you · client";
+    case "admin":
+      return "admin";
+    case "coach":
+      return "main coach";
+    default:
+      return role;
+  }
+}
+
+/**
+ * Client feedback: only the people managing this client get notified —
+ * not every coach. Everyone else can still read the chat, and any coach
+ * can subscribe themselves to notifications (Coach Nadia already has).
+ */
+function NotificationRoster({
+  participants,
+}: {
+  participants: ThreadParticipant[];
+}) {
+  const [selfSubscribed, setSelfSubscribed] = useState(false);
+
+  // Coach Nadia posts in the thread but isn't assigned to this client —
+  // she added herself to the notification list, the model for any coach.
+  const subscribed = participants.filter((p) => p.id === "coach-nadia");
+  const notified = participants
+    .filter((p) => p.id !== "coach-nadia")
+    .slice()
+    .sort((a, b) => (NOTIFY_ORDER[a.role] ?? 9) - (NOTIFY_ORDER[b.role] ?? 9));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold">
+        <BellRing className="h-3.5 w-3.5 shrink-0 text-brand-ink" />
+        Notifications go to
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {notified.map((p) => (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/50 py-1 pl-1 pr-2.5 text-xs font-medium"
+          >
+            <AthleteAvatar
+              initials={initialsFor(p.name)}
+              hue={hueFor(p.id)}
+              size="sm"
+              className="h-5 w-5 text-[0.5rem]"
+            />
+            {p.name}
+            <span className="text-muted-foreground">
+              · {notifyRoleLabel(p.role)}
+            </span>
+            <Bell className="h-3 w-3 shrink-0 text-brand-ink" />
+          </span>
+        ))}
+      </div>
+
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Users className="h-3.5 w-3.5 shrink-0" />
+        All LPS coaches can view this chat.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {subscribed.map((p) => (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 py-1 pl-1 pr-2.5 text-xs font-medium"
+          >
+            <AthleteAvatar
+              initials={initialsFor(p.name)}
+              hue={hueFor(p.id)}
+              size="sm"
+              className="h-5 w-5 text-[0.5rem]"
+            />
+            {p.name}
+            <span className="inline-flex items-center gap-1 text-success">
+              <Check className="h-3 w-3 shrink-0" />
+              Subscribed
+            </span>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={() => setSelfSubscribed((v) => !v)}
+          aria-pressed={selfSubscribed}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+            selfSubscribed
+              ? "border-success/30 bg-success/10 text-success"
+              : "border-dashed border-border text-muted-foreground hover:border-brand/40 hover:text-foreground",
+          )}
+        >
+          {selfSubscribed ? (
+            <>
+              <Check className="h-3 w-3 shrink-0" />
+              You&apos;ll be notified
+            </>
+          ) : (
+            <>
+              <Bell className="h-3 w-3 shrink-0" />+ Subscribe to notifications
+            </>
+          )}
+        </button>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground">
+          <UserPlus className="h-3.5 w-3.5 shrink-0" />
+          Parents/guardians can be added — required for minors
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -403,6 +587,23 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
           </span>
           <span className="block text-[0.68rem] text-muted-foreground">
             Video · {attachment.duration}
+          </span>
+        </span>
+      </span>
+    );
+  }
+  if (attachment.kind === "file") {
+    return (
+      <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand-ink">
+          <Paperclip className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold">
+            {attachment.name}
+          </span>
+          <span className="block text-[0.68rem] text-muted-foreground">
+            File attachment
           </span>
         </span>
       </span>

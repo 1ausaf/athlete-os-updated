@@ -56,6 +56,15 @@ export const REP_MODE_LABEL: Record<RepMode, string> = {
 
 export const LB_PER_KG = 2.2046;
 
+/**
+ * Athlete-facing location labels (client: "should be At LPS — or remote;
+ * remote could be at home, LPS would be at LPS").
+ */
+export const LOCATION_LABEL: Record<"gym" | "home", string> = {
+  gym: "At LPS",
+  home: "Remote",
+};
+
 export function lbToKg(lb: number): number {
   return Math.round((lb / LB_PER_KG) * 2) / 2;
 }
@@ -75,6 +84,13 @@ export interface SetRx {
 /* Exercise library                                                    */
 /* ------------------------------------------------------------------ */
 
+/** One movement inside a circuit-style exercise (e.g. the dynamic warm-up). */
+export interface CircuitItem {
+  name: string;
+  prescription: string;
+  videoUrl: string;
+}
+
 export interface LibraryExercise {
   id: string;
   name: string;
@@ -82,6 +98,11 @@ export interface LibraryExercise {
   /** YouTube demo link (demo placeholder ids). */
   videoUrl: string | null;
   pointsOfPerformance: string[];
+  /**
+   * Circuit blocks carry one video PER movement (TrainHeroic-style: the
+   * warm-up block holds 6 how-to videos the athlete flips through inline).
+   */
+  circuit?: CircuitItem[];
   /** Mother lift for %-based programming (e.g. Hip Snatch → 60% of Snatch). */
   referenceMax: string | null;
   defaultLoadMode: LoadMode;
@@ -396,11 +417,16 @@ export const exerciseLibrary: LibraryExercise[] = [
     tags: ["Warm-up", "Circuit"],
     videoUrl: "https://youtu.be/DynWu201",
     pointsOfPerformance: [
-      "Lying leg raises — 12/leg.",
-      "Page turn — 6/side.",
-      "Glute bridge — 12.",
-      "Bird dog — 6/side.",
-      "Walking groiner stretch — 6/side.",
+      "Move with intent — this primes the whole session.",
+      "Hold positions for a 2-count where noted.",
+    ],
+    circuit: [
+      { name: "Lying leg raises", prescription: "1 set of 12 reps per leg", videoUrl: "https://youtu.be/DynWu201" },
+      { name: "Page turn (T-spine rotation)", prescription: "1 set of 6 reps per side", videoUrl: "https://youtu.be/DynWu202" },
+      { name: "Glute bridge", prescription: "1 set of 12 reps", videoUrl: "https://youtu.be/DynWu203" },
+      { name: "Bird dog", prescription: "1 set of 6 per side", videoUrl: "https://youtu.be/DynWu204" },
+      { name: "Walking groiner stretch", prescription: "1 set of 6 per side", videoUrl: "https://youtu.be/DynWu205" },
+      { name: "Muscle snatch to overhead squat", prescription: "3×3 — dowel or bar only", videoUrl: "https://youtu.be/DynWu206" },
     ],
     referenceMax: null,
     defaultLoadMode: "bw",
@@ -453,12 +479,12 @@ const rx = (target: string, load: number | null, loadMode: LoadMode): SetRx => (
   loadMode,
 });
 
-/** Jordan Vega — In-Season Power, Block C. Day 14 done next; 15 is at-home. */
+/** Jordan Vega — In-Season Power, Block C. Weekly sequence: Day 1..7, restarts Monday. */
 export const jordanProgramDays: ProgramDay[] = [
   {
-    id: "day-14",
-    dayNumber: 14,
-    title: "Lower Power — In-gym",
+    id: "day-1",
+    dayNumber: 1,
+    title: "Lower Power",
     location: "gym",
     focus: "Realization — RPE 8 top sets, brace hard",
     sections: [
@@ -553,11 +579,11 @@ export const jordanProgramDays: ProgramDay[] = [
     ],
   },
   {
-    id: "day-15",
-    dayNumber: 15,
-    title: "At-home — Recovery & Core",
+    id: "day-2",
+    dayNumber: 2,
+    title: "Recovery & Core",
     location: "home",
-    focus: "Skip this if you're at the facility — do Day 16 instead",
+    focus: "Skip this if you're at LPS — do Day 3 instead",
     sections: [
       {
         title: "Circuit",
@@ -588,9 +614,9 @@ export const jordanProgramDays: ProgramDay[] = [
     ],
   },
   {
-    id: "day-16",
-    dayNumber: 16,
-    title: "Upper Strength — In-gym",
+    id: "day-3",
+    dayNumber: 3,
+    title: "Upper Strength",
     location: "gym",
     focus: "Intensification — leave one rep in reserve",
     sections: [
@@ -687,13 +713,13 @@ export const jordanExerciseHistory: Record<string, ExerciseHistory> = {
   "ex-trapbar-dl": {
     lastSummary: "4×3 @ 365 lb",
     lastDate: at(-7),
-    bestSummary: "385 lb ×1",
+    bestSummary: "1 @ 385 lb",
     isRecentPr: true,
   },
   "ex-bench": {
     lastSummary: "4×5 @ 230 lb",
     lastDate: at(-5),
-    bestSummary: "245 lb ×1",
+    bestSummary: "1 @ 245 lb",
   },
   "ex-hip-snatch": {
     lastSummary: "3×6 @ 54 kg (60%)",
@@ -708,32 +734,32 @@ export const jordanExerciseHistory: Record<string, ExerciseHistory> = {
   "ex-weighted-pullup": {
     lastSummary: "3×6 @ 40 lb",
     lastDate: at(-5),
-    bestSummary: "55 lb ×3",
+    bestSummary: "3 @ 55 lb",
   },
   "ex-rdl": {
     lastSummary: "3×8 @ 195 lb",
     lastDate: at(-7),
-    bestSummary: "225 lb ×6",
+    bestSummary: "6 @ 225 lb",
   },
   "ex-cs-row": {
     lastSummary: "3×10 @ 65 lb",
     lastDate: at(-5),
-    bestSummary: "75 lb ×8",
+    bestSummary: "8 @ 75 lb",
   },
   "ex-db-bench-neutral": {
     lastSummary: "4×10 @ 80 lb",
     lastDate: at(-12),
-    bestSummary: "90 lb ×8",
+    bestSummary: "8 @ 90 lb",
   },
   "ex-chinup-supinated": {
     lastSummary: "4×8 BW",
     lastDate: at(-12),
-    bestSummary: "BW ×14",
+    bestSummary: "14 @ BW",
   },
   "ex-farmer-walk": {
     lastSummary: "3×60 m @ 70 lb",
     lastDate: at(-7),
-    bestSummary: "90 lb × 60 m",
+    bestSummary: "60 m @ 90 lb",
   },
 };
 
@@ -750,6 +776,34 @@ export interface BookableSlot {
   spotsLeft: number;
   capacity: number;
 }
+
+/** What each session type is + what an athlete needs before booking it. */
+export const SESSION_TYPE_INFO: Record<
+  BookableSlot["label"],
+  { description: string; requirements: string[] }
+> = {
+  Coaching: {
+    description:
+      "Semi-private coached block — you follow your own individualized program with a coach on the floor.",
+    requirements: ["Active membership in good standing"],
+  },
+  "Master Coaching": {
+    description:
+      "Small-group session led by a head coach — advanced loading, technical priority on the platforms.",
+    requirements: [
+      "Completed remapping assessment",
+      "Head-coach invitation on file",
+    ],
+  },
+  "Weightlifting Team": {
+    description:
+      "Competitive Olympic weightlifting squad training — snatch and clean & jerk focus with meet prep.",
+    requirements: [
+      "Weightlifting team members only",
+      "Coach sign-off on current 1RMs",
+    ],
+  },
+};
 
 /** Weekly pattern: [dayOfWeek (0=Sun), startHour, startMin, durMin, label]. */
 const WEEK_PATTERN: [number, number, number, number, BookableSlot["label"]][] = [
@@ -781,7 +835,7 @@ function spotsFor(weekIdx: number, slotIdx: number, capacity: number): number {
 }
 
 /** Generate `weeks` weeks of bookable slots starting from tomorrow. */
-export function generateBookableSlots(weeks = 5): BookableSlot[] {
+export function generateBookableSlots(weeks = 12): BookableSlot[] {
   const out: BookableSlot[] = [];
   const start = new Date(NOW);
   start.setDate(start.getDate() + 1);
@@ -1084,49 +1138,86 @@ export const liftHistory: Record<string, Record<string, LiftPoint[]>> = {
 /* Nutrition protocol                                                  */
 /* ------------------------------------------------------------------ */
 
+/** One weekly weigh-in entry (their TrainHeroic "Weekly Body Weigh-in & Body Fat Check"). */
+export interface NutritionCheckIn {
+  date: string;
+  weightLb: number;
+  bodyFatPct: number;
+}
+
+/** Lean mass in lb, derived the way their template tracks it. */
+export function leanMassLb(c: Pick<NutritionCheckIn, "weightLb" | "bodyFatPct">): number {
+  return Math.round(c.weightLb * (1 - c.bodyFatPct / 100) * 10) / 10;
+}
+
+/**
+ * Shaped after the client's real Google-Doc template
+ * ("[Client Name] — Nutrition Protocol"): a Weight / Body Fat % / Lean Mass
+ * tracking table, a summary, checkbox example meals, healthy fats, a
+ * supplement protocol, a post-workout shake recipe, and a hard rule.
+ */
 export interface NutritionProtocol {
   updatedAt: string;
   coach: string;
+  title: string;
   goal: string;
+  summary: string;
+  exampleMeals: { meal: string; example: string }[];
+  healthyFats: string[];
   dailyTargets: { label: string; value: string; hint?: string }[];
-  mealStructure: { meal: string; guidance: string }[];
+  supplements: { name: string; dose: string; timing: string }[];
+  postWorkoutShake: string[];
+  rule: string;
   gameDay: string[];
   hydration: string;
-  supplements: { name: string; dose: string; timing: string }[];
   notes: string;
+  /** Weekly check-in history, oldest → newest. */
+  checkIns: NutritionCheckIn[];
 }
 
 export const nutritionProtocols: Record<string, NutritionProtocol> = {
   "ath-jordan": {
     updatedAt: at(-10),
     coach: "Coach Clance",
+    title: "Nutrition Protocol",
     goal: "Support in-season power output and recovery — maintain 185 lb at current body-fat while keeping game-day energy high.",
+    summary:
+      "Meat and vegetables — every meal should consist of meat, poultry or fish, vegetables, and a source of healthy fats.",
+    exampleMeals: [
+      { meal: "Breakfast", example: "Chicken & avocado" },
+      { meal: "Lunch", example: "Lamb & vegetables" },
+      { meal: "Dinner", example: "Shrimp & vegetables" },
+    ],
+    healthyFats: ["Olive oil", "Coconut oil", "Tallow"],
     dailyTargets: [
       { label: "Calories", value: "3,400 kcal", hint: "training days" },
       { label: "Protein", value: "185 g", hint: "~1 g / lb bodyweight" },
       { label: "Carbs", value: "420 g", hint: "front-load around training" },
       { label: "Fat", value: "95 g" },
     ],
-    mealStructure: [
-      { meal: "Breakfast", guidance: "4 eggs + oats with berries + glass of whole milk." },
-      { meal: "Lunch", guidance: "Palm-and-a-half of protein, two fists of carbs, vegetables, olive oil." },
-      { meal: "Pre-training", guidance: "60–90 min before: rice bowl or bagel + lean protein. No heavy fat." },
-      { meal: "Post-training", guidance: "Shake (40 g whey + banana) within 30 min, full meal within 2 h." },
-      { meal: "Dinner", guidance: "Protein + starch + two vegetables. Slow down, eat to satisfied." },
+    supplements: [
+      { name: "Multivitamin", dose: "2 caps", timing: "with meals" },
+      { name: "Fish oil", dose: "15 g", timing: "per day" },
+      { name: "Magnesium glycinate", dose: "3 tablets", timing: "in the evening" },
+      { name: "Probiotics", dose: "2 caps", timing: "with meals, 2× daily" },
+      { name: "Vitamin D", dose: "5,000 IU", timing: "with breakfast" },
+      { name: "Creatine monohydrate", dose: "5 g", timing: "daily, any time" },
     ],
+    postWorkoutShake: ["60 g whey protein", "40 g glutamine", "5 g glycine"],
+    rule: "No fruits (or over 50 g of carbohydrates) outside training windows. All supplements as recommended on the bottle.",
     gameDay: [
       "Game -3 h: full meal — chicken + rice + vegetables.",
       "Game -1 h: fruit + sports drink, sip don't chug.",
       "Between periods: diluted sports drink only.",
       "Post-game: shake immediately, full meal within 90 min.",
     ],
-    hydration: "Minimum 3.5 L/day. Add electrolytes on double-session and game days. Urine check: pale straw.",
-    supplements: [
-      { name: "Whey protein", dose: "40 g", timing: "post-training" },
-      { name: "Creatine monohydrate", dose: "5 g", timing: "daily, any time" },
-      { name: "Vitamin D3", dose: "2,000 IU", timing: "with breakfast" },
-      { name: "Fish oil", dose: "2 g EPA/DHA", timing: "with dinner" },
-    ],
+    hydration: "Minimum 3.5 L/day (about 120 oz). Add electrolytes on double-session and game days. Urine check: pale straw.",
     notes: "No new supplements without checking with the coaching staff first. Weigh-in Mondays, fasted. Flag any appetite dips during exam weeks.",
+    checkIns: [
+      { date: at(-28), weightLb: 189.2, bodyFatPct: 12.8 },
+      { date: at(-21), weightLb: 188.0, bodyFatPct: 12.4 },
+      { date: at(-14), weightLb: 186.8, bodyFatPct: 11.9 },
+      { date: at(-7), weightLb: 185.9, bodyFatPct: 11.5 },
+    ],
   },
 };

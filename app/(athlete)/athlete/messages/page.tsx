@@ -12,8 +12,10 @@ import type { ChatMessage } from "./messages-client";
 
 /**
  * Athlete Messages — a single portal, not an inbox (client feedback):
- * - Tab 1 "Coach chat": one team channel with the whole coaching staff.
+ * - Tab 1 "Chat": one team channel with the whole coaching staff.
  *   Any coach can message the athlete; guardians are added for minors.
+ *   Notifications go to the people managing this client — everyone else
+ *   can still view the chat and subscribe themselves.
  * - Tab 2 "Announcements": read-only facility news feed — no replies.
  */
 export default async function AthleteMessagesPage() {
@@ -43,13 +45,23 @@ export default async function AthleteMessagesPage() {
     ],
   });
 
-  // Channel roster: existing coaches first, then Coach Nadia, then the athlete.
+  // Channel roster: existing coaches first, then Coach Nadia, then
+  // Victoria Flores (admin — she manages this client), then the athlete.
   const base = thread?.participants ?? [];
   const participants: ThreadParticipant[] = [
     ...base.filter((p) => p.role === "coach"),
     ...(base.some((p) => p.id === "coach-nadia")
       ? []
       : [{ id: "coach-nadia", name: "Coach Nadia", role: "coach" as const }]),
+    ...(base.some((p) => p.id === "admin-victoria")
+      ? []
+      : [
+          {
+            id: "admin-victoria",
+            name: "Victoria Flores",
+            role: "admin" as const,
+          },
+        ]),
     ...base.filter((p) => p.role !== "coach"),
   ];
 

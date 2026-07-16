@@ -3,15 +3,19 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertCircle,
+  AlertTriangle,
   CalendarClock,
   CalendarDays,
   Check,
   CheckCheck,
   ChevronDown,
+  Info,
   ListChecks,
   RotateCcw,
+  ShieldCheck,
   Undo2,
   X,
 } from "lucide-react";
@@ -20,7 +24,11 @@ import { Progress } from "@/components/app/progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill, type PillTone } from "@/components/ui/pill";
-import type { BookableSlot, MyBooking } from "@/lib/demo/training";
+import {
+  SESSION_TYPE_INFO,
+  type BookableSlot,
+  type MyBooking,
+} from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -62,6 +70,12 @@ const labelTone: Record<BookableSlot["label"], PillTone> = {
   "Weightlifting Team": "info",
 };
 
+/** Session types you can't just book — requirements gate entry (demo: informational only). */
+const RESTRICTED_TYPES = new Set<BookableSlot["label"]>([
+  "Master Coaching",
+  "Weightlifting Team",
+]);
+
 interface WeekGroup {
   key: number;
   label: string;
@@ -92,7 +106,7 @@ export function SessionBooking({
   frequencyLabel,
   overdue,
 }: {
-  /** 5 weeks of bookable times from the real weekly schedule. */
+  /** 12 weeks of bookable times from the real weekly schedule. */
   slots: BookableSlot[];
   /** Already-booked upcoming sessions. */
   initialBookings: MyBooking[];
@@ -772,8 +786,113 @@ function SlotInfo({ slot, muted }: { slot: BookableSlot; muted?: boolean }) {
       >
         {fmtRange(slot.startsAt, slot.endsAt)}
       </span>
-      <Pill tone={labelTone[slot.label]}>{slot.label}</Pill>
+      <span className="flex shrink-0 items-center gap-0.5">
+        <Pill tone={labelTone[slot.label]}>{slot.label}</Pill>
+        <SessionTypeInfoButton label={slot.label} />
+      </span>
     </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Session-type info popover                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Small ⓘ trigger next to each slot's type pill. Opens a centered
+ * dialog (portaled to <body> so it escapes row labels and week-card
+ * overflow clipping) with the type's description + requirements.
+ * Escape, the backdrop, and the close button all dismiss it.
+ */
+function SessionTypeInfoButton({ label }: { label: BookableSlot["label"] }) {
+  const [open, setOpen] = useState(false);
+  const info = SESSION_TYPE_INFO[label];
+  const restricted = RESTRICTED_TYPES.has(label);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          // Inside a checkbox <label> — don't let the click toggle the slot.
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`About ${label} sessions`}
+        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+
+      {open
+        ? createPortal(
+            <div className="fixed inset-0 z-50">
+              {/* Click-outside backdrop */}
+              <div
+                className="absolute inset-0 bg-background/60 backdrop-blur-[2px]"
+                onClick={() => setOpen(false)}
+                aria-hidden
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${label} session details`}
+                className="absolute left-1/2 top-1/2 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-glow"
+              >
+                <div className="flex items-center gap-2">
+                  <Pill tone={labelTone[label]}>{label}</Pill>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    aria-label="Close"
+                    className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-pretty">{info.description}</p>
+                <p className="eyebrow mt-4">Requirements before you can book</p>
+                <ul className="mt-1.5 flex flex-col gap-1.5">
+                  {info.requirements.map((req) => (
+                    <li key={req} className="flex items-start gap-2 text-sm">
+                      <ShieldCheck
+                        className="mt-0.5 h-4 w-4 shrink-0 text-success"
+                        aria-hidden
+                      />
+                      <span className="min-w-0 text-pretty">{req}</span>
+                    </li>
+                  ))}
+                </ul>
+                {restricted ? (
+                  <p className="mt-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
+                    <AlertTriangle
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    <span className="min-w-0 text-pretty">
+                      You can&apos;t book this session type until requirements
+                      are met — talk to your coach.
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
