@@ -594,7 +594,7 @@ function DigestModal({
           ))}
           <p className="text-xs text-muted-foreground">
             In production this digest emails every coach automatically — here
-            it's simulated from the live board data.
+            it&apos;s simulated from the live board data.
           </p>
         </div>
       </div>
@@ -846,7 +846,8 @@ function CardModal({
                   </div>
                 ))}
                 <p className="text-[0.7rem] text-muted-foreground">
-                  Assignments drive who's in this athlete's chat thread.
+                  Assignments drive who&apos;s in this athlete&apos;s chat
+                  thread.
                 </p>
               </div>
             </section>
