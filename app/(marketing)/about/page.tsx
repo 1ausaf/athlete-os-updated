@@ -41,7 +41,7 @@ const pillars = [
   {
     icon: ClipboardList,
     title: "One profile, every signal",
-    body: "Membership, program day, CAP notes, PRs, injury flags, billing and messages resolve to a single athlete record — shared cleanly across athlete, coach and owner.",
+    body: "Membership, program day, coach notes, PRs, injury flags, billing and messages resolve to a single athlete record — shared cleanly across athlete, coach and owner.",
   },
   {
     icon: BrainCircuit,
@@ -206,7 +206,7 @@ export default function AboutPage() {
               AI drafts and reminds. It never coaches.
             </h2>
             <p className="text-muted-foreground">
-              AOS will summarize a week of CAP notes, flag a lapsed check-in, or
+              AOS will summarize a week of coach notes, flag a lapsed check-in, or
               pre-fill a huddle brief. But a person always writes the program,
               approves the message, and makes the call. The coach is the author;
               the system is the assistant that hands them the pen.
@@ -224,7 +224,7 @@ export default function AboutPage() {
             </div>
             <CardContent className="space-y-3 p-5 text-sm">
               {[
-                { a: "AOS drafts", b: "a huddle brief from the roster + latest CAP notes" },
+                { a: "AOS drafts", b: "a huddle brief from the roster + latest coach notes" },
                 { a: "Coach reviews", b: "edits the plan and confirms the read on each athlete" },
                 { a: "AOS surfaces", b: "a billing pause and a Rule-of-Two gap to resolve" },
                 { a: "Coach acts", b: "and every decision is logged against the athlete record" },

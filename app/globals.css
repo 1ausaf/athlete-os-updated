@@ -197,6 +197,41 @@
     );
   }
 
+  /* Note bodies: scoped typography for the rich-text composer + viewer. */
+  .rich-text p {
+    @apply leading-relaxed;
+  }
+  .rich-text p + p,
+  .rich-text ul + p,
+  .rich-text ol + p {
+    margin-top: 0.375rem;
+  }
+  .rich-text h1 {
+    @apply mb-1 mt-2 text-base font-bold tracking-tight first:mt-0;
+  }
+  .rich-text h2 {
+    @apply mb-1 mt-2 text-sm font-bold tracking-tight first:mt-0;
+  }
+  .rich-text h3 {
+    @apply mb-0.5 mt-1.5 text-[0.8rem] font-bold uppercase tracking-wide text-muted-foreground first:mt-0;
+  }
+  .rich-text ul {
+    @apply my-1 list-disc pl-5;
+  }
+  .rich-text ol {
+    @apply my-1 list-decimal pl-5;
+  }
+  .rich-text li {
+    @apply leading-relaxed;
+  }
+  /* execCommand highlight spans carry an inline background — keep text readable
+     on the yellow in both themes. */
+  .rich-text [style*="background"] {
+    color: hsl(222 47% 9%);
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
   /* Thin brand rule used on marketing sections. */
   .rule-brand {
     height: 2px;

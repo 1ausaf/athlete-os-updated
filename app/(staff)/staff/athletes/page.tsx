@@ -11,7 +11,7 @@ import { RosterBoard } from "./roster-board";
 /**
  * The member board — a faithful port of the client's Trello workflow.
  * Columns = membership buckets, cards = athletes sorted by programming due
- * date, click a card for the full record with CAP notes as the comment feed.
+ * date, click a card for the full record with notes as the comment feed.
  */
 export default async function StaffAthletesPage() {
   const user = await requireUserWithProfile();
@@ -28,7 +28,7 @@ export default async function StaffAthletesPage() {
       <PageHeader
         eyebrow="Staff Workspace · Athletes"
         title="Member board"
-        description="Cards sort by programming due date inside each list — click one to open the athlete's record and CAP notes."
+        description="Cards sort by programming due date inside each list — click one to open the athlete's record and notes."
         actions={
           <div className="flex flex-wrap items-center gap-1.5">
             <Pill tone="neutral" dot>

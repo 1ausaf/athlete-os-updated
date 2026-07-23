@@ -39,7 +39,7 @@ import { billingMeta, seasonMeta } from "@/lib/demo/status";
 import { isStaff } from "@/lib/rbac";
 
 import { programDueLong } from "../program-due";
-import { CapNotesPanel } from "./cap-notes-panel";
+import { NotesPanel } from "./notes-panel";
 
 export default async function StaffAthleteProfilePage({
   params,
@@ -166,12 +166,12 @@ export default async function StaffAthleteProfilePage({
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        {/* Left column — CAP notes are the centerpiece */}
+        {/* Left column — notes are the centerpiece */}
         <div className="flex flex-col gap-6">
-          <CapNotesPanel
+          <NotesPanel
             athleteFirstName={athlete.name.split(" ")[0] ?? athlete.name}
             authorName={user.fullName}
-            initialNotes={athlete.capNotes}
+            initialNotes={athlete.notes}
           />
 
           {/* PRs */}

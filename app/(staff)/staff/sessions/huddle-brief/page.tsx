@@ -14,6 +14,7 @@ import {
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PageHeader } from "@/components/app/page-header";
 import { Progress } from "@/components/app/progress";
+import { RichTextView } from "@/components/app/rich-text";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -119,7 +120,7 @@ export default function HuddleBriefPage() {
       </div>
 
       <p className="text-xs text-muted-foreground no-print">
-        Aggregated live from sessions, memberships, CAP notes, billing and PRs — the
+        Aggregated live from sessions, memberships, notes, billing and PRs — the
         four tools coaches used to open by hand, on one screen.
       </p>
     </div>
@@ -163,7 +164,7 @@ function AthleteBrief({
 }) {
   const billing = billingMeta[athlete.billing.state];
   const season = seasonMeta[athlete.season];
-  const lastNote = athlete.capNotes[0];
+  const lastNote = athlete.notes[0];
   const progressPct = Math.round(
     (athlete.program.day / athlete.program.totalDays) * 100,
   );
@@ -242,10 +243,10 @@ function AthleteBrief({
           </div>
         </div>
 
-        {/* Right: latest CAP note */}
+        {/* Right: latest note */}
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface/50 p-4">
           <div className="flex items-center justify-between">
-            <span className="eyebrow">Latest CAP note</span>
+            <span className="eyebrow">Latest note</span>
             {lastNote ? (
               <span className="text-xs text-muted-foreground">
                 {lastNote.coach} · {relTime(lastNote.date)}
@@ -253,14 +254,10 @@ function AthleteBrief({
             ) : null}
           </div>
           {lastNote ? (
-            <dl className="flex flex-col gap-2.5 text-sm">
-              <CapLine label="C" tone="context" text={lastNote.context} />
-              <CapLine label="A" tone="action" text={lastNote.action} />
-              <CapLine label="P" tone="plan" text={lastNote.plan} />
-            </dl>
+            <RichTextView html={lastNote.body} className="text-foreground/90" />
           ) : (
             <p className="text-sm text-muted-foreground">
-              No CAP note yet — flagged for follow-up.
+              No note yet — flagged for follow-up.
             </p>
           )}
         </div>
@@ -269,20 +266,3 @@ function AthleteBrief({
   );
 }
 
-function CapLine({
-  label,
-  text,
-}: {
-  label: string;
-  tone: "context" | "action" | "plan";
-  text: string;
-}) {
-  return (
-    <div className="flex gap-2.5">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted font-mono text-[0.65rem] font-bold text-muted-foreground">
-        {label}
-      </span>
-      <span className="text-foreground/90">{text}</span>
-    </div>
-  );
-}

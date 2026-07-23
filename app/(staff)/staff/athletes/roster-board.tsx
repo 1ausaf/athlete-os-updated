@@ -19,17 +19,17 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import { RichTextComposer, RichTextView } from "@/components/app/rich-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
-import { Textarea } from "@/components/ui/textarea";
 import {
   athleteGoals,
   fmtDay,
   relTime,
   type Athlete,
-  type CapNote,
   type MemberBucket,
+  type MemberNote,
 } from "@/lib/demo/data";
 import { cn } from "@/lib/utils";
 
@@ -212,7 +212,7 @@ function BoardCard({
         </span>
         <span className="inline-flex items-center gap-1 text-[0.66rem] text-muted-foreground">
           <MessageSquare className="h-3 w-3" />
-          {athlete.capNotes.length}
+          {athlete.notes.length}
         </span>
         <span className="inline-flex items-center gap-1 text-[0.66rem] text-muted-foreground">
           <CheckSquare className="h-3 w-3" />
@@ -243,7 +243,7 @@ function BoardCard({
 }
 
 /* ------------------------------------------------------------------ */
-/* Card modal — Trello card layout: description left, CAP feed right   */
+/* Card modal — Trello card layout: description left, notes feed right */
 /* ------------------------------------------------------------------ */
 
 function CardModal({
@@ -253,8 +253,9 @@ function CardModal({
   athlete: Athlete;
   onClose: () => void;
 }) {
-  const [notes, setNotes] = useState<CapNote[]>(athlete.capNotes);
-  const [draft, setDraft] = useState({ context: "", action: "", plan: "" });
+  const [notes, setNotes] = useState<MemberNote[]>(athlete.notes);
+  const [draftHtml, setDraftHtml] = useState("");
+  const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -270,19 +271,18 @@ function CardModal({
   const programHref = `/staff/athletes/${athlete.id}/program` as Route;
 
   function saveNote() {
-    if (!draft.context.trim() && !draft.action.trim() && !draft.plan.trim()) return;
+    if (!draftHtml.trim()) return;
     setNotes((prev) => [
       {
         id: `local-${prev.length}`,
         date: new Date().toISOString(),
         coach: "Coach Ellis",
-        context: draft.context.trim() || "—",
-        action: draft.action.trim() || "—",
-        plan: draft.plan.trim() || "—",
+        body: draftHtml,
       },
       ...prev,
     ]);
-    setDraft({ context: "", action: "", plan: "" });
+    setDraftHtml("");
+    setResetKey((k) => k + 1);
   }
 
   return (
@@ -420,50 +420,33 @@ function CardModal({
             </Button>
           </div>
 
-          {/* Right: CAP notes as the comments/activity feed */}
+          {/* Right: notes as the comments/activity feed */}
           <div className="flex flex-col gap-3 border-t border-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
             <div className="flex items-center gap-2">
               <NotebookPen className="h-4 w-4 text-muted-foreground" />
-              <h4 className="text-sm font-bold">CAP notes</h4>
+              <h4 className="text-sm font-bold">Notes</h4>
               <span className="tnum ml-auto text-xs text-muted-foreground">
                 {notes.length} on file
               </span>
             </div>
 
-            {/* Composer */}
-            <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface/50 p-2.5">
-              {(["context", "action", "plan"] as const).map((k) => (
-                <div key={k} className="flex items-start gap-2">
-                  <span className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted font-mono text-[0.6rem] font-bold text-muted-foreground">
-                    {k[0].toUpperCase()}
-                  </span>
-                  <Textarea
-                    value={draft[k]}
-                    rows={1}
-                    placeholder={
-                      k === "context"
-                        ? "What did you see?"
-                        : k === "action"
-                          ? "What did you do?"
-                          : "What's next?"
-                    }
-                    className="min-h-0 resize-none border-0 bg-transparent p-1 text-xs shadow-none focus-visible:ring-0"
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, [k]: e.target.value }))
-                    }
-                  />
-                </div>
-              ))}
-              <Button
-                variant="brand"
-                size="sm"
-                className="h-7 self-end text-xs"
-                onClick={saveNote}
-                disabled={!draft.context.trim() && !draft.action.trim() && !draft.plan.trim()}
-              >
-                Save note
-              </Button>
-            </div>
+            {/* Composer — grows with the note, Trello-style */}
+            <RichTextComposer
+              placeholder="Write a comment…"
+              onChangeHtml={setDraftHtml}
+              resetKey={resetKey}
+              actions={
+                <Button
+                  variant="brand"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={saveNote}
+                  disabled={!draftHtml.trim()}
+                >
+                  Save note
+                </Button>
+              }
+            />
 
             {/* Feed */}
             <div className="flex max-h-[46vh] flex-col gap-2.5 overflow-y-auto pr-1 scrollbar-slim">
@@ -476,22 +459,10 @@ function CardModal({
                     <span className="font-semibold">{n.coach}</span>
                     <span className="text-muted-foreground">{relTime(n.date)}</span>
                   </div>
-                  <dl className="flex flex-col gap-1 text-xs leading-relaxed">
-                    {(
-                      [
-                        ["C", n.context],
-                        ["A", n.action],
-                        ["P", n.plan],
-                      ] as const
-                    ).map(([label, text]) => (
-                      <div key={label} className="flex gap-2">
-                        <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded bg-muted font-mono text-[0.55rem] font-bold text-muted-foreground">
-                          {label}
-                        </span>
-                        <span className="text-foreground/90">{text}</span>
-                      </div>
-                    ))}
-                  </dl>
+                  <RichTextView
+                    html={n.body}
+                    className="text-xs text-foreground/90"
+                  />
                 </div>
               ))}
             </div>

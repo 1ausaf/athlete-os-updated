@@ -192,7 +192,7 @@ export default function StyleGuidePage() {
               <div className="flex flex-col gap-1">
                 <p className="max-w-2xl text-muted-foreground">
                   Body — The unified hub for semi-private coaching and fully
-                  individualized programming. Booking, billing, CAP notes and
+                  individualized programming. Booking, billing, coach notes and
                   compliant messaging in one system.
                 </p>
                 <span className="font-mono text-xs text-muted-foreground">

@@ -163,7 +163,7 @@ export default function PricingPage() {
                   <span className="text-xs text-muted-foreground">/ month, per gym</span>
                 </div>
                 <CardDescription className="text-sm">
-                  Full AOS — booking, billing, programming, CAP notes, compliant
+                  Full AOS — booking, billing, programming, coach notes, compliant
                   messaging and the coach huddle brief.
                 </CardDescription>
               </CardHeader>

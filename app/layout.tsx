@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: "%s · AOS",
   },
   description:
-    "The operating system for LPS Athletic — The Pro Maker™. Individualized programming, frequency-aware booking, CAP notes, Safe-Sport messaging, and the coach huddle brief in one place.",
+    "The operating system for LPS Athletic — The Pro Maker™. Individualized programming, frequency-aware booking, coach notes, Safe-Sport messaging, and the coach huddle brief in one place.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

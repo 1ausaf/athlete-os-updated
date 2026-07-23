@@ -51,7 +51,7 @@ export function canViewBilling(
   return false;
 }
 
-/** CAP note authoring is staff-only. */
+/** Note authoring is staff-only. */
 export function canEditNotes(user: MaybeUser): boolean {
   return isStaff(user);
 }

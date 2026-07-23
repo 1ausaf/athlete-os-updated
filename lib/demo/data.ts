@@ -30,13 +30,12 @@ export type BookingState =
   | "completed";
 export type Season = "in-season" | "off-season";
 
-export interface CapNote {
+export interface MemberNote {
   id: string;
   date: string;
   coach: string;
-  context: string;
-  action: string;
-  plan: string;
+  /** Rich-text HTML body (bold/italic/lists/headings/highlight). */
+  body: string;
 }
 
 export interface Pr {
@@ -106,7 +105,7 @@ export interface Athlete {
   reminders: string[];
   guardians: Guardian[];
   lastActive: string;
-  capNotes: CapNote[];
+  notes: MemberNote[];
   prs: Pr[];
 }
 
@@ -229,30 +228,27 @@ export const athletes: Athlete[] = [
     reminders: ["Birthday in 3 days", "Signed pro tryout invite — acknowledge"],
     guardians: [],
     lastActive: at(0, 8, 12),
-    capNotes: [
+    notes: [
       {
         id: "cap-jv-1",
         date: at(-2, 17),
         coach: "Coach Ellis",
-        context: "Upper hinge day. Right scap control improving, no pain.",
-        action: "Held trap-bar at RPE 8, added 2 back-off sets of rows.",
-        plan: "Progress to 3ct pause next session; retest grip endurance Fri.",
+        body:
+          "<p>Upper hinge day. Right scap control improving, no pain. Held trap-bar at RPE 8, added 2 back-off sets of rows.</p><p><strong>Next:</strong> Progress to 3ct pause next session; retest grip endurance Fri.</p>",
       },
       {
         id: "cap-jv-2",
         date: at(-5, 17),
         coach: "Coach Ellis",
-        context: "Reported tight left hip after game travel.",
-        action: "Extended warm-up, capped lower volume, mobility circuit.",
-        plan: "Monitor hip; green to resume normal loading if symptom-free.",
+        body:
+          "<p>Reported tight left hip after game travel. Extended warm-up, capped lower volume, mobility circuit.</p><p><strong>Next:</strong> Monitor hip; green to resume normal loading if symptom-free.</p>",
       },
       {
         id: "cap-jv-3",
         date: at(-9, 17),
         coach: "Coach Nadia",
-        context: "Return from road trip, sleep down to ~6h.",
-        action: "Auto-regulated to RPE 7 cap, emphasized breathing resets.",
-        plan: "Re-establish sleep routine; check readiness Monday.",
+        body:
+          "<p>Return from road trip, sleep down to ~6h. Auto-regulated to RPE 7 cap, emphasized breathing resets.</p><p><strong>Next:</strong> Re-establish sleep routine; check readiness Monday.</p>",
       },
     ],
     prs: [
@@ -297,22 +293,20 @@ export const athletes: Athlete[] = [
       { name: "Diane Okafor", relation: "Mother", email: "diane.okafor@example.com" },
     ],
     lastActive: at(0, 7, 40),
-    capNotes: [
+    notes: [
       {
         id: "cap-mo-1",
         date: at(-1, 16),
         coach: "Coach Ellis",
-        context: "RTP week 2 post ankle sprain. Confident, no swelling.",
-        action: "Bilateral landing progressions, no cutting yet.",
-        plan: "Introduce sub-max unilateral next week if pain-free.",
+        body:
+          "<p>RTP week 2 post ankle sprain. Confident, no swelling. Bilateral landing progressions, no cutting yet.</p><p><strong>Next:</strong> Introduce sub-max unilateral next week if pain-free.</p>",
       },
       {
         id: "cap-mo-2",
         date: at(-4, 16),
         coach: "Coach Nadia",
-        context: "First week back. Nervous about ankle.",
-        action: "Reassurance + isometrics, kept RPE ≤6.",
-        plan: "Build confidence with tempo work.",
+        body:
+          "<p>First week back. Nervous about ankle. Reassurance + isometrics, kept RPE ≤6.</p><p><strong>Next:</strong> Build confidence with tempo work.</p>",
       },
     ],
     prs: [
@@ -356,14 +350,13 @@ export const athletes: Athlete[] = [
       { name: "Paulo Santos", relation: "Father", email: "paulo.santos@example.com" },
     ],
     lastActive: at(-1, 18, 5),
-    capNotes: [
+    notes: [
       {
         id: "cap-as-1",
         date: at(-3, 18),
         coach: "Coach Ellis",
-        context: "Sharp acceleration work. Missed last session (no-show).",
-        action: "Block clearance drills, flagged attendance dip.",
-        plan: "Reconnect on consistency; confirm payment with front desk.",
+        body:
+          "<p>Sharp acceleration work. Missed last session (no-show). Block clearance drills, flagged attendance dip.</p><p><strong>Next:</strong> Reconnect on consistency; confirm payment with front desk.</p>",
       },
     ],
     prs: [
@@ -405,14 +398,13 @@ export const athletes: Athlete[] = [
     reminders: ["Nominated conference player of the week"],
     guardians: [],
     lastActive: at(0, 6, 55),
-    capNotes: [
+    notes: [
       {
         id: "cap-sl-1",
         date: at(-1, 7),
         coach: "Coach Nadia",
-        context: "Match +1 day. Legs heavy but moving well.",
-        action: "Deload lower, full-body flush + core.",
-        plan: "Normal loading resumes match +2.",
+        body:
+          "<p>Match +1 day. Legs heavy but moving well. Deload lower, full-body flush + core.</p><p><strong>Next:</strong> Normal loading resumes match +2.</p>",
       },
     ],
     prs: [
@@ -456,14 +448,13 @@ export const athletes: Athlete[] = [
       { name: "Rachel Brooks", relation: "Mother", email: "rachel.brooks@example.com" },
     ],
     lastActive: at(-2, 17, 20),
-    capNotes: [
+    notes: [
       {
         id: "cap-tb-1",
         date: at(-2, 17),
         coach: "Coach Ellis",
-        context: "Rotational power focus. Great intent on med-ball work.",
-        action: "Kept throwing volume conservative per arm-care plan.",
-        plan: "Progress rotational MB load; monitor elbow.",
+        body:
+          "<p>Rotational power focus. Great intent on med-ball work. Kept throwing volume conservative per arm-care plan.</p><p><strong>Next:</strong> Progress rotational MB load; monitor elbow.</p>",
       },
     ],
     prs: [
@@ -504,14 +495,13 @@ export const athletes: Athlete[] = [
     reminders: ["National qualifier in 9 days"],
     guardians: [],
     lastActive: at(0, 9, 5),
-    capNotes: [
+    notes: [
       {
         id: "cap-rt-1",
         date: at(-1, 9),
         coach: "Coach Nadia",
-        context: "Snatch technical session. Bar path clean at 85%.",
-        action: "Worked openers, kept volume low for taper.",
-        plan: "Openers confirmed; light movement day before meet.",
+        body:
+          "<p>Snatch technical session. Bar path clean at 85%. Worked openers, kept volume low for taper.</p><p><strong>Next:</strong> Openers confirmed; light movement day before meet.</p>",
       },
     ],
     prs: [
@@ -550,17 +540,16 @@ export const athletes: Athlete[] = [
     attendancePct: 74,
     injuryFlags: [],
     season: "off-season",
-    reminders: ["No CAP note in 12 days — follow up"],
+    reminders: ["No note in 12 days — follow up"],
     guardians: [],
     lastActive: at(-6, 19),
-    capNotes: [
+    notes: [
       {
         id: "cap-pn-1",
         date: at(-12, 18),
         coach: "Coach Ellis",
-        context: "Consistent but attendance slipping with school load.",
-        action: "Built a 3-day template that fits her schedule.",
-        plan: "Check in on adherence; consider 2×/week plan if needed.",
+        body:
+          "<p>Consistent but attendance slipping with school load. Built a 3-day template that fits her schedule.</p><p><strong>Next:</strong> Check in on adherence; consider 2×/week plan if needed.</p>",
       },
     ],
     prs: [
@@ -601,14 +590,13 @@ export const athletes: Athlete[] = [
     reminders: [],
     guardians: [],
     lastActive: at(-1, 12),
-    capNotes: [
+    notes: [
       {
         id: "cap-lm-1",
         date: at(-2, 12),
         coach: "Coach Nadia",
-        context: "Anti-rotation + hip speed. Feeling strong.",
-        action: "Cable chops, med-ball rotational throws.",
-        plan: "Add overspeed work; monitor low back.",
+        body:
+          "<p>Anti-rotation + hip speed. Feeling strong. Cable chops, med-ball rotational throws.</p><p><strong>Next:</strong> Add overspeed work; monitor low back.</p>",
       },
     ],
     prs: [{ id: "pr-lm-1", lift: "Rotational MB throw", value: 31, unit: "in", date: at(-18) }],

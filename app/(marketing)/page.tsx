@@ -50,7 +50,7 @@ const features = [
   {
     icon: ClipboardList,
     title: "The coach huddle brief",
-    body: "One screen, every athlete on deck: program day, plan frequency, last 3 CAP notes, injury flags and billing.",
+    body: "One screen, every athlete on deck: program day, plan frequency, last 3 coach notes, injury flags and billing.",
   },
   {
     icon: ShieldCheck,
@@ -60,7 +60,7 @@ const features = [
   {
     icon: Users,
     title: "One unified athlete profile",
-    body: "Membership, history, CAP notes, PRs and messages in a single record — shared cleanly across every role.",
+    body: "Membership, history, coach notes, PRs and messages in a single record — shared cleanly across every role.",
   },
 ];
 
@@ -86,7 +86,7 @@ export default function LandingPage() {
             </h1>
             <p className="max-w-xl text-pretty text-base text-muted-foreground md:text-lg">
               The unified hub for semi-private coaching and fully individualized
-              programming. Booking, billing, CAP notes, compliant messaging and the
+              programming. Booking, billing, coach notes, compliant messaging and the
               coach huddle brief — one system, built for The Pro Maker™.
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
