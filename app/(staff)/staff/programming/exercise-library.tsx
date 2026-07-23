@@ -38,6 +38,38 @@ import { cn } from "@/lib/utils";
 const LOAD_MODES = Object.keys(LOAD_MODE_LABEL) as LoadMode[];
 const REP_MODES = Object.keys(REP_MODE_LABEL) as RepMode[];
 
+/* ---- column sorting (C11) ---- */
+
+type ColumnKey = "name" | "tags" | "video" | "refMax";
+
+interface ColumnSort {
+  key: ColumnKey;
+  dir: 1 | -1;
+}
+
+function compareByColumn(a: LibraryExercise, b: LibraryExercise, key: ColumnKey): number {
+  switch (key) {
+    case "name":
+      return a.name.localeCompare(b.name);
+    case "tags":
+      return a.tags.join(", ").localeCompare(b.tags.join(", "));
+    case "video":
+      // Ascending = exercises WITH a video first.
+      return Number(b.videoUrl != null) - Number(a.videoUrl != null);
+    case "refMax":
+      // Exercises without a reference max sort last.
+      return (a.referenceMax ?? "￿").localeCompare(b.referenceMax ?? "￿");
+  }
+}
+
+function sortRows(rows: LibraryExercise[], sort: ColumnSort | null): LibraryExercise[] {
+  if (!sort) return rows;
+  return [...rows].sort((a, b) => {
+    const cmp = compareByColumn(a, b, sort.key) || a.name.localeCompare(b.name);
+    return cmp * sort.dir;
+  });
+}
+
 /** Editor form state — "none" stands in for a null reference max. */
 interface Draft {
   id: string | null;
@@ -70,6 +102,7 @@ export function ExerciseLibrary() {
   const [list, setList] = useState<LibraryExercise[]>(exerciseLibrary);
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [sort, setSort] = useState<ColumnSort | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,6 +146,18 @@ export function ExerciseLibrary() {
     activeTags.length === 0
       ? bySearch
       : bySearch.filter((ex) => ex.tags.some((t) => activeTags.includes(t)));
+
+  const rows = sortRows(filtered, sort);
+
+  function toggleSort(key: ColumnKey) {
+    setSort((prev) =>
+      prev?.key === key
+        ? prev.dir === 1
+          ? { key, dir: -1 }
+          : null
+        : { key, dir: 1 },
+    );
+  }
 
   const referenceOptions = useMemo(
     () =>
@@ -239,15 +284,37 @@ export function ExerciseLibrary() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Exercise</TableHead>
-                <TableHead>Tags</TableHead>
-                <TableHead className="w-16 text-center">Video</TableHead>
+                <SortableHead
+                  label="Exercise"
+                  columnKey="name"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Tags"
+                  columnKey="tags"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Video"
+                  columnKey="video"
+                  sort={sort}
+                  onSort={toggleSort}
+                  className="w-16 text-center"
+                />
                 <TableHead className="w-20 text-center">Points</TableHead>
-                <TableHead className="w-40">Reference max</TableHead>
+                <SortableHead
+                  label="Reference max"
+                  columnKey="refMax"
+                  sort={sort}
+                  onSort={toggleSort}
+                  className="w-40"
+                />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((ex) => (
+              {rows.map((ex) => (
                 <TableRow
                   key={ex.id}
                   onClick={() => openEditor(ex)}
@@ -297,7 +364,7 @@ export function ExerciseLibrary() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}
@@ -496,5 +563,46 @@ export function ExerciseLibrary() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Clickable column header — cycles ascending ▲ → descending ▼ → off (C11). */
+function SortableHead({
+  label,
+  columnKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  columnKey: ColumnKey;
+  sort: ColumnSort | null;
+  onSort: (key: ColumnKey) => void;
+  className?: string;
+}) {
+  const active = sort?.key === columnKey;
+  const dir = active ? sort.dir : null;
+  return (
+    <TableHead
+      className={className}
+      aria-sort={dir === 1 ? "ascending" : dir === -1 ? "descending" : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(columnKey)}
+        title={`Sort by ${label.toLowerCase()}`}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <span aria-hidden className="text-[0.6rem] leading-none">
+          {dir === 1 ? "▲" : dir === -1 ? "▼" : (
+            <span className="opacity-40">▲▼</span>
+          )}
+        </span>
+      </button>
+    </TableHead>
   );
 }

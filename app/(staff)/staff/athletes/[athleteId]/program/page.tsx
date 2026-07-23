@@ -12,7 +12,7 @@ import { athleteById } from "@/lib/demo/data";
 import {
   athleteMaxes,
   exerciseLibrary,
-  jordanProgramDays,
+  jordanProgram,
 } from "@/lib/demo/training";
 import { isStaff } from "@/lib/rbac";
 
@@ -77,7 +77,7 @@ export default async function ProgramBuilderPage({
         athleteId={athlete.id}
         athleteName={athlete.name}
         isTemplateView={athlete.id !== "ath-jordan"}
-        days={jordanProgramDays}
+        program={jordanProgram}
         library={exerciseLibrary}
         maxes={athleteMaxes[athlete.id] ?? athleteMaxes["ath-jordan"] ?? {}}
       />

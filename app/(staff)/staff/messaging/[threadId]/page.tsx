@@ -9,8 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
-import { isStaff } from "@/lib/rbac";
-import { fmtDay, threadById } from "@/lib/demo/data";
+import { isAdmin, isStaff } from "@/lib/rbac";
+import { athleteById, fmtDay, threadById } from "@/lib/demo/data";
+import {
+  assignedStaffIds,
+  assignmentsForAthlete,
+  COACH_ROLE_LABEL,
+} from "@/lib/demo/staff";
 
 import { ThreadConversation } from "./thread-conversation";
 
@@ -21,11 +26,28 @@ interface PageProps {
 export default async function StaffThreadPage({ params }: PageProps) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
+  const admin = isAdmin(user);
 
   const thread = threadById(params.threadId);
   if (!thread) notFound();
 
   const isBroadcast = thread.kind === "broadcast";
+
+  // C20: involvement follows coach assignments for the thread's athlete.
+  const athleteParticipant = thread.participants.find(
+    (p) => p.role === "athlete" && athleteById(p.id),
+  );
+  const assignment = athleteParticipant
+    ? assignmentsForAthlete(athleteParticipant.id).find(
+        (a) => a.staffId === user.id,
+      )
+    : undefined;
+  const involved = isBroadcast
+    ? true
+    : athleteParticipant
+      ? assignedStaffIds(athleteParticipant.id).has(user.id)
+      : false;
+  const canPost = involved || admin;
 
   return (
     <div className="flex flex-col gap-6">
@@ -68,11 +90,27 @@ export default async function StaffThreadPage({ params }: PageProps) {
                 <span className="opacity-60">· {p.role}</span>
               </Pill>
             ))}
+            {assignment ? (
+              <Pill tone="brand" className="ml-auto">
+                You · {COACH_ROLE_LABEL[assignment.role]}
+              </Pill>
+            ) : admin && !isBroadcast ? (
+              <Pill tone="info" className="ml-auto">
+                Admin oversight
+              </Pill>
+            ) : null}
           </div>
 
           <ThreadConversation
             initialMessages={thread.messages}
             participants={thread.participants}
+            me={{
+              id: user.id,
+              name: user.fullName,
+              role: admin ? "admin" : "coach",
+            }}
+            canPost={canPost}
+            canDelete={admin}
           />
         </CardContent>
       </Card>

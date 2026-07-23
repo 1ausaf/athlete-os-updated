@@ -4,7 +4,12 @@ import { PageHeader } from "@/components/app/page-header";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isAdmin } from "@/lib/rbac";
 
-/** Placeholder — replaced by the staff access-level manager (W10). */
+import { TeamManager } from "./team-manager";
+
+/**
+ * Owner/admin staff manager (O1 + C23): access levels, coach profiles,
+ * certifications and vulnerable-sector check records.
+ */
 export default async function StaffTeamPage() {
   const user = await requireUserWithProfile();
   if (!isAdmin(user)) redirect("/staff/athletes");
@@ -14,8 +19,9 @@ export default async function StaffTeamPage() {
       <PageHeader
         eyebrow="Staff Workspace · Team"
         title="Team & access"
-        description="Coaching staff, access levels and records."
+        description="Who's on staff, what they can do, and whether their records are current. Access levels apply immediately; certifications and vulnerable-sector checks are tracked per coach."
       />
+      <TeamManager />
     </div>
   );
 }

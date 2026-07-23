@@ -3,6 +3,8 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 import {
   Archive,
+  ArrowRight,
+  BadgeCheck,
   CheckCircle2,
   Clock,
   ShieldAlert,
@@ -24,14 +26,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { requireUserWithProfile } from "@/lib/auth";
-import { isStaff } from "@/lib/rbac";
+import { isAdmin, isStaff } from "@/lib/rbac";
 import { complianceRows, facility, threads } from "@/lib/demo/data";
+import { staffMembers } from "@/lib/demo/staff";
 
 export default async function StaffCompliancePage() {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
 
   const gaps = complianceRows.filter((r) => r.status === "gap").length;
+
+  // Staff records summary (C23) — detail lives on the Team page.
+  const staffCerts = staffMembers.flatMap((s) => s.certifications);
+  const certsExpiring = staffCerts.filter(
+    (c) => c.status === "expiring",
+  ).length;
+  const certsExpired = staffCerts.filter((c) => c.status === "expired").length;
+  const vsChecksDue = staffMembers.filter(
+    (s) => s.vulnerableSector.status === "due",
+  ).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -119,6 +132,47 @@ export default async function StaffCompliancePage() {
               text="Every message is logged, timestamped, and retained for the audit record."
             />
           </ul>
+        </CardContent>
+      </Card>
+
+      {/* Staff records summary — managed on the Team page */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
+              <BadgeCheck className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg">Staff records</h2>
+              <p className="text-sm text-muted-foreground">
+                Certifications and vulnerable-sector checks across the coaching
+                staff.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+            <Pill tone={certsExpiring > 0 ? "warning" : "success"} dot>
+              {certsExpiring} certification{certsExpiring === 1 ? "" : "s"}{" "}
+              expiring
+            </Pill>
+            {certsExpired > 0 ? (
+              <Pill tone="danger" dot>
+                {certsExpired} expired
+              </Pill>
+            ) : null}
+            <Pill tone={vsChecksDue > 0 ? "danger" : "success"} dot>
+              {vsChecksDue} vulnerable-sector check
+              {vsChecksDue === 1 ? "" : "s"} due
+            </Pill>
+            {isAdmin(user) ? (
+              <Button asChild variant="outline" size="sm" className="ml-1">
+                <Link href={"/staff/team" as Route}>
+                  Manage in Team
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

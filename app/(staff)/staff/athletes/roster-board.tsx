@@ -463,7 +463,11 @@ function BoardCard({
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.66rem] font-semibold",
-            due.chipClass,
+            due.tone === "danger"
+              ? "bg-destructive text-destructive-foreground"
+              : due.tone === "warning"
+                ? "bg-warning/15 text-warning"
+                : "bg-muted text-muted-foreground",
           )}
         >
           <CalendarClock className="h-3 w-3" />
@@ -487,7 +491,7 @@ function BoardCard({
           {trainingField(athlete)}
           {athlete.nutrition === "pro" ? " · Nutrition: Pro" : ""}
         </span>
-        <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="xs" />
+        <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="sm" />
       </span>
     </button>
   );

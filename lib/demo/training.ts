@@ -495,6 +495,8 @@ export interface ProgramDay {
   title: string;
   location: "gym" | "home";
   focus: string;
+  /** Per-day publish state (C16). Undefined = published (legacy data). */
+  published?: boolean;
   sections: ProgramSection[];
 }
 
@@ -734,6 +736,133 @@ export const jordanProgramDays: ProgramDay[] = [
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Multi-week program (C10/C16) — weeks + auto-publish                 */
+/* ------------------------------------------------------------------ */
+
+export interface ProgramWeek {
+  weekNumber: number;
+  days: ProgramDay[];
+}
+
+export interface AthleteProgram {
+  id: string;
+  name: string;
+  weeks: ProgramWeek[];
+  /**
+   * TrainHeroic-style rule (the client's real one): each day goes live to
+   * the athlete at `hour` o'clock, `daysAhead` days before it is trained.
+   */
+  autoPublish: { enabled: boolean; daysAhead: number; hour: number };
+}
+
+/** Clone a day into a later week — new id, progressed focus, own publish flag. */
+function weekVariant(
+  day: ProgramDay,
+  weekNumber: number,
+  focusSuffix: string,
+  published: boolean,
+): ProgramDay {
+  return {
+    ...day,
+    id: `wk${weekNumber}-${day.id}`,
+    focus: `${day.focus} · ${focusSuffix}`,
+    published,
+    sections: day.sections.map((s) => ({
+      ...s,
+      exercises: s.exercises.map((e) => ({
+        ...e,
+        sets: e.sets.map((set) => ({ ...set })),
+      })),
+    })),
+  };
+}
+
+/**
+ * Jordan's full block — three weeks on the same weekly skeleton, progressed.
+ * Week 1 is live (`jordanProgramDays` — the athlete side reads it directly),
+ * week 2 is queued (day 1 already auto-published), week 3 is still draft.
+ * Auto-publish mirrors the client's real rule: 5:00 AM, 4 days in advance.
+ */
+export const jordanProgram: AthleteProgram = {
+  id: "prog-jordan-block-c",
+  name: "In-Season Power — Block C",
+  autoPublish: { enabled: true, daysAhead: 4, hour: 5 },
+  weeks: [
+    {
+      weekNumber: 1,
+      days: jordanProgramDays.map((d) => ({ ...d, published: true })),
+    },
+    {
+      weekNumber: 2,
+      days: jordanProgramDays.map((d, i) =>
+        weekVariant(d, 2, "wave 2 — add 5 lb to top sets", i === 0),
+      ),
+    },
+    {
+      weekNumber: 3,
+      days: jordanProgramDays.map((d) =>
+        weekVariant(d, 3, "wave 3 — deload −10%, move with speed", false),
+      ),
+    },
+  ],
+};
+
+/** Section skeleton used when scaffolding an empty master-template day. */
+const TEMPLATE_SECTION_TITLES = ["Warm-up", "Strength", "Accessory"];
+
+/**
+ * Build an editable weeks × days/wk scaffold for the template builder (C10).
+ * With `seedDays`, day structures are cycled from the seed (movements only —
+ * copies onto athletes keep their own loads); without, days start empty.
+ */
+export function scaffoldProgram(opts: {
+  id: string;
+  name: string;
+  weeks: number;
+  daysPerWeek: number;
+  remoteDays?: number;
+  seedDays?: ProgramDay[];
+}): AthleteProgram {
+  const weekCount = Math.max(1, Math.min(Math.round(opts.weeks) || 1, 12));
+  const daysPerWeek = Math.max(1, Math.min(Math.round(opts.daysPerWeek) || 1, 7));
+  return {
+    id: opts.id,
+    name: opts.name,
+    autoPublish: { enabled: true, daysAhead: 4, hour: 5 },
+    weeks: Array.from({ length: weekCount }, (_, w) => ({
+      weekNumber: w + 1,
+      days: Array.from({ length: daysPerWeek }, (_, d): ProgramDay => {
+        const seed =
+          opts.seedDays && opts.seedDays.length > 0
+            ? opts.seedDays[d % opts.seedDays.length]
+            : undefined;
+        const remote =
+          opts.remoteDays != null && d >= daysPerWeek - opts.remoteDays;
+        return {
+          id: `${opts.id}-wk${w + 1}-day-${d + 1}`,
+          dayNumber: d + 1,
+          title: seed ? seed.title : `Day ${d + 1}`,
+          location: seed ? seed.location : remote ? "home" : "gym",
+          focus: seed
+            ? seed.focus
+            : "Template scaffolding — add movements from the library",
+          published: false,
+          sections: seed
+            ? seed.sections.map((s) => ({
+                ...s,
+                exercises: s.exercises.map((e) => ({
+                  ...e,
+                  sets: e.sets.map((set) => ({ ...set })),
+                })),
+              }))
+            : TEMPLATE_SECTION_TITLES.map((title) => ({ title, exercises: [] })),
+        };
+      }),
+    })),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Athlete maxes + history (for % programming and "last time" display) */
@@ -1023,6 +1152,9 @@ export interface ProgramTemplate {
   description: string;
   remoteDays?: number;
   createdBy: string;
+  /** ISO date the master was added — powers the "Newest" library sort (C10). */
+  createdAt: string;
+  tags: string[];
 }
 
 export const programTemplates: ProgramTemplate[] = [
@@ -1035,6 +1167,8 @@ export const programTemplates: ProgramTemplate[] = [
     remoteDays: 2,
     description: "Hybrid on-boarding block — two in-gym, two remote days per week.",
     createdBy: "Coach Clance",
+    createdAt: "2026-05-18",
+    tags: ["Hybrid", "On-boarding"],
   },
   {
     id: "tpl-sb",
@@ -1044,6 +1178,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 4,
     description: "Foundation block — balance ratios before intensification.",
     createdBy: "Coach Clance",
+    createdAt: "2025-11-03",
+    tags: ["Structural Balance"],
   },
   {
     id: "tpl-sb-v1",
@@ -1053,6 +1189,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 3,
     description: "SB variation with rotated accessory emphasis.",
     createdBy: "Coach Clance",
+    createdAt: "2026-01-21",
+    tags: ["Structural Balance", "Variation"],
   },
   {
     id: "tpl-pl-max",
@@ -1062,6 +1200,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 4,
     description: "Realization block — singles at RPE 8–9, taper to test.",
     createdBy: "Coach Clance",
+    createdAt: "2026-06-09",
+    tags: ["Powerlifting", "Realization"],
   },
   {
     id: "tpl-pl-max-partial",
@@ -1071,6 +1211,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 4,
     description: "Overload with partials before the full-range max block.",
     createdBy: "Coach Clance",
+    createdAt: "2026-06-30",
+    tags: ["Powerlifting", "Overload"],
   },
   {
     id: "tpl-sb-cj",
@@ -1080,6 +1222,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 4,
     description: "SB pyramid loading with clean & jerk technique work.",
     createdBy: "Coach Clance",
+    createdAt: "2026-02-12",
+    tags: ["Structural Balance", "Olympic Lifts"],
   },
   {
     id: "tpl-sb-exec",
@@ -1089,6 +1233,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 2,
     description: "Executive schedule — 2×/wk full-body with mobility finishers.",
     createdBy: "Coach Clance",
+    createdAt: "2025-09-26",
+    tags: ["Structural Balance", "Executive"],
   },
   {
     id: "tpl-golf",
@@ -1098,6 +1244,8 @@ export const programTemplates: ProgramTemplate[] = [
     daysPerWeek: 2,
     description: "Rotational power + posterior chain for the Sunday golf group.",
     createdBy: "Coach Nadia",
+    createdAt: "2026-04-07",
+    tags: ["Golf", "Rotational Power"],
   },
 ];
 
