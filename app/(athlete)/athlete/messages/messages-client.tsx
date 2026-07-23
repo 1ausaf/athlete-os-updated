@@ -23,23 +23,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Message, ThreadParticipant } from "@/lib/demo/data";
+import type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
+import type { ThreadParticipant } from "@/lib/demo/data";
 import { relTime } from "@/lib/demo/data";
 import type { Announcement } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
-/* Demo-local message model: base Message + optional media attachments  */
+/* Demo-local message model lives in lib/demo/chat.ts (shared with the  */
+/* dashboard preview) — re-exported here for existing importers.        */
 /* ------------------------------------------------------------------ */
 
-export type ChatAttachment =
-  | { kind: "video"; name: string; duration: string }
-  | { kind: "link"; url: string; label: string }
-  | { kind: "file"; name: string };
-
-export interface ChatMessage extends Message {
-  attachments?: ChatAttachment[];
-}
+export type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
 
 /** Canned items so the "Attach" button feels like a real file picker in the demo. */
 const DEMO_ATTACHMENTS: ChatAttachment[] = [
@@ -391,12 +386,14 @@ function CoachChat({
             <Button
               type="button"
               variant="outline"
-              size="icon"
+              size="sm"
               onClick={attachDemoFile}
-              title="Attach a file — or drag & drop into the chat"
-              aria-label="Attach a file — or drag and drop into the chat"
+              className="gap-1.5 px-2.5"
+              title="Attach a photo or video — or drag & drop into the chat"
+              aria-label="Attach a photo or video — or drag and drop into the chat"
             >
               <Paperclip className="h-4 w-4" />
+              <span className="hidden sm:inline">Attach</span>
             </Button>
             <Button
               type="button"
@@ -520,7 +517,7 @@ function NotificationRoster({
 
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Users className="h-3.5 w-3.5 shrink-0" />
-        All LPS coaches can view this chat.
+        All LPS team members can view this chat.
       </p>
 
       <div className="flex flex-wrap items-center gap-1.5">

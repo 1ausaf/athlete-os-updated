@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Minus,
   Scale,
+  Trash2,
 } from "lucide-react";
 
 import { Sparkline } from "@/components/app/mini-charts";
@@ -38,12 +39,14 @@ interface Delta {
   direction: Direction;
   /** Absolute % change vs the previous check-in. */
   pct: number;
+  /** Absolute unit change vs the previous check-in (lb for weights). */
+  abs: number;
   /** Trending the right way for this metric. */
   good: boolean;
 }
 
 /**
- * % change vs the previous check-in. `goodWhen` decides the color:
+ * Change vs the previous check-in. `goodWhen` decides the color:
  * weight down (or stable), body fat down, lean mass up = success.
  */
 function deltaVsPrev(
@@ -54,10 +57,25 @@ function deltaVsPrev(
   if (prev == null || prev === 0) return null;
   const change = ((curr - prev) / prev) * 100;
   const direction: Direction = change > 0.05 ? "up" : change < -0.05 ? "down" : "flat";
-  return { direction, pct: Math.abs(change), good: goodWhen(change) };
+  return {
+    direction,
+    pct: Math.abs(change),
+    abs: Math.abs(curr - prev),
+    good: goodWhen(change),
+  };
 }
 
-function DeltaBadge({ delta }: { delta: Delta | null }) {
+/**
+ * Client direction: weight-type metrics show the change in pounds, body fat
+ * shows the relative % change — always "vs last measured", with an arrow.
+ */
+function DeltaBadge({
+  delta,
+  unit,
+}: {
+  delta: Delta | null;
+  unit: "lb" | "%";
+}) {
   if (!delta) {
     return (
       <span className="text-xs text-muted-foreground">first check-in</span>
@@ -69,6 +87,8 @@ function DeltaBadge({ delta }: { delta: Delta | null }) {
       : delta.direction === "down"
         ? ArrowDownRight
         : Minus;
+  const amount =
+    unit === "lb" ? `${delta.abs.toFixed(1)} lb` : `${delta.pct.toFixed(1)}%`;
   return (
     <span
       className={cn(
@@ -78,8 +98,8 @@ function DeltaBadge({ delta }: { delta: Delta | null }) {
     >
       <Icon className="h-3.5 w-3.5" aria-hidden />
       {delta.direction === "flat"
-        ? "No change vs last week"
-        : `${delta.pct.toFixed(1)}% vs last week`}
+        ? "No change vs last measured"
+        : `${amount} vs last measured`}
     </span>
   );
 }
@@ -136,6 +156,14 @@ export function WeeklyCheckIn({
     flashTimer.current = setTimeout(() => setFlash(false), 4000);
   }
 
+  /** Fat-fingered a check-in? Remove it — the trend recalculates. */
+  function handleDelete(indexNewestFirst: number) {
+    setCheckIns((prev) => {
+      const originalIdx = prev.length - 1 - indexNewestFirst;
+      return prev.filter((_, i) => i !== originalIdx);
+    });
+  }
+
   const latest = checkIns[checkIns.length - 1];
   const prev = checkIns[checkIns.length - 2];
 
@@ -160,9 +188,9 @@ export function WeeklyCheckIn({
         {/* Header */}
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Scale className="h-5 w-5 text-brand-ink" aria-hidden />
-            <h3 className="text-base">Weekly check-in</h3>
-            <Pill tone="brand" className="ml-auto" dot>
+            <Scale className="h-5 w-5 text-success" aria-hidden />
+            <h3 className="text-lg font-extrabold">Check-in</h3>
+            <Pill tone="success" className="ml-auto" dot>
               {checkIns.length} logged
             </Pill>
           </div>
@@ -173,9 +201,11 @@ export function WeeklyCheckIn({
         </div>
 
         {/* Log form */}
+        {/* Light green on purpose — the earlier brand-red tint read as an
+            error state to the client. Logging should feel positive. */}
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-3 rounded-xl border border-brand/30 bg-brand/[0.04] p-4"
+          className="flex flex-col gap-3 rounded-xl border border-success/30 bg-success/[0.06] p-4"
         >
           <span className="eyebrow">Log this week&apos;s check-in</span>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
@@ -254,7 +284,7 @@ export function WeeklyCheckIn({
                   </span>
                 </div>
                 <div className="mt-1.5">
-                  <DeltaBadge delta={weightDelta} />
+                  <DeltaBadge delta={weightDelta} unit="lb" />
                 </div>
               </div>
               <div className="rounded-xl border border-border bg-surface/50 p-4">
@@ -268,7 +298,7 @@ export function WeeklyCheckIn({
                   </span>
                 </div>
                 <div className="mt-1.5">
-                  <DeltaBadge delta={bodyFatDelta} />
+                  <DeltaBadge delta={bodyFatDelta} unit="%" />
                 </div>
               </div>
               <div className="rounded-xl border border-border bg-surface/50 p-4">
@@ -282,7 +312,7 @@ export function WeeklyCheckIn({
                   </span>
                 </div>
                 <div className="mt-1.5">
-                  <DeltaBadge delta={leanDelta} />
+                  <DeltaBadge delta={leanDelta} unit="lb" />
                 </div>
               </div>
             </div>
@@ -336,6 +366,7 @@ export function WeeklyCheckIn({
                     <TableHead className="hidden text-right sm:table-cell">
                       Lean mass (lbs)
                     </TableHead>
+                    <TableHead className="w-10" aria-label="Actions" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -344,7 +375,7 @@ export function WeeklyCheckIn({
                       <TableCell className="whitespace-nowrap font-medium">
                         {fmtDay(c.date)}
                         {i === 0 ? (
-                          <span className="ml-2 text-xs font-semibold text-brand-ink">
+                          <span className="ml-2 text-xs font-semibold text-success">
                             latest
                           </span>
                         ) : null}
@@ -357,6 +388,17 @@ export function WeeklyCheckIn({
                       </TableCell>
                       <TableCell className="tnum hidden text-right sm:table-cell">
                         {leanMassLb(c).toFixed(1)}
+                      </TableCell>
+                      <TableCell className="w-10 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(i)}
+                          title="Delete this check-in"
+                          aria-label={`Delete check-in from ${fmtDay(c.date)}`}
+                          className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
-import { athleteById, relTime } from "@/lib/demo/data";
+import { athleteById, fmtFullDay } from "@/lib/demo/data";
 import {
   athleteMaxes,
   exerciseById,
@@ -78,9 +78,16 @@ export default async function AthleteTrainingPage() {
                   <Trophy className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{pr.lift}</div>
+                  <div className="truncate text-sm font-semibold">
+                    {pr.lift}
+                    {pr.reps ? (
+                      <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+                        {pr.reps === 1 ? "1-rep max" : `${pr.reps}-rep max`}
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    {relTime(pr.date)}
+                    {fmtFullDay(pr.date)}
                   </div>
                 </div>
                 <span className="tnum text-sm font-bold">
@@ -88,6 +95,11 @@ export default async function AthleteTrainingPage() {
                   <span className="ml-0.5 text-xs font-medium text-muted-foreground">
                     {pr.unit}
                   </span>
+                  {pr.reps ? (
+                    <span className="ml-1 text-xs font-semibold text-muted-foreground">
+                      × {pr.reps}
+                    </span>
+                  ) : null}
                 </span>
                 {pr.isNew ? <Pill tone="brand">New</Pill> : null}
               </li>

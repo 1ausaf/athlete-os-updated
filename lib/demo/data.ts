@@ -43,6 +43,8 @@ export interface Pr {
   lift: string;
   value: number;
   unit: "lb" | "kg" | "in" | "s";
+  /** Rep count for the max — a lift can hold a 1RM, 3RM, 5RM… (omit for jumps/sprints). */
+  reps?: number;
   date: string;
   isNew?: boolean;
 }
@@ -175,7 +177,7 @@ export interface Invoice {
   plan: string;
   amountCents: number;
   dueDate: string;
-  status: "paid" | "due" | "overdue" | "upcoming";
+  status: "paid" | "due" | "overdue" | "upcoming" | "canceled";
   method: "Square" | "Cash" | "Card on file";
 }
 
@@ -252,9 +254,12 @@ export const athletes: Athlete[] = [
       },
     ],
     prs: [
-      { id: "pr-jv-1", lift: "Trap-bar deadlift", value: 385, unit: "lb", date: at(-2), isNew: true },
+      { id: "pr-jv-1", lift: "Trap-bar deadlift", value: 385, unit: "lb", reps: 1, date: at(-2), isNew: true },
+      { id: "pr-jv-1b", lift: "Trap-bar deadlift", value: 365, unit: "lb", reps: 3, date: at(-15) },
       { id: "pr-jv-2", lift: "Broad jump", value: 112, unit: "in", date: at(-16) },
-      { id: "pr-jv-3", lift: "Bench press", value: 245, unit: "lb", date: at(-30) },
+      { id: "pr-jv-3", lift: "Bench press", value: 245, unit: "lb", reps: 1, date: at(-30) },
+      { id: "pr-jv-3b", lift: "Bench press", value: 225, unit: "lb", reps: 5, date: at(-44) },
+      { id: "pr-jv-3c", lift: "Bench press", value: 205, unit: "lb", reps: 10, date: at(-71) },
     ],
   },
   {
@@ -961,6 +966,15 @@ export function fmtDay(iso: string): string {
     weekday: "short",
     month: "short",
     day: "numeric",
+  }).format(new Date(iso));
+}
+
+/** Full calendar date for records — "Jul 1, 2026" (PRs show real dates). */
+export function fmtFullDay(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   }).format(new Date(iso));
 }
 

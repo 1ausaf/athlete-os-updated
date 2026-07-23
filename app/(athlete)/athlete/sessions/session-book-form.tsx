@@ -751,14 +751,9 @@ function SlotRow({
           {capBlocked && !checked && !overdue ? (
             <span className="text-xs text-warning">Plan cap this week</span>
           ) : null}
-          <span
-            className={cn(
-              "tnum text-xs",
-              slot.spotsLeft === 1
-                ? "font-medium text-warning"
-                : "text-muted-foreground",
-            )}
-          >
+          {/* Kept deliberately plain — the client doesn't want scarce spots
+              drawing attention (no warning color on "1 spot left"). */}
+          <span className="tnum text-xs text-muted-foreground">
             {slot.spotsLeft} {slot.spotsLeft === 1 ? "spot" : "spots"} left
           </span>
         </span>

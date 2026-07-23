@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
 import {
-  Banknote,
   ChevronDown,
   CreditCard,
   Landmark,
@@ -123,7 +122,8 @@ export default async function AthleteBillingPage() {
           </CardContent>
         </Card>
 
-        {/* Payment method — card on file OR cash / day-pay */}
+        {/* Payment method — card on file only. Cash handling is a back-office
+            action (staff mark an invoice paid manually); it never shows here. */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
             <div className="flex items-center gap-2">
@@ -143,23 +143,6 @@ export default async function AthleteBillingPage() {
                 </div>
               </div>
               <Pill tone="success">Active</Pill>
-            </div>
-            <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-surface/30 p-4">
-              <span className="flex h-10 w-14 items-center justify-center rounded-md bg-muted">
-                <Banknote
-                  className="h-4 w-4 text-muted-foreground"
-                  aria-hidden
-                />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-muted-foreground">
-                  Cash / day-pay — no card required
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Your account can run session-to-session without a stored card.
-                  Ask the front desk to switch.
-                </div>
-              </div>
             </div>
             <Button variant="outline" size="sm" className="w-full" disabled>
               Update payment method (demo)
