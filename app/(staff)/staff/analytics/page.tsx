@@ -74,7 +74,7 @@ export default async function AnalyticsPage() {
       <PageHeader
         eyebrow="Staff Workspace · Performance"
         title="Analytics"
-        description="Estimated 1RMs, session-by-session training summaries, group compliance and engagement — who's progressing, who's logging, and who's gone quiet."
+        description="Estimated 1RMs, rep-max PRs, session-by-session training summaries and per-athlete compliance — over any date range. Who's progressing, who's logging, and who's gone quiet."
         actions={
           <Pill tone="brand" icon={<Activity className="h-3.5 w-3.5" />}>
             Live from training logs

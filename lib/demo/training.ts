@@ -11,6 +11,8 @@
  *   the athlete records in `data.ts`.
  */
 
+import { athleteById, sessions } from "@/lib/demo/data";
+
 const NOW = new Date();
 
 function at(dayOffset: number, hour?: number, minute = 0): string {
@@ -1247,6 +1249,28 @@ export const programTemplates: ProgramTemplate[] = [
     createdAt: "2026-04-07",
     tags: ["Golf", "Rotational Power"],
   },
+  {
+    id: "tpl-sprint-a",
+    name: "Sprint Development — Block A",
+    level: "Intermediate",
+    weeks: 6,
+    daysPerWeek: 3,
+    description: "Acceleration + max-velocity foundation for the track club.",
+    createdBy: "Coach Nadia",
+    createdAt: "2026-05-02",
+    tags: ["Speed", "Team"],
+  },
+  {
+    id: "tpl-baseball-1",
+    name: "Off-season Baseball — Phase 1",
+    level: "Intermediate",
+    weeks: 4,
+    daysPerWeek: 4,
+    description: "GPP + arm-care foundation for the Tigers HPP group.",
+    createdBy: "Coach Ellis",
+    createdAt: "2026-06-16",
+    tags: ["Baseball", "Team"],
+  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -1315,6 +1339,20 @@ export const trainingSummaries: Record<string, SessionSummary[]> = {
     { date: at(-9), title: "Block C — Day 10", reps: 92, volumeKg: 7255, durationMin: 62, blocksCompleted: "5/5" },
     { date: at(-12), title: "Block C — Day 9", reps: 84, volumeKg: 6540, durationMin: 55, blocksCompleted: "5/5" },
     { date: at(-14), title: "Block C — Day 8", reps: 100, volumeKg: 7810, durationMin: 66, blocksCompleted: "5/5" },
+    { date: at(-16), title: "Block C — Day 7", reps: 90, volumeKg: 7040, durationMin: 61, blocksCompleted: "5/5" },
+    { date: at(-19), title: "Block C — Day 6", reps: 82, volumeKg: 6310, durationMin: 54, blocksCompleted: "5/5" },
+    { date: at(-21), title: "Block C — Day 5", reps: 97, volumeKg: 7580, durationMin: 68, blocksCompleted: "5/5" },
+    { date: at(-23), title: "Block C — Day 4", reps: 86, volumeKg: 6720, durationMin: 57, blocksCompleted: "4/5" },
+    { date: at(-26), title: "Block C — Day 3", reps: 94, volumeKg: 7310, durationMin: 63, blocksCompleted: "5/5" },
+    { date: at(-28), title: "Block C — Day 2", reps: 89, volumeKg: 6890, durationMin: 59, blocksCompleted: "5/5" },
+    { date: at(-30), title: "Block C — Day 1", reps: 78, volumeKg: 6120, durationMin: 52, blocksCompleted: "5/5" },
+    { date: at(-35), title: "Block B — Day 16", reps: 102, volumeKg: 7930, durationMin: 69, blocksCompleted: "5/5" },
+    { date: at(-40), title: "Block B — Day 15", reps: 95, volumeKg: 7460, durationMin: 64, blocksCompleted: "4/5" },
+    { date: at(-47), title: "Block B — Day 13", reps: 88, volumeKg: 6850, durationMin: 58, blocksCompleted: "5/5" },
+    { date: at(-54), title: "Block B — Day 11", reps: 91, volumeKg: 7150, durationMin: 62, blocksCompleted: "5/5" },
+    { date: at(-61), title: "Block B — Day 9", reps: 85, volumeKg: 6610, durationMin: 56, blocksCompleted: "5/5" },
+    { date: at(-75), title: "Block B — Day 6", reps: 99, volumeKg: 7720, durationMin: 67, blocksCompleted: "5/5" },
+    { date: at(-89), title: "Block B — Day 2", reps: 80, volumeKg: 6240, durationMin: 53, blocksCompleted: "4/5" },
   ],
   "ath-ren": [
     { date: at(-1), title: "Peaking — Day 17", reps: 42, volumeKg: 4980, durationMin: 75, blocksCompleted: "4/4" },
@@ -1342,6 +1380,11 @@ export interface LiftPoint {
 export const liftHistory: Record<string, Record<string, LiftPoint[]>> = {
   "ath-jordan": {
     "Trap-bar Deadlift": [
+      { date: at(-360), reps: 10, weight: 255, unit: "lb", e1rm: 340 },
+      { date: at(-300), reps: 5, weight: 295, unit: "lb", e1rm: 344 },
+      { date: at(-240), reps: 5, weight: 305, unit: "lb", e1rm: 356 },
+      { date: at(-170), reps: 3, weight: 325, unit: "lb", e1rm: 358 },
+      { date: at(-100), reps: 2, weight: 345, unit: "lb", e1rm: 368 },
       { date: at(-60), reps: 3, weight: 345, unit: "lb", e1rm: 379 },
       { date: at(-45), reps: 3, weight: 355, unit: "lb", e1rm: 390 },
       { date: at(-30), reps: 2, weight: 365, unit: "lb", e1rm: 389 },
@@ -1349,8 +1392,17 @@ export const liftHistory: Record<string, Record<string, LiftPoint[]>> = {
       { date: at(-2), reps: 1, weight: 385, unit: "lb", e1rm: 385 },
     ],
     "Bench Press": [
+      { date: at(-355), reps: 10, weight: 165, unit: "lb", e1rm: 220 },
+      { date: at(-310), reps: 5, weight: 185, unit: "lb", e1rm: 216 },
+      { date: at(-250), reps: 3, weight: 205, unit: "lb", e1rm: 226 },
+      { date: at(-185), reps: 2, weight: 215, unit: "lb", e1rm: 229 },
+      { date: at(-120), reps: 5, weight: 205, unit: "lb", e1rm: 239 },
+      // 10-rep test day — matches the 205 × 10 PR on the athlete's card (A4).
+      { date: at(-71), reps: 10, weight: 205, unit: "lb", e1rm: 273 },
       { date: at(-55), reps: 5, weight: 215, unit: "lb", e1rm: 251 },
       { date: at(-40), reps: 5, weight: 225, unit: "lb", e1rm: 262 },
+      // Tested single — matches the 245 × 1 PR on the athlete's card (A4).
+      { date: at(-30), reps: 1, weight: 245, unit: "lb", e1rm: 245 },
       { date: at(-20), reps: 3, weight: 235, unit: "lb", e1rm: 258 },
       { date: at(-5), reps: 5, weight: 230, unit: "lb", e1rm: 268 },
     ],
@@ -1455,4 +1507,139 @@ export const nutritionProtocols: Record<string, NutritionProtocol> = {
       { date: at(-7), weightLb: 185.9, bodyFatPct: 11.5 },
     ],
   },
+};
+
+/* ------------------------------------------------------------------ */
+/* Round 3 — analytics helpers (C21/C22) + client-queue teams (C12)    */
+/* ------------------------------------------------------------------ */
+
+/** A derived rep-max PR — rendered "365 lb × 3 · Jun 9, 2026" (A4/C21). */
+export interface RepMaxPr {
+  reps: number;
+  weight: number;
+  unit: string;
+  date: string;
+}
+
+const REP_MAX_TARGETS = [1, 2, 3, 5, 10];
+
+/**
+ * Best 1/2/3/5/10-rep maxes for a lift, derived from logged tested sets.
+ * A set of N reps proves every rep-max at or below N, so each target takes
+ * the heaviest set of ≥ that rep count; ties prefer the set closest to the
+ * target rep count, then the most recent date. Defaults to Jordan — the
+ * demo athlete with a year of history.
+ */
+export function prsByRepMax(
+  lift: string,
+  athleteId = "ath-jordan",
+): RepMaxPr[] {
+  const points = liftHistory[athleteId]?.[lift] ?? [];
+  const out: RepMaxPr[] = [];
+  for (const target of REP_MAX_TARGETS) {
+    let best: LiftPoint | null = null;
+    for (const p of points) {
+      if (p.reps < target) continue;
+      const wins =
+        !best ||
+        p.weight > best.weight ||
+        (p.weight === best.weight &&
+          (p.reps < best.reps ||
+            (p.reps === best.reps && p.date > best.date)));
+      if (wins) best = p;
+    }
+    if (best) {
+      out.push({
+        reps: target,
+        weight: best.weight,
+        unit: best.unit,
+        date: best.date,
+      });
+    }
+  }
+  return out;
+}
+
+export interface ComplianceStats {
+  /** % of expected bookings (frequencyPerWeek × weeks in range) actually booked. */
+  bookingPct: number;
+  bookedSessions: number;
+  expectedSessions: number;
+  /** % of booked sessions whose log was actually filled in. */
+  fillPct: number;
+  /** ISO timestamp of the athlete's last activity. */
+  lastLogin: string;
+  /** Most recent session on the books (can be upcoming); null = none scheduled. */
+  lastScheduled: string | null;
+}
+
+/** Tiny deterministic hash — stable per-range variation without Math.random. */
+function seedFor(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 9973;
+  return h;
+}
+
+/**
+ * Booking / fill-in compliance for one athlete over a date range (C22).
+ * Deterministic: derived from the athlete's attendance, program compliance
+ * and scheduled-session roster — the same range always gives the same numbers.
+ */
+export function complianceStats(
+  athleteId: string,
+  fromMs: number,
+  toMs: number,
+): ComplianceStats {
+  const a = athleteById(athleteId);
+  const spanDays = Math.max(1, Math.round((toMs - fromMs) / 86_400_000));
+  if (!a) {
+    return {
+      bookingPct: 0,
+      bookedSessions: 0,
+      expectedSessions: 0,
+      fillPct: 0,
+      lastLogin: new Date(0).toISOString(),
+      lastScheduled: null,
+    };
+  }
+  const weeks = Math.max(1, spanDays / 7);
+  const expectedSessions = Math.max(1, Math.round(a.frequencyPerWeek * weeks));
+  const seed = seedFor(`${athleteId}:${spanDays}`);
+  // Booking rate tracks attendance with a small stable per-range wobble.
+  const bookRate = Math.min(100, Math.max(35, a.attendancePct + ((seed % 9) - 4)));
+  const bookedSessions = Math.min(
+    expectedSessions,
+    Math.max(0, Math.round((expectedSessions * bookRate) / 100)),
+  );
+  const bookingPct = Math.round((bookedSessions / expectedSessions) * 100);
+  const fillPct = Math.min(
+    100,
+    Math.max(0, a.program.compliancePct + ((seed % 7) - 3)),
+  );
+  const scheduled = sessions
+    .filter((s) => s.roster.some((r) => r.athleteId === athleteId))
+    .map((s) => s.startsAt)
+    .sort();
+  return {
+    bookingPct,
+    bookedSessions,
+    expectedSessions,
+    fillPct,
+    lastLogin: a.lastActive,
+    lastScheduled: scheduled.length > 0 ? scheduled[scheduled.length - 1] : null,
+  };
+}
+
+/** Master template whose name matches a group's program — team-row CTA target (C12). */
+export function templateForProgramName(
+  name: string,
+): ProgramTemplate | undefined {
+  return programTemplates.find((t) => t.name === name);
+}
+
+/** Training phase per group (C13) — shown as a pill on the client-queue team rows. */
+export const groupPhase: Record<string, string> = {
+  "grp-golf": "Phase 2",
+  "grp-track": "Block A",
+  "grp-tigers": "Phase 1",
 };
