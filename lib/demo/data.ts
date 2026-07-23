@@ -624,13 +624,13 @@ export const athletes: Athlete[] = [
     attendancePct: 74,
     injuryFlags: [],
     season: "off-season",
-    reminders: ["No note in 12 days — follow up"],
+    reminders: ["No note in 16 days — follow up"],
     guardians: [],
     lastActive: at(-6, 19),
     notes: [
       {
         id: "cap-pn-1",
-        date: at(-12, 18),
+        date: at(-16, 18),
         coach: "Coach Ellis",
         body:
           "<p>Consistent but attendance slipping with school load. Built a 3-day template that fits her schedule.</p><p><strong>Next:</strong> Check in on adherence; consider 2×/week plan if needed.</p>",
@@ -677,7 +677,7 @@ export const athletes: Athlete[] = [
     notes: [
       {
         id: "cap-lm-1",
-        date: at(-2, 12),
+        date: at(-15, 12),
         coach: "Coach Nadia",
         body:
           "<p>Anti-rotation + hip speed. Feeling strong. Cable chops, med-ball rotational throws.</p><p><strong>Next:</strong> Add overspeed work; monitor low back.</p>",

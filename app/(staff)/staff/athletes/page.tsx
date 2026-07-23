@@ -47,7 +47,7 @@ export default async function StaffAthletesPage() {
         }
       />
 
-      <RosterBoard athletes={athletes} />
+      <RosterBoard athletes={athletes} viewerStaffId={user.id} />
     </div>
   );
 }
