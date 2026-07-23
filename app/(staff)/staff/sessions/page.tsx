@@ -29,6 +29,8 @@ import {
   type TrainingSession,
 } from "@/lib/demo/data";
 
+import { SessionsList } from "./sessions-list";
+
 export default async function StaffSessionsPage() {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
@@ -40,9 +42,12 @@ export default async function StaffSessionsPage() {
   const athletesOnDeck = todaySessions.reduce((n, s) => n + s.roster.length, 0);
   const waitlisted = sessions.reduce((n, s) => n + s.waitlist.length, 0);
 
-  // Group sessions by calendar day, preserving chronological order.
+  // Group sessions by calendar day, preserving chronological order. The
+  // featured next-up session is EXCLUDED here — the client flagged seeing it
+  // twice ("I don't know why there's two, it should be just one").
   const groups: { day: string; label: string; items: TrainingSession[] }[] = [];
   for (const s of sessions) {
+    if (s.id === nextSession.id) continue;
     const key = new Date(s.startsAt).toDateString();
     let group = groups.find((g) => g.day === key);
     if (!group) {
@@ -93,22 +98,8 @@ export default async function StaffSessionsPage() {
       {/* Featured next session */}
       <FeaturedSession session={nextSession} />
 
-      {groups.map((group) => (
-        <section key={group.day} className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg">{group.label}</h2>
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">
-              {group.items.length} session{group.items.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {group.items.map((s) => (
-              <SessionCard key={s.id} session={s} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Later sessions — multi-select for a combined huddle brief */}
+      <SessionsList groups={groups} />
     </div>
   );
 }
@@ -176,55 +167,6 @@ function FeaturedSession({ session }: { session: TrainingSession }) {
           <Button asChild variant="ghost" size="sm">
             <Link href={`/staff/sessions/${session.id}` as Route}>
               Session detail
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SessionCard({ session }: { session: TrainingSession }) {
-  const { confirmed, pending, fillPct } = rosterStats(session);
-  const roster = session.roster
-    .map((r) => athleteById(r.athleteId))
-    .filter((a): a is NonNullable<typeof a> => Boolean(a));
-
-  return (
-    <Card className="transition-colors hover:border-brand/40">
-      <CardContent className="flex flex-col gap-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-base">{session.title}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {fmtTime(session.startsAt)}–{fmtTime(session.endsAt)} ·{" "}
-              {session.coach}
-            </p>
-          </div>
-          {session.waitlist.length > 0 ? (
-            <Pill tone="info">{session.waitlist.length} waitlist</Pill>
-          ) : null}
-        </div>
-
-        <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {session.location}
-        </p>
-
-        <CapacityBlock
-          rosterLen={session.roster.length}
-          capacity={session.capacity}
-          fillPct={fillPct}
-          confirmed={confirmed}
-          pending={pending}
-        />
-
-        <div className="flex items-center justify-between gap-3">
-          <AvatarStack roster={roster} />
-          <Button asChild variant="ghost" size="sm">
-            <Link href={`/staff/sessions/${session.id}` as Route}>
-              Roster
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </Button>

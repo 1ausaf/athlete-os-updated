@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Info,
   ListChecks,
+  Lock,
   RotateCcw,
   ShieldCheck,
   Undo2,
@@ -105,6 +106,7 @@ export function SessionBooking({
   bookedThisWeek,
   frequencyLabel,
   overdue,
+  lockedTypes = [],
 }: {
   /** 12 weeks of bookable times from the real weekly schedule. */
   slots: BookableSlot[];
@@ -116,8 +118,11 @@ export function SessionBooking({
   frequencyLabel: string;
   /** Billing past due — booking paused (FR-11). */
   overdue: boolean;
+  /** Session types THIS athlete can't book until staff grant access (A12). */
+  lockedTypes?: string[];
 }) {
   const thisWeekKey = weekStartMs(new Date());
+  const lockedSet = useMemo(() => new Set(lockedTypes), [lockedTypes]);
 
   const groups = useMemo<WeekGroup[]>(() => {
     const map = new Map<number, BookableSlot[]>();
@@ -565,6 +570,7 @@ export function SessionBooking({
                     <SlotRow
                       key={slot.id}
                       slot={slot}
+                      locked={lockedSet.has(slot.label)}
                       booked={bookedStarts.has(slot.startsAt)}
                       waitlisted={waitlistStarts.has(slot.startsAt)}
                       checked={selected.has(slot.id)}
@@ -656,6 +662,7 @@ export function SessionBooking({
 
 function SlotRow({
   slot,
+  locked,
   booked,
   waitlisted,
   checked,
@@ -665,6 +672,8 @@ function SlotRow({
   onWaitlist,
 }: {
   slot: BookableSlot;
+  /** Needs staff approval before this athlete can book it (A12). */
+  locked: boolean;
   booked: boolean;
   waitlisted: boolean;
   checked: boolean;
@@ -684,6 +693,22 @@ function SlotRow({
         <Pill tone="success" className="ml-auto">
           Booked
         </Pill>
+      </li>
+    );
+  }
+
+  // Locked type — the coaching staff grants access from the back end; the row
+  // is visible (so athletes know it exists) but can't be selected.
+  if (locked) {
+    return (
+      <li className="flex flex-wrap items-center gap-3 px-4 py-3 opacity-70">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+          <Lock className="h-3 w-3" aria-hidden />
+        </span>
+        <SlotInfo slot={slot} muted />
+        <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          Team members only — ask your coach for access
+        </span>
       </li>
     );
   }

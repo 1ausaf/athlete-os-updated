@@ -895,11 +895,19 @@ function spotsFor(weekIdx: number, slotIdx: number, capacity: number): number {
   return Math.max(0, Math.min(capacity, capacity - h));
 }
 
-/** Generate `weeks` weeks of bookable slots starting from tomorrow. */
+/**
+ * Generate `weeks` weeks of bookable slots. Weeks run Monday→Sunday (client:
+ * "Monday is the first day of the week — if there's a Monday, we should see
+ * the Sunday too"), so generation starts from THIS week's Monday and slots
+ * already started today are filtered out.
+ */
 export function generateBookableSlots(weeks = 12): BookableSlot[] {
   const out: BookableSlot[] = [];
+  const now = new Date(NOW);
   const start = new Date(NOW);
-  start.setDate(start.getDate() + 1);
+  // Roll back to Monday of the current week (getDay(): Sun=0 … Sat=6).
+  const dow0 = start.getDay();
+  start.setDate(start.getDate() - ((dow0 + 6) % 7));
   start.setHours(0, 0, 0, 0);
 
   for (let d = 0; d < weeks * 7; d++) {
@@ -911,6 +919,7 @@ export function generateBookableSlots(weeks = 12): BookableSlot[] {
       if (pdow !== dow) return;
       const s = new Date(day);
       s.setHours(h, m, 0, 0);
+      if (s.getTime() <= now.getTime()) return; // already started — not bookable
       const e = new Date(s.getTime() + dur * 60000);
       const capacity = label === "Master Coaching" ? 8 : 6;
       out.push({
@@ -924,6 +933,23 @@ export function generateBookableSlots(weeks = 12): BookableSlot[] {
     });
   }
   return out;
+}
+
+/**
+ * Session types an athlete cannot self-book without staff approval (client:
+ * "there's something in the back end that allows them the permission to book
+ * this"). Jordan hasn't been added to the Weightlifting Team yet — coaches
+ * grant access from the athlete's card.
+ */
+export function restrictedSessionTypesFor(
+  athleteId: string,
+): Set<BookableSlot["label"]> {
+  const approved: Record<string, BookableSlot["label"][]> = {
+    "ath-ren": ["Weightlifting Team"], // Ren is on the WL team
+  };
+  const all: BookableSlot["label"][] = ["Weightlifting Team"];
+  const mine = new Set(approved[athleteId] ?? []);
+  return new Set(all.filter((l) => !mine.has(l)));
 }
 
 /** Jordan's currently-booked upcoming sessions (athlete portal view). */

@@ -6,7 +6,11 @@ import { PageHeader } from "@/components/app/page-header";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { athleteById } from "@/lib/demo/data";
-import { generateBookableSlots, myBookings } from "@/lib/demo/training";
+import {
+  generateBookableSlots,
+  myBookings,
+  restrictedSessionTypesFor,
+} from "@/lib/demo/training";
 
 import { SessionBooking } from "./session-book-form";
 
@@ -37,6 +41,7 @@ export default async function AthleteSessionsPage() {
         bookedThisWeek={athlete.bookedThisWeek}
         frequencyLabel={athlete.frequency}
         overdue={athlete.billing.state === "overdue"}
+        lockedTypes={[...restrictedSessionTypesFor(athlete.id)]}
       />
 
       <p className="text-xs text-muted-foreground">
