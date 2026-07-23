@@ -164,7 +164,7 @@ export default async function AthleteDashboardPage() {
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Upcoming sessions */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
