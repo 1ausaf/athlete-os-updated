@@ -45,16 +45,18 @@ import { cn } from "@/lib/utils";
 /* ------------------------------------------------------------------ */
 
 type Unit = "lb" | "kg";
-type Mark = "hit" | "miss" | null;
 
 interface SetLog {
   /** Logged weight, in the unit it was entered/prescribed. Null = BW / %-computed. */
   weight: { value: number; unit: Unit } | null;
   /** Entry/display unit for THIS row — kg on set 1 and lb on set 2 is fine. */
   unit: Unit;
-  /** What the athlete actually did (reps, time, distance…). */
+  /**
+   * What the athlete actually did (reps, time, distance…). This is the whole
+   * story — no separate hit/miss control. A result below target IS the miss
+   * (client: "if you record how many were done you don't need hit/miss").
+   */
   result: string;
-  mark: Mark;
 }
 
 interface WorkoutLoggerProps {
@@ -78,7 +80,6 @@ function buildInitialLogs(days: ProgramDay[]): Record<string, SetLog[]> {
               : null,
           unit: s.loadMode === "kg" ? "kg" : "lb",
           result: "",
-          mark: null,
         }));
       }
     }
@@ -186,7 +187,7 @@ export function WorkoutLogger({
       return items.length >= circuitLen && items.slice(0, circuitLen).every(Boolean);
     }
     const rows = logs[key] ?? [];
-    return rows.length > 0 && rows.every((r) => r.mark !== null);
+    return rows.length > 0 && rows.every((r) => r.result.trim() !== "");
   };
 
   const dayProgress = (day: ProgramDay) => {
@@ -242,7 +243,12 @@ export function WorkoutLogger({
     });
   }
 
-  function toggleMark(key: string, idx: number, mark: "hit" | "miss", target: string) {
+  /**
+   * One-tap set logging: empty result → autofill the target (the common "did
+   * exactly what was written" case); filled result → clear it (undo). A number
+   * typed below target simply stays — that IS the miss, no extra button.
+   */
+  function toggleSetCheck(key: string, idx: number, target: string) {
     flashSaved();
     setLogs((prev) => {
       const rows = prev[key] ?? [];
@@ -250,11 +256,10 @@ export function WorkoutLogger({
         ...prev,
         [key]: rows.map((row, i) => {
           if (i !== idx) return row;
-          const next: Mark = row.mark === mark ? null : mark;
-          // Hitting the target auto-fills the result — one-tap logging.
-          const result =
-            next === "hit" && row.result.trim() === "" ? target : row.result;
-          return { ...row, mark: next, result };
+          return {
+            ...row,
+            result: row.result.trim() === "" ? target : "",
+          };
         }),
       };
     });
@@ -444,138 +449,126 @@ export function WorkoutLogger({
             ) : null}
           </div>
 
-          {/* Sections rendered as TrainHeroic-style blocks */}
-          <div className="flex flex-col gap-6">
-            {activeDay.sections.map((section) => (
-              <section key={section.title} className="flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <h4 className="eyebrow">{section.title}</h4>
-                  <span className="h-px flex-1 bg-border" aria-hidden />
-                  <span className="text-xs text-muted-foreground">
-                    {section.exercises.length} movement
-                    {section.exercises.length === 1 ? "" : "s"}
-                  </span>
+          {/* One continuous A → B → C → D1/D2 list — the section labels are a
+              coach concept and stay internal (client feedback, round 3). */}
+          <div className="flex flex-col gap-3">
+            {groupExercises(
+              activeDay.sections.flatMap((s) => s.exercises),
+            ).map((group) =>
+              group.superset ? (
+                <div
+                  key={group.key}
+                  className="overflow-hidden rounded-xl border border-brand/30"
+                >
+                  <div className="flex flex-wrap items-center gap-2 border-b border-brand/20 bg-brand/[0.06] px-4 py-2">
+                    <Link2 className="h-3.5 w-3.5 text-brand-ink" aria-hidden />
+                    <span className="text-xs font-bold uppercase tracking-wide text-brand-ink">
+                      Superset
+                      {group.exercises.length > 2
+                        ? ` ×${group.exercises.length}`
+                        : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Alternate {group.exercises.map((e) => e.slot).join(" → ")},
+                      rest after the last movement
+                    </span>
+                  </div>
+                  <div className="bg-surface/40">
+                    {group.exercises.map((ex, i) => (
+                      <ExerciseBlock
+                        key={ex.slot}
+                        ex={ex}
+                        lib={exercises[ex.exerciseId]}
+                        hist={history[ex.exerciseId]}
+                        rows={logs[exKey(activeDay.id, ex.slot)] ?? []}
+                        done={isDone(
+                          exKey(activeDay.id, ex.slot),
+                          circuitFor(ex)?.length,
+                        )}
+                        unit={unit}
+                        maxes={maxes}
+                        inSuperset
+                        isLastInGroup={i === group.exercises.length - 1}
+                        circuitState={
+                          circuitDone[exKey(activeDay.id, ex.slot)] ?? []
+                        }
+                        onToggleCircuitItem={(idx, len) =>
+                          toggleCircuitItem(exKey(activeDay.id, ex.slot), idx, len)
+                        }
+                        onToggleDone={() =>
+                          toggleDone(
+                            exKey(activeDay.id, ex.slot),
+                            circuitFor(ex)?.length,
+                          )
+                        }
+                        onUpdateSet={(idx, patch) =>
+                          updateSet(exKey(activeDay.id, ex.slot), idx, patch)
+                        }
+                        onToggleCheck={(idx, target) =>
+                          toggleSetCheck(exKey(activeDay.id, ex.slot), idx, target)
+                        }
+                        onOpenVideo={(lib, index) => setVideo({ lib, index })}
+                      />
+                    ))}
+                  </div>
                 </div>
-
-                {groupExercises(section.exercises).map((group) =>
-                  group.superset ? (
-                    <div
-                      key={group.key}
-                      className="overflow-hidden rounded-xl border border-brand/30"
-                    >
-                      <div className="flex flex-wrap items-center gap-2 border-b border-brand/20 bg-brand/[0.06] px-4 py-2">
-                        <Link2 className="h-3.5 w-3.5 text-brand-ink" aria-hidden />
-                        <span className="text-xs font-bold uppercase tracking-wide text-brand-ink">
-                          Superset
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Alternate {group.exercises.map((e) => e.slot).join(" → ")},
-                          rest after the last movement
-                        </span>
-                      </div>
-                      <div className="bg-surface/40">
-                        {group.exercises.map((ex, i) => (
-                          <ExerciseBlock
-                            key={ex.slot}
-                            ex={ex}
-                            lib={exercises[ex.exerciseId]}
-                            hist={history[ex.exerciseId]}
-                            rows={logs[exKey(activeDay.id, ex.slot)] ?? []}
-                            done={isDone(
-                              exKey(activeDay.id, ex.slot),
-                              circuitFor(ex)?.length,
-                            )}
-                            unit={unit}
-                            maxes={maxes}
-                            inSuperset
-                            isLastInGroup={i === group.exercises.length - 1}
-                            circuitState={
-                              circuitDone[exKey(activeDay.id, ex.slot)] ?? []
-                            }
-                            onToggleCircuitItem={(idx, len) =>
-                              toggleCircuitItem(exKey(activeDay.id, ex.slot), idx, len)
-                            }
-                            onToggleDone={() =>
-                              toggleDone(
-                                exKey(activeDay.id, ex.slot),
-                                circuitFor(ex)?.length,
-                              )
-                            }
-                            onUpdateSet={(idx, patch) =>
-                              updateSet(exKey(activeDay.id, ex.slot), idx, patch)
-                            }
-                            onToggleMark={(idx, mark, target) =>
-                              toggleMark(
-                                exKey(activeDay.id, ex.slot),
-                                idx,
-                                mark,
-                                target,
-                              )
-                            }
-                            onOpenVideo={(lib, index) => setVideo({ lib, index })}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <ExerciseBlock
-                      key={group.key}
-                      ex={group.exercises[0]!}
-                      lib={exercises[group.exercises[0]!.exerciseId]}
-                      hist={history[group.exercises[0]!.exerciseId]}
-                      rows={
-                        logs[exKey(activeDay.id, group.exercises[0]!.slot)] ?? []
-                      }
-                      done={isDone(
-                        exKey(activeDay.id, group.exercises[0]!.slot),
-                        circuitFor(group.exercises[0]!)?.length,
-                      )}
-                      unit={unit}
-                      maxes={maxes}
-                      circuitState={
-                        circuitDone[exKey(activeDay.id, group.exercises[0]!.slot)] ??
-                        []
-                      }
-                      onToggleCircuitItem={(idx, len) =>
-                        toggleCircuitItem(
-                          exKey(activeDay.id, group.exercises[0]!.slot),
-                          idx,
-                          len,
-                        )
-                      }
-                      onToggleDone={() =>
-                        toggleDone(
-                          exKey(activeDay.id, group.exercises[0]!.slot),
-                          circuitFor(group.exercises[0]!)?.length,
-                        )
-                      }
-                      onUpdateSet={(idx, patch) =>
-                        updateSet(
-                          exKey(activeDay.id, group.exercises[0]!.slot),
-                          idx,
-                          patch,
-                        )
-                      }
-                      onToggleMark={(idx, mark, target) =>
-                        toggleMark(
-                          exKey(activeDay.id, group.exercises[0]!.slot),
-                          idx,
-                          mark,
-                          target,
-                        )
-                      }
-                      onOpenVideo={(lib, index) => setVideo({ lib, index })}
-                    />
-                  ),
-                )}
-              </section>
-            ))}
+              ) : (
+                <ExerciseBlock
+                  key={group.key}
+                  ex={group.exercises[0]!}
+                  lib={exercises[group.exercises[0]!.exerciseId]}
+                  hist={history[group.exercises[0]!.exerciseId]}
+                  rows={
+                    logs[exKey(activeDay.id, group.exercises[0]!.slot)] ?? []
+                  }
+                  done={isDone(
+                    exKey(activeDay.id, group.exercises[0]!.slot),
+                    circuitFor(group.exercises[0]!)?.length,
+                  )}
+                  unit={unit}
+                  maxes={maxes}
+                  circuitState={
+                    circuitDone[exKey(activeDay.id, group.exercises[0]!.slot)] ??
+                    []
+                  }
+                  onToggleCircuitItem={(idx, len) =>
+                    toggleCircuitItem(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      idx,
+                      len,
+                    )
+                  }
+                  onToggleDone={() =>
+                    toggleDone(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      circuitFor(group.exercises[0]!)?.length,
+                    )
+                  }
+                  onUpdateSet={(idx, patch) =>
+                    updateSet(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      idx,
+                      patch,
+                    )
+                  }
+                  onToggleCheck={(idx, target) =>
+                    toggleSetCheck(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      idx,
+                      target,
+                    )
+                  }
+                  onOpenVideo={(lib, index) => setVideo({ lib, index })}
+                />
+              ),
+            )}
           </div>
 
           <p className="text-xs text-muted-foreground text-pretty">
-            Log what you actually did — hit or miss, set by set. Marking an
-            exercise done counts even if you stopped after the top set. Your
-            coach sees everything.
+            Log what you actually did, set by set — tap the check to log the
+            set as written, or type what you got. Marking an exercise done
+            counts even if you stopped after the top set. Your coach sees
+            everything.
           </p>
         </CardContent>
       </Card>
@@ -600,6 +593,13 @@ export function WorkoutLogger({
 /* Exercise block — header, history line, per-set table                */
 /* ------------------------------------------------------------------ */
 
+/** True when a logged result reads below the written target ("4" vs "6"). */
+function belowTarget(result: string, target: string): boolean {
+  const r = parseFloat(result.replace(",", "."));
+  const t = parseFloat(target.replace(",", "."));
+  return Number.isFinite(r) && Number.isFinite(t) && r < t;
+}
+
 function ExerciseBlock({
   ex,
   lib,
@@ -614,7 +614,7 @@ function ExerciseBlock({
   onToggleCircuitItem,
   onToggleDone,
   onUpdateSet,
-  onToggleMark,
+  onToggleCheck,
   onOpenVideo,
 }: {
   ex: ProgramExercise;
@@ -630,7 +630,7 @@ function ExerciseBlock({
   onToggleCircuitItem: (idx: number, len: number) => void;
   onToggleDone: () => void;
   onUpdateSet: (idx: number, patch: Partial<SetLog>) => void;
-  onToggleMark: (idx: number, mark: "hit" | "miss", target: string) => void;
+  onToggleCheck: (idx: number, target: string) => void;
   onOpenVideo: (lib: LibraryExercise, index: number) => void;
 }) {
   const name = lib?.name ?? ex.exerciseId;
@@ -646,7 +646,9 @@ function ExerciseBlock({
   const refEntry = lib?.referenceMax ? maxes[lib.referenceMax] : undefined;
 
   const body = (
-    <div className="min-w-0 flex-1">
+    // Desktop + print run two columns — exercise info left, the set table
+    // right — so long programs stay short on screen and on paper (A10).
+    <div className="print-two-col min-w-0 flex-1 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.9fr)] md:items-start md:gap-x-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -683,7 +685,7 @@ function ExerciseBlock({
             </p>
           ) : null}
           {hist ? (
-            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+            <p className="no-print mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
               <History className="h-3 w-3" aria-hidden />
               <span>
                 Last ({daysAgo(hist.lastDate)}):{" "}
@@ -701,7 +703,7 @@ function ExerciseBlock({
             </p>
           ) : null}
           {usesPct && lib?.referenceMax && refEntry ? (
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="no-print mt-1 text-xs text-muted-foreground">
               Loads are % of{" "}
               <span className="font-semibold text-foreground">
                 {lib.referenceMax}
@@ -740,7 +742,7 @@ function ExerciseBlock({
       {/* Circuit blocks (warm-up): one row PER MOVEMENT, each with its own
           video and complete toggle — TrainHeroic's long-list-of-videos model. */}
       {lib?.circuit ? (
-        <ol className="mt-3 flex flex-col gap-1.5">
+        <ol className="mt-3 flex flex-col gap-1.5 md:mt-0">
           {lib.circuit.map((item, i) => {
             const itemDone = circuitState[i] ?? false;
             return (
@@ -792,21 +794,23 @@ function ExerciseBlock({
           })}
         </ol>
       ) : (
-      <div className="mt-3">
-        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.25rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 md:mt-0">
+        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_1.75rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Set</span>
           <span className="text-center">Target</span>
           <span>{weightHeader}</span>
           <span>{resultHeader}</span>
-          <span className="text-center">Hit?</span>
+          <span aria-hidden />
         </div>
         {ex.sets.map((set, i) => {
           const row: SetLog =
-            rows[i] ?? { weight: null, unit: "lb", result: "", mark: null };
+            rows[i] ?? { weight: null, unit: "lb", result: "" };
+          const logged = row.result.trim() !== "";
+          const short = logged && belowTarget(row.result, set.target);
           return (
             <div
               key={i}
-              className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.25rem] items-center gap-x-2 border-t border-border/60 py-1.5"
+              className="print-set-row grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_1.75rem] items-center gap-x-2 border-t border-border/60 py-1.5"
             >
               <span className="tnum text-xs font-semibold text-muted-foreground">
                 {i + 1}
@@ -864,45 +868,42 @@ function ExerciseBlock({
                 </span>
               )}
 
-              {/* Result cell */}
+              {/* Result cell — what was done IS the record. A number under
+                  target quietly reads amber; no separate miss button. */}
               <Input
                 type="text"
                 aria-label={`Set ${i + 1} result for ${name}`}
                 placeholder={set.target}
-                className="tnum h-8 w-full min-w-0 px-1.5 text-sm"
+                className={cn(
+                  "tnum h-8 w-full min-w-0 px-1.5 text-sm",
+                  short && "text-warning",
+                )}
                 value={row.result}
                 onChange={(e) => onUpdateSet(i, { result: e.target.value })}
               />
 
-              {/* Hit / miss */}
-              <span className="flex items-center justify-center gap-1">
+              {/* One-tap log: empty → fill the target; filled → clear */}
+              <span className="flex items-center justify-center">
                 <button
                   type="button"
-                  aria-label={`Set ${i + 1}: hit target`}
-                  aria-pressed={row.mark === "hit"}
-                  onClick={() => onToggleMark(i, "hit", set.target)}
+                  aria-label={
+                    logged
+                      ? `Set ${i + 1}: clear logged result`
+                      : `Set ${i + 1}: log as written (${set.target})`
+                  }
+                  aria-pressed={logged}
+                  title={logged ? "Clear this set" : "Log the set as written"}
+                  onClick={() => onToggleCheck(i, set.target)}
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
-                    row.mark === "hit"
-                      ? "border-success/50 bg-success/15 text-success"
+                    logged
+                      ? short
+                        ? "border-warning/50 bg-warning/10 text-warning"
+                        : "border-success/50 bg-success/15 text-success"
                       : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
                   )}
                 >
                   <Check className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Set ${i + 1}: missed target`}
-                  aria-pressed={row.mark === "miss"}
-                  onClick={() => onToggleMark(i, "miss", set.target)}
-                  className={cn(
-                    "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
-                    row.mark === "miss"
-                      ? "border-destructive/50 bg-destructive/10 text-destructive"
-                      : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
-                  )}
-                >
-                  <X className="h-3 w-3" />
                 </button>
               </span>
             </div>

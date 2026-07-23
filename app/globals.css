@@ -276,5 +276,22 @@
       border: none !important;
       box-shadow: none !important;
     }
+    /* Workout sheet: exercise info left, set boxes right — halves the page
+       count on long programs (round-3 client feedback). Scoped to the logger
+       so the staff program print is untouched. */
+    .print-two-col {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+      gap: 0 0.75rem;
+      align-items: start;
+    }
+    .print-set-row {
+      padding-top: 2px !important;
+      padding-bottom: 2px !important;
+    }
+    .print-set-row input {
+      height: 1.15rem !important;
+      font-size: 10px !important;
+    }
   }
 }
