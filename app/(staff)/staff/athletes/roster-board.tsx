@@ -343,9 +343,13 @@ function CardModal({
                     Chat
                   </Link>
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 opacity-60" title="Stubbed in the demo">
-                  <Link2 className="h-3.5 w-3.5" />
-                  Assessment
+                <Button asChild variant="outline" size="sm" className="h-8">
+                  <Link
+                    href={`/staff/athletes/${athlete.id}/assessment` as Route}
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    Assessment
+                  </Link>
                 </Button>
                 <Button variant="outline" size="sm" className="h-8 opacity-60" title="Stubbed in the demo">
                   <Link2 className="h-3.5 w-3.5" />

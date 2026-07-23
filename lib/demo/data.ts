@@ -12,7 +12,7 @@
 const NOW = new Date();
 
 /** ISO string offset from now by whole days + optional hour-of-day override. */
-function at(dayOffset: number, hour?: number, minute = 0): string {
+export function at(dayOffset: number, hour?: number, minute = 0): string {
   const d = new Date(NOW);
   d.setDate(d.getDate() + dayOffset);
   if (hour != null) d.setHours(hour, minute, 0, 0);
