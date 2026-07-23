@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 
+import { useSidebar } from "@/components/shell/sidebar-context";
 import { cn } from "@/lib/utils";
 
 export interface ShellNavItem {
@@ -28,22 +29,58 @@ export interface ShellNavProps {
 /**
  * Sidebar nav shared by the athlete portal and staff workspace. Active items
  * get a volt indicator bar + raised tile; role filtering happens upstream.
+ * Renders icon-only when the desktop sidebar is collapsed.
  */
 export function ShellNav({ title, subtitle, items }: ShellNavProps) {
   const pathname = usePathname();
+  const { collapsed } = useSidebar();
 
   return (
-    <nav className="flex h-full flex-col gap-1 p-4" aria-label={`${title} navigation`}>
-      <p className="px-3 pb-2 pt-2 font-mono text-[0.62rem] uppercase tracking-[0.2em] text-muted-foreground/70">
-        {title}
-      </p>
+    <nav
+      className={cn(
+        "flex h-full flex-col gap-1 p-4",
+        collapsed && "items-center p-2",
+      )}
+      aria-label={`${title} navigation`}
+    >
+      {!collapsed ? (
+        <p className="px-3 pb-2 pt-2 font-mono text-[0.62rem] uppercase tracking-[0.2em] text-muted-foreground/70">
+          {title}
+        </p>
+      ) : (
+        <span className="h-2" aria-hidden />
+      )}
 
-      <ul className="flex flex-col gap-1">
+      <ul className={cn("flex flex-col gap-1", collapsed && "items-center")}>
         {items.map((item) => {
           const Icon = item.icon;
           const active =
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+
+          if (collapsed) {
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  title={item.label}
+                  className={cn(
+                    "relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
+                    active
+                      ? "bg-accent text-brand-ink"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={item.label}
+                >
+                  {Icon ? <Icon className="h-[18px] w-[18px]" aria-hidden /> : null}
+                  {item.badge ? (
+                    <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand" />
+                  ) : null}
+                </Link>
+              </li>
+            );
+          }
 
           return (
             <li key={item.href}>

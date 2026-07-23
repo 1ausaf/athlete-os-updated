@@ -3,10 +3,12 @@
 import {
   Apple,
   CalendarDays,
+  ClipboardCheck,
   CreditCard,
   Dumbbell,
   LayoutDashboard,
   MessagesSquare,
+  UserRound,
 } from "lucide-react";
 
 import { athleteById, threads } from "@/lib/demo/data";
@@ -40,11 +42,14 @@ export function AthleteNav({ user }: { user: AppUser }) {
       tag: hasNutrition ? "Pro" : "Upgrade",
       locked: !hasNutrition,
     },
+    { href: "/athlete/assessment", label: "Assessment", icon: ClipboardCheck },
   ];
 
   if (canViewBilling(user)) {
     items.push({ href: "/athlete/billing", label: "Billing", icon: CreditCard });
   }
+
+  items.push({ href: "/athlete/profile", label: "Profile", icon: UserRound });
 
   return <ShellNav title="Athlete Portal" subtitle={user.fullName} items={items} />;
 }

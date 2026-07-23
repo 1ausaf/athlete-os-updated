@@ -23,6 +23,7 @@ export default async function StaffWorkspaceLayout({
       role={getDemoRole()}
       workspaceLabel="Staff Workspace"
       nav={<StaffNav user={user} />}
+      fullWidth
     >
       {children}
     </AppShell>

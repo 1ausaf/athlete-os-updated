@@ -7,11 +7,12 @@ import {
   LineChart,
   MessagesSquare,
   ShieldCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 
 import { athletes, complianceRows, threads } from "@/lib/demo/data";
-import { canManageMemberships, canViewBilling } from "@/lib/rbac";
+import { canManageMemberships, canViewBilling, isAdmin } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
 
 import { ShellNav, type ShellNavItem } from "./shell-nav";
@@ -47,6 +48,10 @@ export function StaffNav({ user }: { user: AppUser }) {
 
   if (canViewBilling(user) || canManageMemberships(user)) {
     items.push({ href: "/staff/billing", label: "Billing", icon: CreditCard });
+  }
+
+  if (isAdmin(user)) {
+    items.push({ href: "/staff/team", label: "Team", icon: UserCog });
   }
 
   return (
