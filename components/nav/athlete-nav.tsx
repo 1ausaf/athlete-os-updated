@@ -11,19 +11,27 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { athleteById, threads } from "@/lib/demo/data";
+import type { Athlete } from "@/lib/demo/data";
+import { threads } from "@/lib/demo/data";
 import { canViewBilling } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
 
 import { ShellNav, type ShellNavItem } from "./shell-nav";
 
-export function AthleteNav({ user }: { user: AppUser }) {
-  const athlete = athleteById(user.id);
+export function AthleteNav({
+  user,
+  athlete,
+}: {
+  user: AppUser;
+  /** The athlete being viewed — self, or a parent's selected child. */
+  athlete: Athlete;
+}) {
   const unread = threads
-    .filter((t) => t.participants.some((p) => p.id === user.id))
+    .filter((t) => t.participants.some((p) => p.id === athlete.id))
     .reduce((n, t) => n + t.unread, 0);
 
-  const hasNutrition = athlete?.nutrition === "pro";
+  const hasNutrition = athlete.nutrition === "pro";
+  const isParent = user.role === "parent";
 
   const items: ShellNavItem[] = [
     { href: "/athlete/dashboard", label: "Today", icon: LayoutDashboard },
@@ -51,5 +59,13 @@ export function AthleteNav({ user }: { user: AppUser }) {
 
   items.push({ href: "/athlete/profile", label: "Profile", icon: UserRound });
 
-  return <ShellNav title="Athlete Portal" subtitle={user.fullName} items={items} />;
+  return (
+    <ShellNav
+      title="Athlete Portal"
+      subtitle={
+        isParent ? `${user.fullName} · viewing ${athlete.name}` : user.fullName
+      }
+      items={items}
+    />
+  );
 }

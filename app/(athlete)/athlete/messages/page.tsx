@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Pill } from "@/components/ui/pill";
-import { requireUserWithProfile } from "@/lib/auth";
+import { requireAthleteContext } from "@/lib/demo/session";
 import { jordanTeamChannel } from "@/lib/demo/chat";
-import { athleteById } from "@/lib/demo/data";
 import { announcements } from "@/lib/demo/training";
 
 import { MessagesClient } from "./messages-client";
@@ -18,10 +16,7 @@ import { MessagesClient } from "./messages-client";
  * - Tab 2 "Announcements": read-only facility news feed — no replies.
  */
 export default async function AthleteMessagesPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const { messages: seed, participants, unread } = jordanTeamChannel();
 
   return (

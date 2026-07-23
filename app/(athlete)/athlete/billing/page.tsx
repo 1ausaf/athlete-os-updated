@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { redirect } from "next/navigation";
 import {
   ChevronDown,
   CreditCard,
@@ -13,15 +12,12 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
-import { requireUserWithProfile } from "@/lib/auth";
-import { athleteById, fmtDay, invoices, money2, plans } from "@/lib/demo/data";
+import { requireAthleteContext } from "@/lib/demo/session";
+import { fmtDay, invoices, money2, plans } from "@/lib/demo/data";
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteBillingPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const billing = billingMeta[athlete.billing.state];
   const plan = plans.find((p) => athlete.planName.startsWith(p.name));
   const amountDue = athlete.billing.amountDueCents;

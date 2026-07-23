@@ -1,11 +1,9 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Pill } from "@/components/ui/pill";
-import { requireUserWithProfile } from "@/lib/auth";
-import { athleteById } from "@/lib/demo/data";
+import { requireAthleteContext } from "@/lib/demo/session";
 import {
   generateBookableSlots,
   myBookings,
@@ -15,10 +13,7 @@ import {
 import { SessionBooking } from "./session-book-form";
 
 export default async function AthleteSessionsPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const slots = generateBookableSlots(12);
 
   return (

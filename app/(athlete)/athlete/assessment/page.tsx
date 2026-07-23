@@ -1,12 +1,11 @@
-import { redirect } from "next/navigation";
 import { ClipboardCheck } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
 import { AssessmentForm } from "@/components/assessment/assessment-form";
 import { Pill } from "@/components/ui/pill";
-import { requireUserWithProfile } from "@/lib/auth";
+import { requireAthleteContext } from "@/lib/demo/session";
 import { assessmentForAthlete } from "@/lib/demo/assessment";
-import { athleteById, fmtFullDay } from "@/lib/demo/data";
+import { fmtFullDay } from "@/lib/demo/data";
 
 /**
  * The athlete's Remapping Assessment — read-only. Coaches run the assessment
@@ -14,10 +13,7 @@ import { athleteById, fmtFullDay } from "@/lib/demo/data";
  * record here, exactly as written.
  */
 export default async function AthleteAssessmentPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const assessment = assessmentForAthlete(athlete.id);
 
   return (

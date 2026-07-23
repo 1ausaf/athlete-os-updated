@@ -58,10 +58,24 @@ export const PERSONAS: Record<DemoRole, Persona> = {
       isMinor: false,
     },
   },
+  parent: {
+    key: "parent",
+    label: "Parent",
+    blurb: "Diane Okafor · Maya + Noah",
+    user: {
+      id: "parent-diane",
+      email: "diane.okafor@example.com",
+      fullName: "Diane Okafor",
+      role: "parent",
+      isMinor: false,
+      athleteIds: ["ath-maya", "ath-noah"],
+    },
+  },
 };
 
 export const PERSONA_LIST: Persona[] = [
   PERSONAS.athlete,
+  PERSONAS.parent,
   PERSONAS.coach,
   PERSONAS.owner,
 ];

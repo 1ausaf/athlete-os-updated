@@ -38,6 +38,13 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     label: "Owner",
     blurb: "Jeremy Choi · Founder / COO",
   },
+  {
+    role: "parent",
+    email: "diane.okafor@example.com",
+    name: "Diane Okafor",
+    label: "Parent",
+    blurb: "Diane Okafor · manages Maya + Noah",
+  },
 ];
 
 /** Shared demo password shown on the sign-in screen (any password also works). */

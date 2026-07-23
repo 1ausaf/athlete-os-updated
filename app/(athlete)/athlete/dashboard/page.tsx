@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { redirect } from "next/navigation";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -19,10 +18,9 @@ import { Progress } from "@/components/app/progress";
 import { Pill } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireUserWithProfile } from "@/lib/auth";
+import { requireAthleteContext } from "@/lib/demo/session";
 import { jordanTeamChannel } from "@/lib/demo/chat";
 import {
-  athleteById,
   fmtFullDay,
   fmtRange,
   money,
@@ -38,10 +36,7 @@ import {
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteDashboardPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const firstName = athlete.name.split(" ")[0];
 
   // Plain "Coaching" bookings — no coach names or session-type jargon.

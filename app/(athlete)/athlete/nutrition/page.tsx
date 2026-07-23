@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -28,8 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { requireUserWithProfile } from "@/lib/auth";
-import { athleteById, fmtDay } from "@/lib/demo/data";
+import { requireAthleteContext } from "@/lib/demo/session";
+import { fmtDay } from "@/lib/demo/data";
 import { nutritionProtocols } from "@/lib/demo/training";
 
 import { WeeklyCheckIn } from "./weekly-check-in";
@@ -45,10 +44,7 @@ function DocHeading({ children }: { children: React.ReactNode }) {
 }
 
 export default async function NutritionPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const protocol =
     athlete.nutrition === "pro" ? nutritionProtocols[athlete.id] : undefined;
 

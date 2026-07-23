@@ -1,27 +1,40 @@
 import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
 
+import { ChildSwitcher } from "@/components/app/child-switcher";
 import { AthleteNav } from "@/components/nav/athlete-nav";
 import { AppShell } from "@/components/shell/app-shell";
-import { requireUserWithProfile } from "@/lib/auth";
-import { getDemoRole } from "@/lib/demo/session";
+import { getDemoRole, requireAthleteContext } from "@/lib/demo/session";
 
 export default async function AthletePortalLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") {
-    redirect("/staff/athletes");
-  }
+  // Athletes see themselves; parents see the selected child; staff redirect.
+  const ctx = requireAthleteContext();
 
   return (
     <AppShell
-      user={user}
+      user={ctx.user}
       role={getDemoRole()}
-      workspaceLabel="Athlete Portal"
-      nav={<AthleteNav user={user} />}
+      workspaceLabel={
+        ctx.isParentView ? `Athlete Portal · ${ctx.athlete.name}` : "Athlete Portal"
+      }
+      nav={<AthleteNav user={ctx.user} athlete={ctx.athlete} />}
+      headerExtra={
+        ctx.isParentView ? (
+          <ChildSwitcher
+            activeId={ctx.athlete.id}
+            childrenOptions={ctx.children.map((c) => ({
+              id: c.id,
+              name: c.name,
+              initials: c.initials,
+              hue: c.hue,
+              sport: c.sport,
+            }))}
+          />
+        ) : null
+      }
     >
       {children}
     </AppShell>

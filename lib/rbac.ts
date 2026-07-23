@@ -48,6 +48,12 @@ export function canViewBilling(
     if (!targetAthleteId) return true;
     return user.id === targetAthleteId;
   }
+  if (user.role === "parent") {
+    // A parent manages their kids' accounts, billing included.
+    if (!targetAthleteId) return true;
+    const full = user as AppUser;
+    return full.athleteIds?.includes(targetAthleteId) ?? false;
+  }
   return false;
 }
 
@@ -68,6 +74,8 @@ export function canManageMemberships(user: MaybeUser): boolean {
  */
 export function canBookSession(user: MaybeUser): boolean {
   if (!user) return false;
+  // Parents book on behalf of their kids — the whole point of the login.
+  if (user.role === "parent") return true;
   if (user.role !== "athlete") return false;
   const full = user as AppUser;
   return Boolean(full.hasActiveMembership);

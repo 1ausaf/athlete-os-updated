@@ -1,11 +1,10 @@
-import { redirect } from "next/navigation";
 import { ChevronDown, Trophy } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
-import { requireUserWithProfile } from "@/lib/auth";
-import { athleteById, fmtFullDay } from "@/lib/demo/data";
+import { requireAthleteContext } from "@/lib/demo/session";
+import { fmtFullDay } from "@/lib/demo/data";
 import {
   athleteMaxes,
   exerciseById,
@@ -17,10 +16,7 @@ import {
 import { WorkoutLogger } from "./workout-logger";
 
 export default async function AthleteTrainingPage() {
-  const user = await requireUserWithProfile();
-  if (user.role !== "athlete") redirect("/staff/athletes");
-
-  const athlete = athleteById(user.id) ?? athleteById("ath-jordan")!;
+  const { athlete } = requireAthleteContext();
   const { program } = athlete;
 
   // Assemble serializable props for the client logger.

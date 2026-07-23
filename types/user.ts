@@ -1,12 +1,15 @@
 /**
  * Role hierarchy (lowest privilege to highest):
- *   athlete < coach < admin < owner
+ *   parent ≈ athlete < coach < admin < owner
+ *
+ * A parent manages one or more athlete accounts (their kids) and sees the
+ * athlete portal scoped to the selected child.
  *
  * Roles are stored in Postgres on the `user_roles` table (one row per role)
  * and enforced by RLS. The strings here must stay in sync with the
  * `user_role` Postgres enum.
  */
-export type UserRole = "athlete" | "coach" | "admin" | "owner";
+export type UserRole = "athlete" | "parent" | "coach" | "admin" | "owner";
 
 export const STAFF_ROLES: ReadonlyArray<UserRole> = ["coach", "admin", "owner"];
 export const ADMIN_ROLES: ReadonlyArray<UserRole> = ["admin", "owner"];

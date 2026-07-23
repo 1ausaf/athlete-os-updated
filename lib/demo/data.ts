@@ -19,7 +19,7 @@ export function at(dayOffset: number, hour?: number, minute = 0): string {
   return d.toISOString();
 }
 
-export type DemoRole = "athlete" | "coach" | "owner";
+export type DemoRole = "athlete" | "coach" | "owner" | "parent";
 
 export type BillingState = "paid" | "overdue" | "grace" | "pending";
 export type BookingState =
@@ -53,6 +53,34 @@ export interface Guardian {
   name: string;
   relation: string;
   email: string;
+}
+
+/**
+ * Self-service athlete profile (round 3): contact details, socials and
+ * recruiting links the athlete maintains — the coach card prepopulates
+ * from this instead of staff re-typing it into Trello.
+ */
+export interface AthleteProfile {
+  athleteId: string;
+  email: string;
+  phone: string;
+  address: { street: string; city: string; region: string; postal: string };
+  instagram?: string;
+  twitter?: string;
+  /** HUDL recruiting profile URL. */
+  hudl?: string;
+  /** Full date of birth (ISO). */
+  dob: string;
+  guardian?: { name: string; relation: string; phone: string; email: string };
+  emergencyContact?: { name: string; relation: string; phone: string };
+}
+
+/** A parent login that manages one or more kids' accounts. */
+export interface ParentAccount {
+  id: string;
+  name: string;
+  email: string;
+  childAthleteIds: string[];
 }
 
 /** Trello-style member-ops bucket (mirrors the client's board lists). */
@@ -317,6 +345,57 @@ export const athletes: Athlete[] = [
     prs: [
       { id: "pr-mo-1", lift: "Vertical jump", value: 27, unit: "in", date: at(-40) },
       { id: "pr-mo-2", lift: "Back squat", value: 175, unit: "lb", date: at(-52) },
+    ],
+  },
+  {
+    // Maya's younger brother — managed through Diane's parent login (A1).
+    id: "ath-noah",
+    slug: "noah-okafor",
+    name: "Noah Okafor",
+    initials: "NO",
+    hue: 292,
+    sport: "Basketball",
+    age: 11,
+    isMinor: true,
+    yearOfBirth: 2015,
+    gender: "M",
+    bucket: "in-gym",
+    programDueInDays: 12,
+    nutrition: "none",
+    coach: "Coach Nadia",
+    planName: "Academy Juniors — 2×/week",
+    frequency: "2×/week",
+    frequencyPerWeek: 2,
+    bookedThisWeek: 1,
+    billing: { state: "paid", amountDueCents: 0, nextInvoice: at(9) },
+    program: {
+      name: "Youth Foundations — Block A",
+      day: 4,
+      totalDays: 16,
+      phase: "Accumulation",
+      block: "Block A",
+      compliancePct: 81,
+    },
+    attendancePct: 88,
+    injuryFlags: [],
+    season: "off-season",
+    reminders: [],
+    guardians: [
+      { name: "Diane Okafor", relation: "Mother", email: "diane.okafor@example.com" },
+    ],
+    lastActive: at(-1, 17, 5),
+    notes: [
+      {
+        id: "note-no-1",
+        date: at(-3, 17),
+        coach: "Coach Nadia",
+        body:
+          "<p>Great listener, movement quality ahead of his age group. Kept everything bodyweight + med ball.</p><p><strong>Next:</strong> Introduce dowel work for hinge patterning.</p>",
+      },
+    ],
+    prs: [
+      { id: "pr-no-1", lift: "Broad jump", value: 64, unit: "in", date: at(-21) },
+      { id: "pr-no-2", lift: "Vertical jump", value: 14, unit: "in", date: at(-21) },
     ],
   },
   {
@@ -611,6 +690,69 @@ export const athletes: Athlete[] = [
 export const athleteById = (id: string) => athletes.find((a) => a.id === id);
 
 /** Sport-specific training goal per athlete (the Trello-card "GOALS" line). */
+/* ------------------------------------------------------------------ */
+/* Athlete profiles — self-maintained contact/socials (A20, feeds C6)  */
+/* ------------------------------------------------------------------ */
+
+export const athleteProfiles: Record<string, AthleteProfile> = {
+  "ath-jordan": {
+    athleteId: "ath-jordan",
+    email: "jordan.vega@lpsathletic.com",
+    phone: "+1 (647) 555-0148",
+    address: { street: "48 Maplewood Ave", city: "North York", region: "ON", postal: "M2N 5X9" },
+    instagram: "@jordanvega_10",
+    twitter: "@jvega10",
+    hudl: "hudl.com/profile/jordanvega",
+    dob: "2007-07-26",
+    emergencyContact: { name: "Elena Vega", relation: "Mother", phone: "+1 (647) 555-0121" },
+  },
+  "ath-maya": {
+    athleteId: "ath-maya",
+    email: "maya.okafor@example.com",
+    phone: "+1 (416) 555-0192",
+    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4" },
+    instagram: "@maya.hoops",
+    hudl: "hudl.com/profile/mayaokafor",
+    dob: "2010-03-14",
+    guardian: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177", email: "diane.okafor@example.com" },
+    emergencyContact: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177" },
+  },
+  "ath-noah": {
+    athleteId: "ath-noah",
+    email: "diane.okafor@example.com",
+    phone: "+1 (416) 555-0177",
+    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4" },
+    dob: "2015-09-02",
+    guardian: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177", email: "diane.okafor@example.com" },
+    emergencyContact: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177" },
+  },
+  "ath-dre": {
+    athleteId: "ath-dre",
+    email: "andre.santos@example.com",
+    phone: "+1 (905) 555-0163",
+    address: { street: "203 Weston Rd", city: "Toronto", region: "ON", postal: "M6N 4Z4" },
+    instagram: "@dre.santos7",
+    hudl: "hudl.com/profile/andresantos",
+    dob: "2009-11-30",
+    guardian: { name: "Paulo Santos", relation: "Father", phone: "+1 (905) 555-0114", email: "paulo.santos@example.com" },
+    emergencyContact: { name: "Paulo Santos", relation: "Father", phone: "+1 (905) 555-0114" },
+  },
+};
+
+export function athleteProfileById(id: string): AthleteProfile | undefined {
+  return athleteProfiles[id];
+}
+
+/** Parent logins — each manages one or more kids (A1). */
+export const parentAccounts: ParentAccount[] = [
+  {
+    id: "parent-diane",
+    name: "Diane Okafor",
+    email: "diane.okafor@example.com",
+    childAthleteIds: ["ath-maya", "ath-noah"],
+  },
+];
+
 export const athleteGoals: Record<string, string> = {
   "ath-jordan": "Improve explosiveness and top-end speed for pro tryouts.",
   "ath-maya":
