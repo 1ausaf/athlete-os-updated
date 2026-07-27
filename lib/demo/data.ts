@@ -83,15 +83,35 @@ export interface ParentAccount {
   childAthleteIds: string[];
 }
 
-/** Trello-style member-ops bucket (mirrors the client's board lists). */
-export type MemberBucket = "in-gym" | "private" | "program-only" | "online" | "away";
+/** Membership type — how the athlete trains with LPS (round 4: pure type,
+ *  no longer a board column; lifecycle lives on `status`). */
+export type MemberBucket = "in-gym" | "private" | "program-only" | "online";
 
 export const bucketLabel: Record<MemberBucket, string> = {
   "in-gym": "In-gym",
   private: "Private 1-on-1",
   "program-only": "Program only",
   online: "Online",
-  away: "At-risk / Away",
+};
+
+/**
+ * Member lifecycle (round 4 — replaces the Trello board lists):
+ * - active   — training normally.
+ * - away     — seasonal break (in-season elsewhere). Can still log in, keeps
+ *              their profile, but no programs run. Follow-up date set for the
+ *              expected return (e.g. done in September → follow up in May).
+ * - paused   — membership on hold; follow-up due date drives the sales /
+ *              retention call.
+ * - inactive — account disabled (no login), record kept. Deletable when the
+ *              record should be removed entirely.
+ */
+export type AthleteStatus = "active" | "away" | "paused" | "inactive";
+
+export const statusLabel: Record<AthleteStatus, string> = {
+  active: "Active",
+  away: "Away",
+  paused: "Paused",
+  inactive: "Inactive",
 };
 
 export interface Athlete {
@@ -105,8 +125,12 @@ export interface Athlete {
   isMinor: boolean;
   yearOfBirth: number;
   gender: "M" | "F";
-  /** Member-ops bucket (Trello board list equivalent). */
+  /** Membership type (in-gym / private / program-only / online). */
   bucket: MemberBucket;
+  /** Lifecycle status — drives the members list tabs (round 4). */
+  status: AthleteStatus;
+  /** Follow-up due date for away/paused members (sales & retention). */
+  followUpDate?: string;
   /** Days of published program remaining — 0 means a program update is due now. */
   programDueInDays: number;
   /** Nutrition protocol tier. */
@@ -236,6 +260,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2007,
     gender: "M",
     bucket: "in-gym",
+    status: "active",
     programDueInDays: 6,
     nutrition: "pro",
     coach: "Coach Ellis",
@@ -302,6 +327,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2010,
     gender: "F",
     bucket: "in-gym",
+    status: "active",
     programDueInDays: 18,
     nutrition: "none",
     coach: "Coach Ellis",
@@ -360,6 +386,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2015,
     gender: "M",
     bucket: "in-gym",
+    status: "active",
     programDueInDays: 12,
     nutrition: "none",
     coach: "Coach Nadia",
@@ -410,6 +437,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2009,
     gender: "M",
     bucket: "in-gym",
+    status: "active",
     programDueInDays: 0,
     nutrition: "none",
     coach: "Coach Ellis",
@@ -460,6 +488,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2004,
     gender: "F",
     bucket: "online",
+    status: "active",
     programDueInDays: 5,
     nutrition: "none",
     coach: "Coach Nadia",
@@ -508,6 +537,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2011,
     gender: "M",
     bucket: "in-gym",
+    status: "active",
     programDueInDays: 16,
     nutrition: "none",
     coach: "Coach Ellis",
@@ -557,6 +587,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2002,
     gender: "M",
     bucket: "private",
+    status: "active",
     programDueInDays: 4,
     nutrition: "pro",
     coach: "Coach Nadia",
@@ -604,7 +635,9 @@ export const athletes: Athlete[] = [
     isMinor: false,
     yearOfBirth: 2008,
     gender: "F",
-    bucket: "away",
+    bucket: "in-gym",
+    status: "paused",
+    followUpDate: at(14),
     programDueInDays: 21,
     nutrition: "none",
     coach: "Coach Ellis",
@@ -652,6 +685,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 1997,
     gender: "M",
     bucket: "program-only",
+    status: "active",
     programDueInDays: 10,
     nutrition: "pro",
     coach: "Coach Nadia",
@@ -684,6 +718,102 @@ export const athletes: Athlete[] = [
       },
     ],
     prs: [{ id: "pr-lm-1", lift: "Rotational MB throw", value: 31, unit: "in", date: at(-18) }],
+  },
+  {
+    // AWAY — in-season with his junior team until spring; keeps his login,
+    // no programs run. Follow-up set for the expected return window.
+    id: "ath-marcus",
+    slug: "marcus-hale",
+    name: "Marcus Hale",
+    initials: "MH",
+    hue: 105,
+    sport: "Hockey",
+    age: 18,
+    isMinor: false,
+    yearOfBirth: 2008,
+    gender: "M",
+    bucket: "in-gym",
+    status: "away",
+    followUpDate: at(285),
+    programDueInDays: 999,
+    nutrition: "none",
+    coach: "Coach Ellis",
+    planName: "Off-season — returning",
+    frequency: "—",
+    frequencyPerWeek: 0,
+    bookedThisWeek: 0,
+    billing: { state: "paid", amountDueCents: 0, nextInvoice: at(285) },
+    program: {
+      name: "No active program",
+      day: 0,
+      totalDays: 0,
+      phase: "Away",
+      block: "—",
+      compliancePct: 0,
+    },
+    attendancePct: 0,
+    injuryFlags: [],
+    season: "in-season",
+    reminders: ["Season ends April — follow up in May for summer block"],
+    guardians: [],
+    lastActive: at(-64, 9),
+    notes: [
+      {
+        id: "note-mh-1",
+        date: at(-64, 12),
+        coach: "Coach Ellis",
+        body:
+          "<p>Left for the season — junior A roster spot. Great summer block, trap-bar up 40 lb.</p><p><strong>Next:</strong> Reach out in May to lock the summer slot before tryout season.</p>",
+      },
+    ],
+    prs: [{ id: "pr-mh-1", lift: "Trap-bar deadlift", value: 335, unit: "lb", reps: 1, date: at(-70) }],
+  },
+  {
+    // INACTIVE — moved away last year. Login disabled, record kept.
+    id: "ath-elena",
+    slug: "elena-brooks",
+    name: "Elena Brooks",
+    initials: "EB",
+    hue: 350,
+    sport: "Volleyball",
+    age: 20,
+    isMinor: false,
+    yearOfBirth: 2006,
+    gender: "F",
+    bucket: "online",
+    status: "inactive",
+    programDueInDays: 999,
+    nutrition: "none",
+    coach: "—",
+    planName: "—",
+    frequency: "—",
+    frequencyPerWeek: 0,
+    bookedThisWeek: 0,
+    billing: { state: "paid", amountDueCents: 0, nextInvoice: at(999) },
+    program: {
+      name: "No active program",
+      day: 0,
+      totalDays: 0,
+      phase: "Inactive",
+      block: "—",
+      compliancePct: 0,
+    },
+    attendancePct: 0,
+    injuryFlags: [],
+    season: "off-season",
+    reminders: [],
+    guardians: [],
+    lastActive: at(-310, 10),
+    notes: [
+      {
+        id: "note-eb-1",
+        date: at(-310, 12),
+        coach: "Coach Nadia",
+        body:
+          "<p>Moved to Vancouver for school — ran the exit checklist, billing canceled, workouts unpublished.</p>",
+      },
+    ],
+    prs: [],
   },
 ];
 

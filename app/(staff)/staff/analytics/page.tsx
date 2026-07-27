@@ -57,7 +57,9 @@ export default async function AnalyticsPage() {
     : 0;
 
   // Engagement: stale-first so dormant athletes surface before they go quiet.
-  const engagement = [...athletes]
+  // Active members only — away/paused/inactive don't belong here (R4).
+  const engagement = athletes
+    .filter((a) => a.status === "active")
     .map((a) => ({
       athlete: a,
       daysSince: Math.floor(

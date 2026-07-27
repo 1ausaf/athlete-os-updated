@@ -62,9 +62,10 @@ export function ClientQueue({ viewerId }: { viewerId: string }) {
   const [coachFilter, setCoachFilter] = useState<string>("all");
 
   const queue = useMemo(() => {
-    const sorted = [...athletes].sort(
-      (a, b) => a.programDueInDays - b.programDueInDays,
-    );
+    // Away/paused/inactive members have no program runway — active only (R4).
+    const sorted = athletes
+      .filter((a) => a.status === "active")
+      .sort((a, b) => a.programDueInDays - b.programDueInDays);
     if (coachFilter === "all") return sorted;
     const target = coachFilter === "mine" ? viewerId : coachFilter;
     return sorted.filter((a) => programmingCoachIdFor(a.id) === target);

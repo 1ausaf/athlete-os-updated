@@ -19,7 +19,6 @@ import {
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PageHeader } from "@/components/app/page-header";
-import { Progress } from "@/components/app/progress";
 import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,11 +27,14 @@ import { requireUserWithProfile } from "@/lib/auth";
 import {
   athleteById,
   athleteGoals,
+  athleteProfileById,
   bucketLabel,
+  fmtDay,
   fmtRange,
   money2,
   relTime,
   sessions,
+  statusLabel,
   type Athlete,
 } from "@/lib/demo/data";
 import { billingMeta, seasonMeta } from "@/lib/demo/status";
@@ -40,6 +42,13 @@ import { isStaff } from "@/lib/rbac";
 
 import { programDueLong } from "../program-due";
 import { NotesPanel } from "./notes-panel";
+import {
+  ChecklistsCard,
+  CoachesCard,
+  CompactProgramCard,
+  FollowUpBanner,
+  StatusCard,
+} from "./profile-panels";
 
 export default async function StaffAthleteProfilePage({
   params,
@@ -54,9 +63,6 @@ export default async function StaffAthleteProfilePage({
 
   const billing = billingMeta[athlete.billing.state];
   const season = seasonMeta[athlete.season];
-  const progressPct = Math.round(
-    (athlete.program.day / athlete.program.totalDays) * 100,
-  );
 
   const upcoming = sessions
     .filter((s) => s.roster.some((r) => r.athleteId === athlete.id))
@@ -84,6 +90,20 @@ export default async function StaffAthleteProfilePage({
               {athlete.sport} · {athlete.gender} · {athlete.yearOfBirth}
             </Pill>
             {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
+            <Pill
+              tone={
+                athlete.status === "active"
+                  ? "success"
+                  : athlete.status === "paused"
+                    ? "warning"
+                    : athlete.status === "away"
+                      ? "info"
+                      : "neutral"
+              }
+              dot
+            >
+              {statusLabel[athlete.status]}
+            </Pill>
             <Pill tone={season.tone}>{season.label}</Pill>
             <Pill tone={billing.tone} dot>
               {billing.label}
@@ -112,7 +132,7 @@ export default async function StaffAthleteProfilePage({
       />
 
       {/* KPI tiles */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Attendance"
           value={athlete.attendancePct}
@@ -144,35 +164,20 @@ export default async function StaffAthleteProfilePage({
         />
       </div>
 
-      {/* Program strip */}
-      <Card className="bg-brand-sheen">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
-          <div className="min-w-0">
-            <span className="eyebrow">Current program</span>
-            <h3 className="mt-1 text-lg">{athlete.program.name}</h3>
-            <p className="text-sm text-muted-foreground">
-              {athlete.program.block} · {athlete.program.phase} phase ·{" "}
-              {athlete.frequency}
-            </p>
-          </div>
-          <div className="w-full max-w-xs">
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Block progress</span>
-              <span className="tnum font-semibold">{progressPct}%</span>
-            </div>
-            <Progress value={progressPct} />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Away/paused follow-up strip */}
+      <FollowUpBanner athlete={athlete} />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        {/* Left column — notes are the centerpiece */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        {/* Left column — notes are the centerpiece ("this side is perfect") */}
         <div className="flex flex-col gap-6">
           <NotesPanel
             athleteFirstName={athlete.name.split(" ")[0] ?? athlete.name}
             authorName={user.fullName}
             initialNotes={athlete.notes}
           />
+
+          {/* Checklists — moved here from the retired card modal */}
+          <ChecklistsCard athlete={athlete} />
 
           {/* PRs */}
           <Section icon={Trophy} title="Personal records">
@@ -206,9 +211,41 @@ export default async function StaffAthleteProfilePage({
           </Section>
         </div>
 
-        {/* Right column */}
+        {/* Right column — status, compact program, record, coaches, money */}
         <div className="flex flex-col gap-6">
+          <StatusCard athlete={athlete} />
+          <CompactProgramCard athlete={athlete} />
           <MemberRecord athlete={athlete} programHref={programHref} />
+          <CoachesCard athlete={athlete} />
+
+          {/* Financial — the plan tile's detail, on the record itself */}
+          <Section icon={CreditCard} title="Financial">
+            <div className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-3">
+                <span className="font-medium">{athlete.planName}</span>
+                <Pill tone={billing.tone} dot>
+                  {billing.label}
+                </Pill>
+              </div>
+              <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+                <span>Next invoice</span>
+                <span className="tnum font-semibold text-foreground">
+                  {fmtDay(athlete.billing.nextInvoice)}
+                </span>
+              </div>
+              {athlete.billing.amountDueCents > 0 ? (
+                <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+                  <span>Outstanding</span>
+                  <span className="tnum font-semibold text-destructive">
+                    {money2(athlete.billing.amountDueCents)}
+                  </span>
+                </div>
+              ) : null}
+              <p className="px-1 text-[0.7rem] text-muted-foreground">
+                Mark paid / cancel lives in Billing — Square handles cards.
+              </p>
+            </div>
+          </Section>
 
           {/* Injury flags */}
           {athlete.injuryFlags.length > 0 ? (
@@ -312,6 +349,7 @@ function MemberRecord({
   programHref: Route;
 }) {
   const due = programDueLong(athlete.programDueInDays);
+  const profile = athleteProfileById(athlete.id);
   const goal =
     athleteGoals[athlete.id] ??
     `Build toward the next ${athlete.sport} season with a full, healthy block.`;
@@ -344,24 +382,45 @@ function MemberRecord({
           <p className="mt-1 text-sm text-foreground/90">{goal}</p>
         </div>
 
-        {/* Guardians / contacts */}
+        {/* Contact info — synced from the athlete's own profile */}
         <div>
-          <span className="eyebrow">Guardians & contacts</span>
-          {athlete.guardians.length === 0 ? (
-            athlete.isMinor ? (
-              <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Minor with no guardian on file — add one to satisfy Rule of
-                  Two before messaging.
-                </span>
-              </div>
-            ) : (
-              <p className="mt-2 rounded-lg border border-dashed border-border bg-surface/30 p-3 text-sm text-muted-foreground">
-                Adult athlete — no guardian required.
+          <span className="eyebrow">Contact info</span>
+          {profile ? (
+            <div className="mt-2 flex flex-col gap-1 text-sm">
+              <p className="text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {athlete.name}
+                </span>{" "}
+                · <span className="font-mono text-xs">{profile.phone}</span> ·{" "}
+                <span className="font-mono text-xs">{profile.email}</span>
               </p>
-            )
-          ) : (
+              {profile.instagram || profile.hudl ? (
+                <p className="text-xs text-muted-foreground">
+                  {profile.instagram ? `Instagram ${profile.instagram}` : ""}
+                  {profile.instagram && profile.hudl ? " · " : ""}
+                  {profile.hudl ? `HUDL ${profile.hudl}` : ""}
+                </p>
+              ) : null}
+              {profile.guardian ? (
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {profile.guardian.name}
+                  </span>{" "}
+                  · {profile.guardian.relation} ·{" "}
+                  <span className="font-mono text-xs">
+                    {profile.guardian.phone}
+                  </span>{" "}
+                  ·{" "}
+                  <span className="font-mono text-xs">
+                    {profile.guardian.email}
+                  </span>
+                </p>
+              ) : null}
+              <p className="text-[0.7rem] text-muted-foreground">
+                Synced from the member&apos;s profile — they keep it current.
+              </p>
+            </div>
+          ) : athlete.guardians.length > 0 ? (
             <ul className="mt-2 flex flex-col gap-2">
               {athlete.guardians.map((g) => (
                 <li
@@ -378,10 +437,22 @@ function MemberRecord({
                 </li>
               ))}
             </ul>
+          ) : athlete.isMinor ? (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm font-medium text-warning">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Minor with no guardian on file — add one to satisfy Rule of Two
+                before messaging.
+              </span>
+            </div>
+          ) : (
+            <p className="mt-2 rounded-lg border border-dashed border-border bg-surface/30 p-3 text-sm text-muted-foreground">
+              No profile on file yet.
+            </p>
           )}
         </div>
 
-        {/* Links */}
+        {/* Links — in-app + their external stack */}
         <div>
           <span className="eyebrow">Links</span>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -391,18 +462,28 @@ function MemberRecord({
                 Program
               </Link>
             </Button>
-            <Button variant="outline" size="sm" disabled>
-              <ClipboardCheck className="h-4 w-4" />
-              Assessment
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/staff/athletes/${athlete.id}/assessment` as Route}>
+                <ClipboardCheck className="h-4 w-4" />
+                Assessment
+              </Link>
             </Button>
-            <Button variant="outline" size="sm" disabled>
-              <HardDrive className="h-4 w-4" />
-              Drive
+            <Button asChild variant="outline" size="sm">
+              <Link href={"/staff/messaging" as Route}>
+                <MessagesSquare className="h-4 w-4" />
+                Chat
+              </Link>
             </Button>
           </div>
-          <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
-            Assessment & Drive links are stubbed in the demo.
-          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Pill tone="neutral" icon={<HardDrive className="h-3 w-3" />}>
+              Drive
+            </Pill>
+            <Pill tone="neutral">Quo</Pill>
+            <Pill tone="neutral">Google Contact</Pill>
+            <Pill tone="neutral">Brevo</Pill>
+            <Pill tone="neutral">Square</Pill>
+          </div>
         </div>
       </div>
     </Section>
