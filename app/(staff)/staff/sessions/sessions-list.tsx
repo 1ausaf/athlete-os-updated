@@ -17,6 +17,8 @@ import {
 } from "@/lib/demo/data";
 import { cn } from "@/lib/utils";
 
+import { ComingVsCoach } from "./coming-vs-coach";
+
 export interface SessionDayGroup {
   day: string;
   label: string;
@@ -171,30 +173,8 @@ function SessionCard({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center">
-            <div className="flex -space-x-2">
-              {roster.slice(0, 5).map((a) => (
-                <AthleteAvatar
-                  key={a.id}
-                  initials={a.initials}
-                  hue={a.hue}
-                  size="sm"
-                  ring
-                />
-              ))}
-            </div>
-            {roster.length > 5 ? (
-              <span className="ml-2 text-xs font-medium text-muted-foreground">
-                +{roster.length - 5}
-              </span>
-            ) : null}
-            {roster.length === 0 ? (
-              <span className="text-xs text-muted-foreground">
-                No athletes booked
-              </span>
-            ) : null}
-          </div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <ComingVsCoach roster={roster} coachName={session.coach} />
           <Button asChild variant="ghost" size="sm">
             <Link href={`/staff/sessions/${session.id}` as Route}>
               Roster

@@ -152,6 +152,11 @@ export function staffById(id: string): StaffMember | undefined {
   return staffMembers.find((s) => s.id === id);
 }
 
+/** Sessions store the coach by display name — resolve to the staff record. */
+export function staffByName(name: string): StaffMember | undefined {
+  return staffMembers.find((s) => s.name === name);
+}
+
 /* ------------------------------------------------------------------ */
 /* Coach assignments (C7) — programming / management / assistant       */
 /* ------------------------------------------------------------------ */

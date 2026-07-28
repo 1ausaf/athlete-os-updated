@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import {
   ArrowRight,
   CalendarDays,
+  CheckCircle2,
   Clock,
   Clipboard,
+  History,
   MapPin,
   UserCog,
   Users,
@@ -25,15 +27,24 @@ import {
   fmtDay,
   fmtTime,
   nextSession,
+  pastSessions,
   sessions,
   type TrainingSession,
 } from "@/lib/demo/data";
+import { cn } from "@/lib/utils";
 
+import { ComingVsCoach } from "./coming-vs-coach";
 import { SessionsList } from "./sessions-list";
 
-export default async function StaffSessionsPage() {
+export default async function StaffSessionsPage({
+  searchParams,
+}: {
+  searchParams?: { view?: string };
+}) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
+
+  const view = searchParams?.view === "past" ? "past" : "upcoming";
 
   const today = new Date().toDateString();
   const todaySessions = sessions.filter(
@@ -57,12 +68,32 @@ export default async function StaffSessionsPage() {
     group.items.push(s);
   }
 
+  // Past sessions grouped newest-first ("go back in the past sessions").
+  const pastGroups: { day: string; label: string; items: TrainingSession[] }[] =
+    [];
+  for (const s of [...pastSessions].sort((a, b) =>
+    a.startsAt > b.startsAt ? -1 : 1,
+  )) {
+    const key = new Date(s.startsAt).toDateString();
+    let group = pastGroups.find((g) => g.day === key);
+    if (!group) {
+      group = { day: key, label: fmtDay(s.startsAt), items: [] };
+      pastGroups.push(group);
+    }
+    group.items.push(s);
+  }
+  const attendedTotal = pastSessions.reduce(
+    (n, s) => n + s.roster.filter((r) => r.state === "completed").length,
+    0,
+  );
+  const rosteredTotal = pastSessions.reduce((n, s) => n + s.roster.length, 0);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Staff Workspace · Sessions"
         title="Sessions"
-        description="Every semi-private block on the floor — capacity, confirmations and who's on deck, at a glance."
+        description="Every semi-private block on the floor — who's coming, which coach has it, and the history behind it."
         actions={
           <Button asChild variant="brand" size="sm">
             <Link href={"/staff/sessions/huddle-brief" as Route}>
@@ -73,34 +104,131 @@ export default async function StaffSessionsPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile
-          label="Sessions today"
-          value={todaySessions.length}
-          icon={CalendarDays}
-          hint={`${sessions.length} scheduled this week`}
-          accent
+      {/* Upcoming / Past tabs */}
+      <div className="flex items-center gap-1 border-b border-border">
+        <TabLink
+          href={"/staff/sessions" as Route}
+          active={view === "upcoming"}
+          label="Upcoming"
+          count={sessions.length}
         />
-        <StatTile
-          label="Athletes on deck"
-          value={athletesOnDeck}
-          icon={Users}
-          hint="across today's blocks"
-        />
-        <StatTile
-          label="Waitlisted"
-          value={waitlisted}
-          icon={Clock}
-          hint="awaiting an open spot"
+        <TabLink
+          href={"/staff/sessions?view=past" as Route}
+          active={view === "past"}
+          label="Past"
+          count={pastSessions.length}
         />
       </div>
 
-      {/* Featured next session */}
-      <FeaturedSession session={nextSession} />
+      {view === "upcoming" ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatTile
+              label="Sessions today"
+              value={todaySessions.length}
+              icon={CalendarDays}
+              hint={`${sessions.length} scheduled this week`}
+              accent
+            />
+            <StatTile
+              label="Athletes on deck"
+              value={athletesOnDeck}
+              icon={Users}
+              hint="across today's blocks"
+            />
+            <StatTile
+              label="Waitlisted"
+              value={waitlisted}
+              icon={Clock}
+              hint="awaiting an open spot"
+            />
+          </div>
 
-      {/* Later sessions — multi-select for a combined huddle brief */}
-      <SessionsList groups={groups} />
+          {/* Featured next session */}
+          <FeaturedSession session={nextSession} />
+
+          {/* Later sessions — multi-select for a combined huddle brief */}
+          <SessionsList groups={groups} />
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatTile
+              label="Past sessions"
+              value={pastSessions.length}
+              icon={History}
+              hint="last 7 days shown"
+              accent
+            />
+            <StatTile
+              label="Attendance"
+              value={`${attendedTotal}/${rosteredTotal}`}
+              icon={CheckCircle2}
+              hint="attended vs rostered"
+            />
+            <StatTile
+              label="No-shows"
+              value={rosteredTotal - attendedTotal}
+              icon={Users}
+              hint="flag repeat offenders in notes"
+            />
+          </div>
+
+          {pastGroups.map((group) => (
+            <section key={group.day} className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg">{group.label}</h2>
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">
+                  {group.items.length} session
+                  {group.items.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {group.items.map((s) => (
+                  <PastSessionCard key={s.id} session={s} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
+      )}
     </div>
+  );
+}
+
+function TabLink({
+  href,
+  active,
+  label,
+  count,
+}: {
+  href: Route;
+  active: boolean;
+  label: string;
+  count: number;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "-mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
+        active
+          ? "border-brand text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+      <span
+        className={cn(
+          "tnum rounded-full px-1.5 text-[0.65rem] font-bold",
+          active ? "bg-brand/10 text-brand-ink" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {count}
+      </span>
+    </Link>
   );
 }
 
@@ -154,16 +282,33 @@ function FeaturedSession({ session }: { session: TrainingSession }) {
           </Button>
         </div>
 
-        <CapacityBlock
-          rosterLen={session.roster.length}
-          capacity={session.capacity}
-          fillPct={fillPct}
-          confirmed={confirmed}
-          pending={pending}
-        />
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Capacity</span>
+            <span className="tnum font-semibold">
+              {session.roster.length}
+              <span className="text-muted-foreground">/{session.capacity}</span>
+            </span>
+          </div>
+          <Progress value={fillPct} tone={fillPct >= 100 ? "warning" : "brand"} />
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Pill tone="success">{confirmed} confirmed</Pill>
+            {pending > 0 ? <Pill tone="warning">{pending} pending</Pill> : null}
+            {session.capacity - session.roster.length > 0 ? (
+              <Pill tone="neutral">
+                {session.capacity - session.roster.length} open
+              </Pill>
+            ) : (
+              <Pill tone="warning">Full</Pill>
+            )}
+          </div>
+        </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <AvatarStack roster={roster} />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <ComingVsCoach
+            roster={roster}
+            coachName={session.coach}
+          />
           <Button asChild variant="ghost" size="sm">
             <Link href={`/staff/sessions/${session.id}` as Route}>
               Session detail
@@ -176,73 +321,47 @@ function FeaturedSession({ session }: { session: TrainingSession }) {
   );
 }
 
-function CapacityBlock({
-  rosterLen,
-  capacity,
-  fillPct,
-  confirmed,
-  pending,
-}: {
-  rosterLen: number;
-  capacity: number;
-  fillPct: number;
-  confirmed: number;
-  pending: number;
-}) {
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Capacity</span>
-        <span className="tnum font-semibold">
-          {rosterLen}
-          <span className="text-muted-foreground">/{capacity}</span>
-        </span>
-      </div>
-      <Progress
-        value={fillPct}
-        tone={fillPct >= 100 ? "warning" : "brand"}
-      />
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <Pill tone="success">{confirmed} confirmed</Pill>
-        {pending > 0 ? <Pill tone="warning">{pending} pending</Pill> : null}
-        {capacity - rosterLen > 0 ? (
-          <Pill tone="neutral">{capacity - rosterLen} open</Pill>
-        ) : (
-          <Pill tone="warning">Full</Pill>
-        )}
-      </div>
-    </div>
-  );
-}
+function PastSessionCard({ session }: { session: TrainingSession }) {
+  const roster = session.roster
+    .map((r) => ({
+      athlete: athleteById(r.athleteId),
+      attended: r.state === "completed",
+    }))
+    .filter(
+      (r): r is { athlete: NonNullable<ReturnType<typeof athleteById>>; attended: boolean } =>
+        Boolean(r.athlete),
+    );
+  const attended = roster.filter((r) => r.attended);
+  const missed = roster.filter((r) => !r.attended);
 
-function AvatarStack({
-  roster,
-}: {
-  roster: { id: string; initials: string; hue: number; name: string }[];
-}) {
-  const shown = roster.slice(0, 5);
-  const extra = roster.length - shown.length;
   return (
-    <div className="flex items-center">
-      <div className="flex -space-x-2">
-        {shown.map((a) => (
-          <AthleteAvatar
-            key={a.id}
-            initials={a.initials}
-            hue={a.hue}
-            size="sm"
-            ring
-          />
-        ))}
-      </div>
-      {extra > 0 ? (
-        <span className="ml-2 text-xs font-medium text-muted-foreground">
-          +{extra}
-        </span>
-      ) : null}
-      {roster.length === 0 ? (
-        <span className="text-xs text-muted-foreground">No athletes booked</span>
-      ) : null}
-    </div>
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base">{session.title}</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {fmtTime(session.startsAt)}–{fmtTime(session.endsAt)} ·{" "}
+              {session.location}
+            </p>
+          </div>
+          <Pill tone={missed.length > 0 ? "warning" : "success"}>
+            {attended.length}/{roster.length} attended
+          </Pill>
+        </div>
+
+        <ComingVsCoach
+          roster={attended.map((r) => r.athlete)}
+          coachName={session.coach}
+          comingLabel="Attended"
+        />
+
+        {missed.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No-show: {missed.map((r) => r.athlete.name).join(", ")}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

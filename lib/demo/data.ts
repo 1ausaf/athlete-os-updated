@@ -985,6 +985,114 @@ export const sessions: TrainingSession[] = [
 /** The next upcoming session (used by the coach huddle brief). */
 export const nextSession = sessions[0];
 
+/**
+ * Session history — coaches can page back through past blocks ("how we can
+ * go back in the past sessions"). Roster state "completed" = attended;
+ * "pending" here reads as a no-show.
+ */
+export const pastSessions: TrainingSession[] = [
+  {
+    id: "past-1",
+    title: "Semi-Private — Power",
+    type: "Semi-Private",
+    startsAt: at(-1, 16),
+    endsAt: at(-1, 17, 30),
+    coach: "Coach Ellis",
+    location: "Floor A · Racks 1–4",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-jordan", state: "completed" },
+      { athleteId: "ath-maya", state: "completed" },
+      { athleteId: "ath-ty", state: "completed" },
+      { athleteId: "ath-dre", state: "pending" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "past-2",
+    title: "Semi-Private — Speed",
+    type: "Semi-Private",
+    startsAt: at(-1, 18),
+    endsAt: at(-1, 19, 30),
+    coach: "Coach Nadia",
+    location: "Turf · Lanes 1–3",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-sofia", state: "completed" },
+      { athleteId: "ath-ren", state: "completed" },
+      { athleteId: "ath-noah", state: "completed" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "past-3",
+    title: "Semi-Private — Power",
+    type: "Semi-Private",
+    startsAt: at(-2, 16),
+    endsAt: at(-2, 17, 30),
+    coach: "Coach Ellis",
+    location: "Floor A · Racks 1–4",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-jordan", state: "completed" },
+      { athleteId: "ath-priya", state: "completed" },
+      { athleteId: "ath-maya", state: "completed" },
+      { athleteId: "ath-leo", state: "completed" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "past-4",
+    title: "Weightlifting Team",
+    type: "Team",
+    startsAt: at(-3, 18, 30),
+    endsAt: at(-3, 20, 30),
+    coach: "Coach Clance",
+    location: "Platforms 1–6",
+    capacity: 8,
+    roster: [
+      { athleteId: "ath-ren", state: "completed" },
+      { athleteId: "ath-jordan", state: "completed" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "past-5",
+    title: "Semi-Private — Speed",
+    type: "Semi-Private",
+    startsAt: at(-4, 18),
+    endsAt: at(-4, 19, 30),
+    coach: "Coach Nadia",
+    location: "Turf · Lanes 1–3",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-dre", state: "completed" },
+      { athleteId: "ath-sofia", state: "pending" },
+      { athleteId: "ath-noah", state: "completed" },
+      { athleteId: "ath-ty", state: "completed" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "past-6",
+    title: "Semi-Private — Power",
+    type: "Semi-Private",
+    startsAt: at(-5, 16),
+    endsAt: at(-5, 17, 30),
+    coach: "Coach Ellis",
+    location: "Floor A · Racks 1–4",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-jordan", state: "completed" },
+      { athleteId: "ath-maya", state: "completed" },
+      { athleteId: "ath-ty", state: "completed" },
+      { athleteId: "ath-priya", state: "completed" },
+      { athleteId: "ath-leo", state: "completed" },
+    ],
+    waitlist: [],
+  },
+];
+
 /* ------------------------------------------------------------------ */
 /* Messaging + Safe-Sport Rule of Two                                  */
 /* ------------------------------------------------------------------ */

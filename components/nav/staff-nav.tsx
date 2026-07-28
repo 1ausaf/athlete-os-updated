@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   ShieldCheck,
   UserCog,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -53,6 +54,8 @@ export function StaffNav({ user }: { user: AppUser }) {
   if (isAdmin(user)) {
     items.push({ href: "/staff/team", label: "Team", icon: UserCog });
   }
+
+  items.push({ href: "/staff/profile", label: "Profile", icon: UserRound });
 
   return (
     <ShellNav
