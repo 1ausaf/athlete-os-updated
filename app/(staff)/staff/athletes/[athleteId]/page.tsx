@@ -46,7 +46,9 @@ import {
   ChecklistsCard,
   CoachesCard,
   CompactProgramCard,
+  DetailsCard,
   FollowUpBanner,
+  GoalsCard,
   StatusCard,
 } from "./profile-panels";
 
@@ -211,10 +213,17 @@ export default async function StaffAthleteProfilePage({
           </Section>
         </div>
 
-        {/* Right column — status, compact program, record, coaches, money */}
+        {/* Right column — status, details, compact program, record, coaches */}
         <div className="flex flex-col gap-6">
           <StatusCard athlete={athlete} />
+          <DetailsCard athlete={athlete} />
           <CompactProgramCard athlete={athlete} />
+          <GoalsCard
+            initialGoal={
+              athleteGoals[athlete.id] ??
+              `Build toward the next ${athlete.sport} season with a full, healthy block.`
+            }
+          />
           <MemberRecord athlete={athlete} programHref={programHref} />
           <CoachesCard athlete={athlete} />
 
@@ -350,36 +359,14 @@ function MemberRecord({
 }) {
   const due = programDueLong(athlete.programDueInDays);
   const profile = athleteProfileById(athlete.id);
-  const goal =
-    athleteGoals[athlete.id] ??
-    `Build toward the next ${athlete.sport} season with a full, healthy block.`;
 
   return (
-    <Section icon={IdCard} title="Member record">
+    <Section icon={IdCard} title="Contact & links">
       <div className="flex flex-col gap-4">
-        {/* Card title line + status chips */}
-        <div>
-          <p className="font-display text-lg font-bold">
-            {athlete.sport} · {athlete.gender} · {athlete.yearOfBirth}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Pill tone="brand">{bucketLabel[athlete.bucket]}</Pill>
-            <Pill tone={due.tone} dot>
-              {due.label}
-            </Pill>
-            <Pill tone={athlete.nutrition === "pro" ? "success" : "neutral"}>
-              Nutrition · {athlete.nutrition === "pro" ? "Pro" : "None"}
-            </Pill>
-          </div>
-        </div>
-
-        {/* Goal */}
-        <div className="rounded-lg border border-border bg-surface/50 p-3">
-          <span className="flex items-center gap-1.5">
-            <Target className="h-3.5 w-3.5 text-brand-ink" aria-hidden />
-            <span className="eyebrow">Goal</span>
-          </span>
-          <p className="mt-1 text-sm text-foreground/90">{goal}</p>
+        <div className="flex flex-wrap gap-1.5">
+          <Pill tone={due.tone} dot>
+            {due.label}
+          </Pill>
         </div>
 
         {/* Contact info — synced from the athlete's own profile */}

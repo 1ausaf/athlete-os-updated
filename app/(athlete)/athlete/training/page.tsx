@@ -13,11 +13,26 @@ import {
   type LibraryExercise,
 } from "@/lib/demo/training";
 
+import { NoProgramNotice } from "../status-notice";
 import { WorkoutLogger } from "./workout-logger";
 
 export default async function AthleteTrainingPage() {
   const { athlete } = requireAthleteContext();
   const { program } = athlete;
+
+  // Away/paused members keep their login — but no program runs (round 4).
+  if (athlete.status !== "active" || athlete.program.totalDays === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          eyebrow="Athlete Portal · Training"
+          title="Training"
+          description="Your program history stays right here for when you're back."
+        />
+        <NoProgramNotice athlete={athlete} />
+      </div>
+    );
+  }
 
   // Assemble serializable props for the client logger.
   const days = jordanProgramDays;

@@ -23,7 +23,7 @@ export function StaffNav({ user }: { user: AppUser }) {
   const programsDue = athletes.filter((a) => a.programDueInDays <= 5).length;
 
   const items: ShellNavItem[] = [
-    { href: "/staff/athletes", label: "Athletes", icon: Users },
+    { href: "/staff/athletes", label: "Members", icon: Users },
     {
       href: "/staff/programming",
       label: "Programming",

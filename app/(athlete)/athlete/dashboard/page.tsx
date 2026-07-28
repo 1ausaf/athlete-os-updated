@@ -35,6 +35,8 @@ import {
 } from "@/lib/demo/training";
 import { billingMeta } from "@/lib/demo/status";
 
+import { NoProgramNotice } from "../status-notice";
+
 export default async function AthleteDashboardPage() {
   const { athlete } = requireAthleteContext();
   const firstName = athlete.name.split(" ")[0];
@@ -67,6 +69,10 @@ export default async function AthleteDashboardPage() {
     (athlete.program.day / athlete.program.totalDays) * 100,
   );
 
+  // Away/paused members keep their portal — but no program runs (round 4).
+  const hasProgram =
+    athlete.status === "active" && athlete.program.totalDays > 0;
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -75,7 +81,10 @@ export default async function AthleteDashboardPage() {
         description="Your program comes first — then sessions, messages, billing and your latest wins."
       />
 
+      {!hasProgram ? <NoProgramNotice athlete={athlete} /> : null}
+
       {/* Program hero (primary content — FR-02) */}
+      {hasProgram ? (
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-5 p-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -163,6 +172,7 @@ export default async function AthleteDashboardPage() {
           </div>
         </div>
       </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Upcoming sessions */}

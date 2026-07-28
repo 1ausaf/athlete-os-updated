@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarClock,
   CheckSquare,
+  IdCard,
+  Target,
   Trash2,
   UserCog,
 } from "lucide-react";
@@ -11,11 +13,14 @@ import {
 import { Progress } from "@/components/app/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { Textarea } from "@/components/ui/textarea";
 import {
+  bucketLabel,
   fmtDay,
   statusLabel,
   type Athlete,
   type AthleteStatus,
+  type MemberBucket,
 } from "@/lib/demo/data";
 import {
   athleteChecklists,
@@ -294,6 +299,190 @@ export function ChecklistsCard({ athlete }: { athlete: Athlete }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Trello-style editable details — carried over from the retired card modal
+ * ("whatever is in those cards, we should put them into here somehow").
+ * Click a field and change it; saves locally in the demo.
+ */
+export function DetailsCard({ athlete }: { athlete: Athlete }) {
+  const [a, setA] = useState({
+    bucket: athlete.bucket,
+    sport: athlete.sport,
+    yob: athlete.yearOfBirth,
+    gender: athlete.gender,
+    dueDays: athlete.programDueInDays,
+    nutrition: athlete.nutrition,
+  });
+
+  const patch = <K extends keyof typeof a>(key: K, value: (typeof a)[K]) =>
+    setA((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-5">
+        <div className="flex items-center gap-2">
+          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Details</h3>
+          <span className="ml-auto text-[0.7rem] text-muted-foreground">
+            Click a field to change it
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <FieldSelect
+            label="Membership"
+            value={a.bucket}
+            options={(Object.keys(bucketLabel) as MemberBucket[]).map((b) => ({
+              value: b,
+              label: bucketLabel[b],
+            }))}
+            onChange={(v) => patch("bucket", v as MemberBucket)}
+          />
+          <FieldInput
+            label="Sport"
+            value={a.sport}
+            onCommit={(v) => patch("sport", v || a.sport)}
+          />
+          <FieldInput
+            label="YOB"
+            value={String(a.yob)}
+            numeric
+            onCommit={(v) => {
+              const n = Number(v);
+              if (Number.isFinite(n) && n > 1900) patch("yob", n);
+            }}
+          />
+          <FieldSelect
+            label="Gender"
+            value={a.gender}
+            options={[
+              { value: "M", label: "M" },
+              { value: "F", label: "F" },
+            ]}
+            onChange={(v) => patch("gender", v as "M" | "F")}
+          />
+          <FieldInput
+            label="Due (days)"
+            value={String(a.dueDays)}
+            numeric
+            onCommit={(v) => {
+              const n = Number(v);
+              if (Number.isFinite(n) && n >= 0) patch("dueDays", n);
+            }}
+          />
+          <FieldSelect
+            label="Nutrition"
+            value={a.nutrition}
+            options={[
+              { value: "pro", label: "Pro" },
+              { value: "none", label: "None" },
+            ]}
+            onChange={(v) => patch("nutrition", v as "pro" | "none")}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Click-to-edit goals — also carried over from the card modal. */
+export function GoalsCard({ initialGoal }: { initialGoal: string }) {
+  const [goal, setGoal] = useState(initialGoal);
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-2 p-5">
+        <div className="flex items-center gap-2">
+          <Target className="h-5 w-5 text-brand-ink" aria-hidden />
+          <h3 className="text-base">Goal</h3>
+        </div>
+        {editing ? (
+          <Textarea
+            autoFocus
+            rows={2}
+            value={goal}
+            className="text-sm"
+            onChange={(e) => setGoal(e.target.value)}
+            onBlur={() => setEditing(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Click to edit"
+            className="-m-1 rounded-md p-1 text-left text-sm leading-relaxed text-foreground/90 transition-colors hover:bg-accent/50"
+          >
+            {goal || "Click to add a goal…"}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FieldSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FieldInput({
+  label,
+  value,
+  numeric = false,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  numeric?: boolean;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <input
+        value={draft}
+        inputMode={numeric ? "numeric" : undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onCommit(draft.trim())}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input focus:border-input focus:outline-none"
+      />
+    </label>
   );
 }
 
