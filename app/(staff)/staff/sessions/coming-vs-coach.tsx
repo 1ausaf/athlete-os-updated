@@ -42,7 +42,7 @@ export function ComingVsCoach({
           ) : null}
           {roster.length === 0 ? (
             <span className="text-xs text-muted-foreground">
-              No athletes booked
+              No clients booked
             </span>
           ) : null}
         </div>

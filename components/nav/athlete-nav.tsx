@@ -1,8 +1,10 @@
 "use client";
 
+import type { Route } from "next";
 import {
   Apple,
   CalendarDays,
+  CircleUserRound,
   ClipboardCheck,
   CreditCard,
   Dumbbell,
@@ -59,11 +61,20 @@ export function AthleteNav({
 
   items.push({ href: "/athlete/profile", label: "Profile", icon: UserRound });
 
+  // P3 — parents get their OWN profile, separate from the kids' profiles.
+  if (isParent) {
+    items.push({
+      href: "/athlete/parent" as Route,
+      label: "My profile",
+      icon: CircleUserRound,
+    });
+  }
+
   return (
     <ShellNav
       title="Athlete Portal"
       subtitle={
-        isParent ? `${user.fullName} · viewing ${athlete.name}` : user.fullName
+        isParent ? `${user.fullName} · managing ${athlete.name}` : user.fullName
       }
       items={items}
     />

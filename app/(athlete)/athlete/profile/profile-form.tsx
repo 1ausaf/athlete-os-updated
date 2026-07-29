@@ -3,37 +3,53 @@
 import { useState } from "react";
 import {
   AtSign,
+  Camera,
   CheckCircle2,
+  HeartPulse,
   Instagram,
   Link2,
   MapPin,
   Phone,
   Save,
+  Scale,
   ShieldAlert,
   UserRound,
 } from "lucide-react";
 
+import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { AthleteProfile } from "@/lib/demo/data";
 
 /**
- * Self-service profile (A20): address, contact details, socials and
- * recruiting links. What's saved here is what the coaching staff sees on the
- * athlete's card — no more re-typing contact info into Trello.
+ * Self-service profile (A20 + round 5 A16): photo spot, split name fields,
+ * full address (province/state + country), read-only parent info linked from
+ * the parent account, an editable emergency contact, and the preferred unit
+ * that drives the session-log default.
  */
 export function ProfileForm({
   initial,
   athleteName,
+  initials,
+  hue,
   gender,
   isMinor,
   isParentView,
 }: {
   initial: AthleteProfile;
   athleteName: string;
+  initials: string;
+  hue: number;
   gender: "M" | "F";
   isMinor: boolean;
   isParentView: boolean;
@@ -49,6 +65,17 @@ export function ProfileForm({
     setSaved(false);
   };
 
+  const setEmergency = (
+    patch: Partial<NonNullable<AthleteProfile["emergencyContact"]>>,
+  ) => {
+    set("emergencyContact", {
+      name: p.emergencyContact?.name ?? "",
+      relation: p.emergencyContact?.relation ?? "",
+      phone: p.emergencyContact?.phone ?? "",
+      ...patch,
+    });
+  };
+
   function handleSave() {
     setSaved(true);
     window.setTimeout(() => setSaved(false), 3500);
@@ -56,16 +83,42 @@ export function ProfileForm({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Identity — DOB + gender live on the record (assessment needs them) */}
+      {/* Identity — photo spot + locked names + DOB (round 5, A16) */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <UserRound className="h-5 w-5 text-muted-foreground" aria-hidden />
             <h3 className="text-base">Identity</h3>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Full name">
-              <Input value={athleteName} disabled className="bg-muted/40" />
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="relative">
+              <AthleteAvatar initials={initials} hue={hue} size="xl" />
+              <button
+                type="button"
+                title="Upload photo (demo)"
+                aria-label="Upload profile photo"
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{athleteName}</p>
+              <p className="mt-0.5 max-w-md text-xs text-muted-foreground text-pretty">
+                Your photo appears on rosters and huddle boards so coaches
+                recognize you. Upload is a demo here — production stores the
+                image.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="First name">
+              <Input value={p.firstName} disabled className="bg-muted/40" />
+            </Field>
+            <Field label="Last name">
+              <Input value={p.lastName} disabled className="bg-muted/40" />
             </Field>
             <Field label="Date of birth">
               <Input
@@ -78,6 +131,10 @@ export function ProfileForm({
               <Input value={gender === "M" ? "Male" : "Female"} disabled className="bg-muted/40" />
             </Field>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Name changes go through the front desk — they update your legal
+            record everywhere at once.
+          </p>
         </CardContent>
       </Card>
 
@@ -108,7 +165,7 @@ export function ProfileForm({
             <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />
             <span className="text-sm font-semibold">Home address</span>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Street" className="sm:col-span-2">
               <Input
                 value={p.address.street}
@@ -125,6 +182,14 @@ export function ProfileForm({
                 }
               />
             </Field>
+            <Field label="Province / State">
+              <Input
+                value={p.address.region}
+                onChange={(e) =>
+                  set("address", { ...p.address, region: e.target.value })
+                }
+              />
+            </Field>
             <Field label="Postal code">
               <Input
                 value={p.address.postal}
@@ -133,6 +198,44 @@ export function ProfileForm({
                 }
               />
             </Field>
+            <Field label="Country">
+              <Input
+                value={p.address.country}
+                onChange={(e) =>
+                  set("address", { ...p.address, country: e.target.value })
+                }
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Training preferences — the logger reads this default (A7/A16) */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+          <div className="flex items-center gap-2">
+            <Scale className="h-5 w-5 text-muted-foreground" aria-hidden />
+            <h3 className="text-base">Training preferences</h3>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Preferred unit">
+              <Select
+                value={p.preferredUnit}
+                onValueChange={(v) => set("preferredUnit", v as "lb" | "kg")}
+              >
+                <SelectTrigger aria-label="Preferred weight unit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lb">Pounds (lb)</SelectItem>
+                  <SelectItem value="kg">Kilograms (kg)</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <p className="self-end pb-2 text-xs text-muted-foreground text-pretty">
+              Sets the default unit in your session log — each exercise
+              section can still be flipped on the floor.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -173,7 +276,7 @@ export function ProfileForm({
         </CardContent>
       </Card>
 
-      {/* Guardian — required for minors */}
+      {/* Parent / guardian — read-only, linked from the parent account (A16) */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-2">
@@ -185,60 +288,74 @@ export function ProfileForm({
               </Pill>
             ) : null}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {p.guardian ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Name">
+                  <Input value={p.guardian.name} disabled className="bg-muted/40" />
+                </Field>
+                <Field label="Relation">
+                  <Input
+                    value={p.guardian.relation}
+                    disabled
+                    className="bg-muted/40"
+                  />
+                </Field>
+                <Field label="Phone">
+                  <Input value={p.guardian.phone} disabled className="bg-muted/40" />
+                </Field>
+                <Field label="Email">
+                  <Input value={p.guardian.email} disabled className="bg-muted/40" />
+                </Field>
+              </div>
+              <p className="text-xs text-muted-foreground text-pretty">
+                Linked from the parent account — parents keep this current in
+                their own profile.
+              </p>
+            </>
+          ) : (
+            <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+              No linked parent account on file
+              {isMinor
+                ? " — the front desk links one during onboarding."
+                : "."}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Emergency contact — editable, for when it's not the parents (A16) */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+          <div className="flex items-center gap-2">
+            <HeartPulse className="h-5 w-5 text-muted-foreground" aria-hidden />
+            <h3 className="text-base">Emergency contact</h3>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Name">
               <Input
-                value={p.guardian?.name ?? ""}
-                onChange={(e) =>
-                  set("guardian", {
-                    name: e.target.value,
-                    relation: p.guardian?.relation ?? "",
-                    phone: p.guardian?.phone ?? "",
-                    email: p.guardian?.email ?? "",
-                  })
-                }
+                value={p.emergencyContact?.name ?? ""}
+                onChange={(e) => setEmergency({ name: e.target.value })}
               />
             </Field>
             <Field label="Relation">
               <Input
-                value={p.guardian?.relation ?? ""}
-                onChange={(e) =>
-                  set("guardian", {
-                    name: p.guardian?.name ?? "",
-                    relation: e.target.value,
-                    phone: p.guardian?.phone ?? "",
-                    email: p.guardian?.email ?? "",
-                  })
-                }
+                value={p.emergencyContact?.relation ?? ""}
+                onChange={(e) => setEmergency({ relation: e.target.value })}
               />
             </Field>
             <Field label="Phone">
               <Input
-                value={p.guardian?.phone ?? ""}
-                onChange={(e) =>
-                  set("guardian", {
-                    name: p.guardian?.name ?? "",
-                    relation: p.guardian?.relation ?? "",
-                    phone: e.target.value,
-                    email: p.guardian?.email ?? "",
-                  })
-                }
-              />
-            </Field>
-            <Field label="Email">
-              <Input
-                value={p.guardian?.email ?? ""}
-                onChange={(e) =>
-                  set("guardian", {
-                    name: p.guardian?.name ?? "",
-                    relation: p.guardian?.relation ?? "",
-                    phone: p.guardian?.phone ?? "",
-                    email: e.target.value,
-                  })
-                }
+                type="tel"
+                value={p.emergencyContact?.phone ?? ""}
+                onChange={(e) => setEmergency({ phone: e.target.value })}
               />
             </Field>
           </div>
+          <p className="text-xs text-muted-foreground text-pretty">
+            Who we call first in an emergency — useful when it&apos;s not the
+            parents.
+          </p>
         </CardContent>
       </Card>
 
@@ -254,8 +371,8 @@ export function ProfileForm({
         ) : (
           <span className="text-xs text-muted-foreground">
             {isParentView
-              ? "You're editing this on your child's behalf."
-              : "Changes appear on your card in the coach workspace."}
+              ? "You're editing this on your child's behalf. Saves locally in this demo."
+              : "Changes appear on your card in the coach workspace. Saves locally in this demo."}
           </span>
         )}
       </div>

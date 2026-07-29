@@ -11,6 +11,7 @@ import {
   Link2,
   ListOrdered,
   MapPin,
+  PencilLine,
   Play,
   Printer,
   Trophy,
@@ -18,10 +19,12 @@ import {
 } from "lucide-react";
 
 import { Progress } from "@/components/app/progress";
+import { TabBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { fmtFullDay, type Pr } from "@/lib/demo/data";
 import {
   LB_PER_KG,
   LOAD_MODE_LABEL,
@@ -32,6 +35,7 @@ import {
   lbToKg,
   slotGroup,
   type CircuitItem,
+  type CompletedSession,
   type ExerciseHistory,
   type LibraryExercise,
   type ProgramDay,
@@ -49,7 +53,7 @@ type Unit = "lb" | "kg";
 interface SetLog {
   /** Logged weight, in the unit it was entered/prescribed. Null = BW / %-computed. */
   weight: { value: number; unit: Unit } | null;
-  /** Entry/display unit for THIS row — kg on set 1 and lb on set 2 is fine. */
+  /** Display unit for THIS row — driven by the exercise-level lb⇄kg toggle. */
   unit: Unit;
   /**
    * What the athlete actually did (reps, time, distance…). This is the whole
@@ -64,11 +68,20 @@ interface WorkoutLoggerProps {
   exercises: Record<string, LibraryExercise>;
   history: Record<string, ExerciseHistory>;
   maxes: Record<string, ReferenceMaxEntry>;
+  /** Past completed sessions — the "fix a forgotten log" tab (round 5, A2). */
+  completed: CompletedSession[];
+  /** Personal records — expanded on the training landing page (round 5, A8). */
+  prs: Pr[];
+  /** Profile-preferred unit — the default for every exercise section (A7). */
+  preferredUnit: Unit;
 }
 
 const exKey = (dayId: string, slot: string) => `${dayId}:${slot}`;
 
-function buildInitialLogs(days: ProgramDay[]): Record<string, SetLog[]> {
+function buildInitialLogs(
+  days: ProgramDay[],
+  defaultUnit: Unit,
+): Record<string, SetLog[]> {
   const out: Record<string, SetLog[]> = {};
   for (const day of days) {
     for (const section of day.sections) {
@@ -78,7 +91,7 @@ function buildInitialLogs(days: ProgramDay[]): Record<string, SetLog[]> {
             (s.loadMode === "lb" || s.loadMode === "kg") && s.load != null
               ? { value: s.load, unit: s.loadMode }
               : null,
-          unit: s.loadMode === "kg" ? "kg" : "lb",
+          unit: defaultUnit,
           result: "",
         }));
       }
@@ -97,7 +110,7 @@ function convertRaw(value: number, from: Unit, to: Unit): number {
   return roundForUnit(from === "kg" ? value * LB_PER_KG : value / LB_PER_KG, to);
 }
 
-/** Display a logged weight in the current global unit (live lb⇄kg swap). */
+/** Display a logged weight in the row's current unit (live lb⇄kg swap). */
 function weightInUnit(w: SetLog["weight"], unit: Unit): string {
   if (w == null) return "";
   if (w.unit === unit) return String(w.value);
@@ -145,19 +158,32 @@ function groupExercises(
 }
 
 /* ------------------------------------------------------------------ */
-/* Main component                                                      */
+/* Main component — landing (tabs + PRs) or a single open workout      */
 /* ------------------------------------------------------------------ */
+
+type LandingTab = "published" | "past";
 
 export function WorkoutLogger({
   days,
   exercises,
   history,
   maxes,
+  completed,
+  prs,
+  preferredUnit,
 }: WorkoutLoggerProps) {
-  const [activeDayId, setActiveDayId] = useState(days[0]?.id ?? "");
-  const [unit, setUnit] = useState<Unit>("lb");
+  const [tab, setTab] = useState<LandingTab>("published");
+  /**
+   * Which workout is open. Null = the landing page (tabs + PR panel). When
+   * opened from the Past tab we keep the session so the header can flag
+   * "Editing a completed session" (A2 — fix forgotten/wrong entries).
+   */
+  const [open, setOpen] = useState<{
+    dayId: string;
+    completedSession: CompletedSession | null;
+  } | null>(null);
   const [logs, setLogs] = useState<Record<string, SetLog[]>>(() =>
-    buildInitialLogs(days),
+    buildInitialLogs(days, preferredUnit),
   );
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [video, setVideo] = useState<{ lib: LibraryExercise; index: number } | null>(
@@ -169,7 +195,7 @@ export function WorkoutLogger({
   const [savedFlash, setSavedFlash] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const activeDay = days.find((d) => d.id === activeDayId) ?? days[0];
+  const activeDay = open ? days.find((d) => d.id === open.dayId) ?? null : null;
 
   function flashSaved() {
     if (savedTimer.current) clearTimeout(savedTimer.current);
@@ -180,6 +206,11 @@ export function WorkoutLogger({
   const circuitFor = (ex: ProgramExercise): CircuitItem[] | undefined =>
     exercises[ex.exerciseId]?.circuit;
 
+  /**
+   * Round 5 (A6): ANY logged set marks the whole exercise section done —
+   * "if they hit a max we stop them; as long as one is done, the section is
+   * done." Circuits (warm-up movement lists) still want every movement.
+   */
   const isDone = (key: string, circuitLen?: number): boolean => {
     if (doneOverride[key] != null) return doneOverride[key];
     if (circuitLen) {
@@ -187,7 +218,7 @@ export function WorkoutLogger({
       return items.length >= circuitLen && items.slice(0, circuitLen).every(Boolean);
     }
     const rows = logs[key] ?? [];
-    return rows.length > 0 && rows.every((r) => r.result.trim() !== "");
+    return rows.length > 0 && rows.some((r) => r.result.trim() !== "");
   };
 
   const dayProgress = (day: ProgramDay) => {
@@ -231,16 +262,16 @@ export function WorkoutLogger({
     flashSaved();
   }
 
-  /** Global lb⇄kg applies to every row; rows can still be flipped one by one. */
-  function applyUnitToAll(u: Unit) {
-    setUnit(u);
-    setLogs((prev) => {
-      const next: Record<string, SetLog[]> = {};
-      for (const [k, rows] of Object.entries(prev)) {
-        next[k] = rows.map((r) => ({ ...r, unit: u }));
-      }
-      return next;
-    });
+  /**
+   * Round 5 (A7): the exercise-section lb⇄kg toggle — flips EVERY set in
+   * that section ("different gym areas use different plates"). The default
+   * comes from the athlete profile's preferred unit.
+   */
+  function setSectionUnit(key: string, u: Unit) {
+    setLogs((prev) => ({
+      ...prev,
+      [key]: (prev[key] ?? []).map((row) => ({ ...row, unit: u })),
+    }));
   }
 
   /**
@@ -271,93 +302,240 @@ export function WorkoutLogger({
     flashSaved();
   }
 
-  if (!activeDay) return null;
+  /* -------------------------------------------------- Landing view */
 
-  return (
-    <>
-      {/* -------------------------------------------------- Day picker */}
-      <Card className="no-print">
-        <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <ListOrdered className="h-5 w-5 text-brand-ink" aria-hidden />
-                <h3 className="text-base">Program</h3>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground text-pretty">
-                Sessions run in order — day one, day two, day three, restarting
-                each week. At LPS on a remote day? Skip ahead and do the next
-                LPS session instead.
-              </p>
-            </div>
-          </div>
+  if (!open || !activeDay) {
+    return (
+      <>
+        <TabBar<LandingTab>
+          tabs={[
+            { value: "published", label: "Published workouts" },
+            {
+              value: "past",
+              label: "Past completed sessions",
+              count: completed.length,
+            },
+          ]}
+          active={tab}
+          onSelect={setTab}
+        />
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            {days.map((day, i) => {
-              const active = day.id === activeDay.id;
-              const p = dayProgress(day);
-              return (
-                <button
-                  key={day.id}
-                  type="button"
-                  onClick={() => setActiveDayId(day.id)}
-                  aria-pressed={active}
-                  className={cn(
-                    "flex flex-col gap-2 rounded-xl border p-4 text-left transition-colors",
-                    active
-                      ? "border-brand/50 bg-brand/[0.05] ring-1 ring-brand/40"
-                      : "border-border bg-surface/50 hover:border-brand/30 hover:bg-accent/40",
-                  )}
-                >
-                  <div className="flex w-full flex-wrap items-center gap-2">
-                    <span className="tnum text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                      Day {day.dayNumber}
-                    </span>
-                    {i === 0 ? (
-                      <Pill tone="brand" dot>
-                        Up next
-                      </Pill>
-                    ) : null}
-                    <Pill
-                      tone={day.location === "gym" ? "neutral" : "info"}
-                      icon={
-                        day.location === "gym" ? (
-                          <MapPin className="h-3 w-3" />
-                        ) : (
-                          <Home className="h-3 w-3" />
-                        )
-                      }
-                      className="ml-auto"
-                    >
-                      {LOCATION_LABEL[day.location]}
-                    </Pill>
+        {tab === "published" ? (
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ListOrdered className="h-5 w-5 text-brand-ink" aria-hidden />
+                    <h3 className="text-base">Program</h3>
                   </div>
-                  <span className="text-sm font-semibold leading-snug">
-                    {day.title}
-                  </span>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">
-                    {day.focus}
+                  <p className="mt-1 text-xs text-muted-foreground text-pretty">
+                    Sessions run in order — day one, day two, day three,
+                    restarting each week. At LPS on a remote day? Skip ahead
+                    and do the next LPS session instead.
                   </p>
-                  <div className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                    <span className="tnum">
-                      {p.total} movement{p.total === 1 ? "" : "s"}
-                    </span>
-                    {p.done > 0 ? (
-                      <span className="tnum font-semibold text-success">
-                        · {p.done}/{p.total} done
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {days.map((day, i) => {
+                  const p = dayProgress(day);
+                  return (
+                    <button
+                      key={day.id}
+                      type="button"
+                      onClick={() =>
+                        setOpen({ dayId: day.id, completedSession: null })
+                      }
+                      className="flex flex-col gap-2 rounded-xl border border-border bg-surface/50 p-4 text-left transition-colors hover:border-brand/30 hover:bg-accent/40"
+                    >
+                      <div className="flex w-full flex-wrap items-center gap-2">
+                        <span className="tnum text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                          Day {day.dayNumber}
+                        </span>
+                        {i === 0 ? (
+                          <Pill tone="brand" dot>
+                            Up next
+                          </Pill>
+                        ) : null}
+                        <Pill
+                          tone={day.location === "gym" ? "neutral" : "info"}
+                          icon={
+                            day.location === "gym" ? (
+                              <MapPin className="h-3 w-3" />
+                            ) : (
+                              <Home className="h-3 w-3" />
+                            )
+                          }
+                          className="ml-auto"
+                        >
+                          {LOCATION_LABEL[day.location]}
+                        </Pill>
+                      </div>
+                      <span className="text-sm font-semibold leading-snug">
+                        {day.title}
+                      </span>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {day.focus}
+                      </p>
+                      <div className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+                        <span className="tnum">
+                          {p.total} movement{p.total === 1 ? "" : "s"}
+                        </span>
+                        {p.done > 0 ? (
+                          <span className="tnum font-semibold text-success">
+                            · {p.done}/{p.total} done
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <History className="h-5 w-5 text-brand-ink" aria-hidden />
+                  <h3 className="text-base">Past completed sessions</h3>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground text-pretty">
+                  Forgot to log a set, or entered the wrong unit? Open any
+                  completed session and fix the entries — everything stays
+                  editable.
+                </p>
+              </div>
+
+              {completed.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+                  No completed sessions yet — finish a published workout and it
+                  lands here.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {completed.map((s, i) => {
+                    const dayExists = days.some((d) => d.id === s.dayId);
+                    return (
+                      <li
+                        key={`${s.dayId}-${s.completedOn}-${i}`}
+                        className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold">
+                            Day {s.dayNumber} — {s.title}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Completed {fmtFullDay(s.completedOn)} · {s.summary}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!dayExists}
+                          onClick={() =>
+                            setOpen({ dayId: s.dayId, completedSession: s })
+                          }
+                        >
+                          <PencilLine className="h-3.5 w-3.5" aria-hidden />
+                          Open log
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Personal records — fully expanded on the landing page (A8) */}
+        <Card>
+          <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-brand-ink" aria-hidden />
+            <h3 className="text-base">Personal records</h3>
+            <span className="ml-auto tnum text-xs text-muted-foreground">
+              {prs.length} on file
+            </span>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {prs.map((pr) => (
+              <li
+                key={pr.id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-brand/10 text-brand-ink">
+                  <Trophy className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">
+                    {pr.lift}
+                    {pr.reps ? (
+                      <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+                        {pr.reps === 1 ? "1-rep max" : `${pr.reps}-rep max`}
                       </span>
                     ) : null}
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                  <div className="text-xs text-muted-foreground">
+                    {fmtFullDay(pr.date)}
+                  </div>
+                </div>
+                <span className="tnum text-sm font-bold">
+                  {pr.value}
+                  <span className="ml-0.5 text-xs font-medium text-muted-foreground">
+                    {pr.unit}
+                  </span>
+                  {pr.reps ? (
+                    <span className="ml-1 text-xs font-semibold text-muted-foreground">
+                      × {pr.reps}
+                    </span>
+                  ) : null}
+                </span>
+                {pr.isNew ? <Pill tone="brand">New</Pill> : null}
+              </li>
+            ))}
+          </ul>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+
+  /* -------------------------------------------------- Open workout */
+
+  const editingCompleted = open.completedSession;
+
+  return (
+    <>
+      {/* No day-picker strip once a workout is open (A3) — just a way back. */}
+      <div className="no-print flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(null)}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          All workouts
+        </Button>
+        {editingCompleted ? (
+          <Pill tone="info" icon={<PencilLine className="h-3 w-3" />}>
+            Editing a completed session ·{" "}
+            {fmtFullDay(editingCompleted.completedOn)}
+          </Pill>
+        ) : null}
+      </div>
 
       {/* -------------------------------------------------- Session logger */}
-      <Card className="print-flat overflow-hidden">
-        <CardContent className="flex flex-col gap-5 p-5 sm:p-6">
+      <Card className="print-flat session-print overflow-hidden">
+        <CardContent className="print-tight flex flex-col gap-5 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -391,30 +569,6 @@ export function WorkoutLogger({
               <p className="text-xs text-muted-foreground">{activeDay.focus}</p>
             </div>
             <div className="flex items-center gap-2">
-              {/* Global lb ⇄ kg swap — Olympic lifts in kilos, gym lifts in pounds. */}
-              <div
-                role="group"
-                aria-label="Weight unit — applies to all sets"
-                title="Sets all rows — each set also has its own lb/kg flip"
-                className="no-print flex items-center rounded-lg border border-border bg-surface/60 p-0.5"
-              >
-                {(["lb", "kg"] as const).map((u) => (
-                  <button
-                    key={u}
-                    type="button"
-                    aria-pressed={unit === u}
-                    onClick={() => applyUnitToAll(u)}
-                    className={cn(
-                      "rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition-colors",
-                      unit === u
-                        ? "bg-brand text-brand-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {u}
-                  </button>
-                ))}
-              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -485,7 +639,7 @@ export function WorkoutLogger({
                           exKey(activeDay.id, ex.slot),
                           circuitFor(ex)?.length,
                         )}
-                        unit={unit}
+                        defaultUnit={preferredUnit}
                         maxes={maxes}
                         inSuperset
                         isLastInGroup={i === group.exercises.length - 1}
@@ -507,6 +661,9 @@ export function WorkoutLogger({
                         onToggleCheck={(idx, target) =>
                           toggleSetCheck(exKey(activeDay.id, ex.slot), idx, target)
                         }
+                        onSetUnit={(u) =>
+                          setSectionUnit(exKey(activeDay.id, ex.slot), u)
+                        }
                         onOpenVideo={(lib, index) => setVideo({ lib, index })}
                       />
                     ))}
@@ -525,7 +682,7 @@ export function WorkoutLogger({
                     exKey(activeDay.id, group.exercises[0]!.slot),
                     circuitFor(group.exercises[0]!)?.length,
                   )}
-                  unit={unit}
+                  defaultUnit={preferredUnit}
                   maxes={maxes}
                   circuitState={
                     circuitDone[exKey(activeDay.id, group.exercises[0]!.slot)] ??
@@ -558,6 +715,12 @@ export function WorkoutLogger({
                       target,
                     )
                   }
+                  onSetUnit={(u) =>
+                    setSectionUnit(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      u,
+                    )
+                  }
                   onOpenVideo={(lib, index) => setVideo({ lib, index })}
                 />
               ),
@@ -566,12 +729,34 @@ export function WorkoutLogger({
 
           <p className="text-xs text-muted-foreground text-pretty">
             Log what you actually did, set by set — tap the check to log the
-            set as written, or type what you got. Marking an exercise done
-            counts even if you stopped after the top set. Your coach sees
-            everything.
+            set as written, or type what you got. One logged set counts the
+            whole exercise done, so a stopped-after-the-max day still reads
+            right. Your coach sees everything.
           </p>
         </CardContent>
       </Card>
+
+      {/* Round 5 (A4): print the session sheet at ~12px so a full day fits on
+          one page. Scoped to .session-print — staff print paths untouched. */}
+      <style>{`
+        @media print {
+          .session-print { font-size: 11px; }
+          .session-print .print-tight { padding: 0.5rem !important; gap: 0.5rem !important; }
+          .session-print h3 { font-size: 12px !important; }
+          .session-print .text-lg { font-size: 12px !important; }
+          .session-print .text-base { font-size: 11px !important; }
+          .session-print .text-sm { font-size: 10.5px !important; }
+          .session-print .text-xs { font-size: 9.5px !important; }
+          .session-print .eyebrow { font-size: 8.5px !important; }
+          .session-print .p-4 { padding: 0.35rem 0.5rem !important; }
+          .session-print .py-2 { padding-top: 0.15rem !important; padding-bottom: 0.15rem !important; }
+          .session-print .gap-3 { gap: 0.35rem !important; }
+          .session-print .gap-5 { gap: 0.45rem !important; }
+          .session-print .print-set-row { padding-top: 1px !important; padding-bottom: 1px !important; }
+          .session-print .print-set-row input { height: 1rem !important; font-size: 9.5px !important; }
+          .session-print .rounded-xl { border-radius: 0.4rem !important; }
+        }
+      `}</style>
 
       {video ? (
         <VideoModal
@@ -606,7 +791,7 @@ function ExerciseBlock({
   hist,
   rows,
   done,
-  unit,
+  defaultUnit,
   maxes,
   inSuperset = false,
   isLastInGroup = true,
@@ -615,6 +800,7 @@ function ExerciseBlock({
   onToggleDone,
   onUpdateSet,
   onToggleCheck,
+  onSetUnit,
   onOpenVideo,
 }: {
   ex: ProgramExercise;
@@ -622,7 +808,8 @@ function ExerciseBlock({
   hist: ExerciseHistory | undefined;
   rows: SetLog[];
   done: boolean;
-  unit: Unit;
+  /** Fallback unit for unseeded rows — the athlete's preferred unit. */
+  defaultUnit: Unit;
   maxes: Record<string, ReferenceMaxEntry>;
   inSuperset?: boolean;
   isLastInGroup?: boolean;
@@ -631,6 +818,8 @@ function ExerciseBlock({
   onToggleDone: () => void;
   onUpdateSet: (idx: number, patch: Partial<SetLog>) => void;
   onToggleCheck: (idx: number, target: string) => void;
+  /** The section-level lb⇄kg toggle (A7) — flips every set in this block. */
+  onSetUnit: (u: Unit) => void;
   onOpenVideo: (lib: LibraryExercise, index: number) => void;
 }) {
   const name = lib?.name ?? ex.exerciseId;
@@ -643,7 +832,12 @@ function ExerciseBlock({
     ex.repMode === "reps" ? "Done" : REP_MODE_LABEL[ex.repMode];
 
   const usesPct = ex.sets.some((s) => s.loadMode === "pct");
+  const usesWeight = ex.sets.some(
+    (s) => s.loadMode === "lb" || s.loadMode === "kg" || s.loadMode === "pct",
+  );
   const refEntry = lib?.referenceMax ? maxes[lib.referenceMax] : undefined;
+  /** The whole section shares one display unit (A7). */
+  const sectionUnit: Unit = rows[0]?.unit ?? defaultUnit;
 
   const body = (
     // Desktop + print run two columns — exercise info left, the set table
@@ -723,20 +917,52 @@ function ExerciseBlock({
             </p>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={onToggleDone}
-          aria-pressed={done}
-          className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors",
-            done
-              ? "border-success/40 bg-success/10 text-success"
-              : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
-          )}
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {done ? "Done" : "Mark done"}
-        </button>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {/* Per-section lb⇄kg toggle (A7) — defaults from the profile unit */}
+          {usesWeight && !lib?.circuit ? (
+            <span
+              role="group"
+              aria-label={`${name}: weight unit for this section`}
+              title="Flips every set in this section between lb and kg"
+              className="no-print flex items-center rounded-md border border-border bg-surface/60 p-0.5"
+            >
+              {(["lb", "kg"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  aria-pressed={sectionUnit === u}
+                  onClick={() => onSetUnit(u)}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[0.62rem] font-bold uppercase transition-colors",
+                    sectionUnit === u
+                      ? "bg-brand text-brand-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {u}
+                </button>
+              ))}
+            </span>
+          ) : null}
+          {/* ✓-only section toggle (A5) — no "Mark done" label */}
+          <button
+            type="button"
+            onClick={onToggleDone}
+            aria-pressed={done}
+            aria-label={
+              done ? `${name}: marked done — tap to undo` : `${name}: mark done`
+            }
+            title={done ? "Done — tap to undo" : "Mark done"}
+            className={cn(
+              "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
+              done
+                ? "border-success/40 bg-success/10 text-success"
+                : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
+            )}
+          >
+            <Check className="h-4 w-4" />
+          </button>
+        </span>
       </div>
 
       {/* Circuit blocks (warm-up): one row PER MOVEMENT, each with its own
@@ -774,20 +1000,25 @@ function ExerciseBlock({
                     {item.prescription}
                   </span>
                 </span>
+                {/* ✓-only mark control (A5) */}
                 <button
                   type="button"
                   aria-pressed={itemDone}
-                  aria-label={`${item.name}: mark complete`}
+                  aria-label={
+                    itemDone
+                      ? `${item.name}: complete — tap to undo`
+                      : `${item.name}: mark complete`
+                  }
+                  title={itemDone ? "Complete — tap to undo" : "Mark complete"}
                   onClick={() => lib?.circuit && onToggleCircuitItem(i, lib.circuit.length)}
                   className={cn(
-                    "flex h-7 w-16 shrink-0 items-center justify-center gap-1 rounded-md border text-[0.65rem] font-semibold transition-colors",
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
                     itemDone
                       ? "border-success/50 bg-success/15 text-success"
                       : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
                   )}
                 >
-                  <Check className="h-3 w-3" />
-                  {itemDone ? "Done" : "Mark"}
+                  <Check className="h-3.5 w-3.5" />
                 </button>
               </li>
             );
@@ -798,13 +1029,20 @@ function ExerciseBlock({
         <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_1.75rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Set</span>
           <span className="text-center">Target</span>
-          <span>{weightHeader}</span>
+          <span>
+            {weightHeader}
+            {usesWeight ? (
+              <span className="tnum ml-1 normal-case text-muted-foreground/80">
+                ({sectionUnit})
+              </span>
+            ) : null}
+          </span>
           <span>{resultHeader}</span>
           <span aria-hidden />
         </div>
         {ex.sets.map((set, i) => {
           const row: SetLog =
-            rows[i] ?? { weight: null, unit: "lb", result: "" };
+            rows[i] ?? { weight: null, unit: defaultUnit, result: "" };
           const logged = row.result.trim() !== "";
           const short = logged && belowTarget(row.result, set.target);
           return (
@@ -819,40 +1057,27 @@ function ExerciseBlock({
                 {set.target}
               </span>
 
-              {/* Weight cell — editable with a PER-SET lb/kg flip, % resolved, BW fixed */}
+              {/* Weight cell — editable; unit follows the section toggle */}
               {set.loadMode === "lb" || set.loadMode === "kg" ? (
-                <span className="flex min-w-0 items-center gap-1">
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    aria-label={`Set ${i + 1} weight for ${name} in ${row.unit}`}
-                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
-                    value={weightInUnit(row.weight, row.unit)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "") {
-                        onUpdateSet(i, { weight: null });
-                        return;
-                      }
-                      const n = Number(v);
-                      if (!Number.isNaN(n)) {
-                        onUpdateSet(i, { weight: { value: n, unit: row.unit } });
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Set ${i + 1}: switch unit (now ${row.unit})`}
-                    title="Flip this set between lb and kg"
-                    onClick={() =>
-                      onUpdateSet(i, { unit: row.unit === "lb" ? "kg" : "lb" })
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  aria-label={`Set ${i + 1} weight for ${name} in ${row.unit}`}
+                  className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                  value={weightInUnit(row.weight, row.unit)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "") {
+                      onUpdateSet(i, { weight: null });
+                      return;
                     }
-                    className="no-print flex h-8 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-[0.6rem] font-bold uppercase text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-                  >
-                    {row.unit}
-                  </button>
-                </span>
+                    const n = Number(v);
+                    if (!Number.isNaN(n)) {
+                      onUpdateSet(i, { weight: { value: n, unit: row.unit } });
+                    }
+                  }}
+                />
               ) : set.loadMode === "pct" && set.load != null ? (
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
                   <span className="tnum text-xs text-muted-foreground">

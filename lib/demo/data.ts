@@ -1384,6 +1384,8 @@ export const invoices: Invoice[] = [
   { id: "inv-5", athleteId: "ath-ren", athleteName: "Ren Tanaka", plan: "Elite", amountCents: 52000, dueDate: at(-2), status: "paid", method: "Square" },
   { id: "inv-6", athleteId: "ath-maya", athleteName: "Maya Okafor", plan: "Academy", amountCents: 26000, dueDate: at(6), status: "upcoming", method: "Square" },
   { id: "inv-7", athleteId: "ath-leo", athleteName: "Leo Martin", plan: "Executive", amountCents: 30000, dueDate: at(-1), status: "paid", method: "Card on file" },
+  // Round 5 (P2): Noah's overdue invoice feeds his parent-switcher badge.
+  { id: "inv-8", athleteId: "ath-noah", athleteName: "Noah Okafor", plan: "Academy", amountCents: 26000, dueDate: at(-3), status: "overdue", method: "Square" },
 ];
 
 /** 8-week revenue trend (cents), oldest → newest. */

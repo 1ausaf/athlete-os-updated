@@ -21,12 +21,21 @@ import { ClientQueue } from "./client-queue";
 import { ExerciseLibrary } from "./exercise-library";
 import { ProgramLibrary } from "./program-library";
 
-export default async function ProgrammingPage() {
+export default async function ProgrammingPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string };
+}) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
 
   const dueNow = athletes.filter((a) => a.programDueInDays === 0).length;
   const dueSoon = athletes.filter((a) => a.programDueInDays <= 5).length;
+  // C25 — library detail URLs are routable; ?tab=programs brings the back
+  // button home to the right tab.
+  const tab = ["queue", "programs", "exercises"].includes(searchParams?.tab ?? "")
+    ? (searchParams!.tab as string)
+    : "queue";
 
   return (
     <div className="flex flex-col gap-6">
@@ -61,11 +70,11 @@ export default async function ProgrammingPage() {
           value={dueNow}
           icon={CalendarClock}
           accent
-          hint={`${dueSoon} athletes inside 5 days of runway`}
+          hint={`${dueSoon} clients inside 5 days of runway`}
         />
       </div>
 
-      <Tabs defaultValue="queue">
+      <Tabs defaultValue={tab}>
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="queue">Client queue</TabsTrigger>
           <TabsTrigger value="programs">Program library</TabsTrigger>
@@ -95,10 +104,6 @@ export default async function ProgrammingPage() {
             <span className="eyebrow">Groups</span>
             <h2 className="text-lg">Teams on shared programs</h2>
           </div>
-          <span className="text-xs text-muted-foreground">
-            One program, many athletes — individual loads still auto-scale to
-            each athlete&apos;s maxes.
-          </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           {trainingGroups.map((g) => {

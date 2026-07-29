@@ -22,6 +22,7 @@ import { athletes, relTime } from "@/lib/demo/data";
 import { trainingGroups, trainingSummaries } from "@/lib/demo/training";
 
 import { AnalyticsExplorer } from "./analytics-explorer";
+import { PrintReportButton } from "./print-button";
 
 const DAY_MS = 86_400_000;
 /** Athletes quiet longer than this get flagged — their old system let people drift to "last login: 100+ days". */
@@ -72,15 +73,27 @@ export default async function AnalyticsPage() {
   ).length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="analytics-report flex flex-col gap-6">
+      {/* Scoped print tweaks (C36): each panel stays on one page, shadows
+          drop, and interactive chrome hides — the report reads clean on
+          paper for the athlete. */}
+      <style>{`@media print {
+        .analytics-report { gap: 0.75rem !important; }
+        .analytics-report > * { break-inside: avoid; }
+        .analytics-report [class*="shadow"] { box-shadow: none !important; }
+        .analytics-report button { display: none !important; }
+      }`}</style>
       <PageHeader
         eyebrow="Staff Workspace · Performance"
         title="Analytics"
-        description="Estimated 1RMs, rep-max PRs, session-by-session training summaries and per-athlete compliance — over any date range. Who's progressing, who's logging, and who's gone quiet."
+        description="Estimated 1RMs, rep-max PRs, session-by-session training summaries and per-client compliance — over any date range. Who's progressing, who's logging, and who's gone quiet."
         actions={
-          <Pill tone="brand" icon={<Activity className="h-3.5 w-3.5" />}>
-            Live from training logs
-          </Pill>
+          <div className="flex items-center gap-2">
+            <Pill tone="brand" icon={<Activity className="h-3.5 w-3.5" />}>
+              Live from training logs
+            </Pill>
+            <PrintReportButton />
+          </div>
         }
       />
 
@@ -206,8 +219,8 @@ export default async function AnalyticsPage() {
                     key={a.id}
                     className={
                       stale
-                        ? "flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/[0.06] p-3"
-                        : "flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                        ? "flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-warning/40 bg-warning/[0.06] p-3"
+                        : "flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-surface/50 p-3"
                     }
                   >
                     <AthleteAvatar

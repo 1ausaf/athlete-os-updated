@@ -131,7 +131,7 @@ export default async function StaffSessionsPage({
               accent
             />
             <StatTile
-              label="Athletes on deck"
+              label="Clients on deck"
               value={athletesOnDeck}
               icon={Users}
               hint="across today's blocks"
@@ -184,7 +184,7 @@ export default async function StaffSessionsPage({
                   {group.items.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {group.items.map((s) => (
                   <PastSessionCard key={s.id} session={s} />
                 ))}
@@ -254,9 +254,6 @@ function FeaturedSession({ session }: { session: TrainingSession }) {
               <Pill tone="brand" dot>
                 Next up
               </Pill>
-              <span className="text-xs text-muted-foreground">
-                {session.type}
-              </span>
             </div>
             <h2 className="mt-2 text-2xl text-balance">{session.title}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -311,7 +308,7 @@ function FeaturedSession({ session }: { session: TrainingSession }) {
           />
           <Button asChild variant="ghost" size="sm">
             <Link href={`/staff/sessions/${session.id}` as Route}>
-              Session detail
+              Open session
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </Button>

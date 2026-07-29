@@ -2,18 +2,26 @@
 
 import { useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarCheck,
   CalendarClock,
+  ChevronDown,
   ClipboardCheck,
   Dumbbell,
+  Layers,
   LogIn,
+  Search,
   Timer,
   TrendingDown,
   TrendingUp,
   Trophy,
+  Users,
 } from "lucide-react";
 
 import { BarSeries, Sparkline } from "@/components/app/mini-charts";
+import { Progress } from "@/components/app/progress";
 import { StatTile } from "@/components/app/stat-tile";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,7 +29,9 @@ import { Pill } from "@/components/ui/pill";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -40,14 +50,19 @@ import {
   complianceStats,
   liftHistory,
   prsByRepMax,
+  trainingGroups,
   trainingSummaries,
   type LiftPoint,
   type ReferenceMaxEntry,
   type SessionSummary,
+  type TrainingGroup,
 } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
 const DAY_MS = 86_400_000;
+
+/** Sentinel for the "All lifts" combobox option (C36). */
+const ALL_LIFTS = "__all-lifts__";
 
 const shortDay = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -97,16 +112,14 @@ function compactDay(iso: string): string {
 }
 
 /**
- * Client-side analytics explorer (C21/C22): pick an athlete, one of their
- * tested lifts and a date range. Every panel below — e1RM progression,
- * rep-max PRs, training summary and compliance — follows the selection.
- * Stacked full-width rows, exactly as the client asked. Pure local state,
- * no backend.
+ * Client-side analytics explorer (C21/C22, round-5 C36): pick a CLIENT —
+ * an individual or a whole team — a lift (searchable, with "All lifts") and
+ * a date range. Every panel follows the selection. Pure local state.
  */
 export function AnalyticsExplorer() {
   const defaultAthleteId = athletesWithData[0]?.id ?? "";
-  const [athleteId, setAthleteId] = useState(defaultAthleteId);
-  const [lift, setLift] = useState(liftsFor(defaultAthleteId)[0] ?? "");
+  const [clientId, setClientId] = useState(defaultAthleteId);
+  const [lift, setLift] = useState(liftsFor(defaultAthleteId)[0] ?? ALL_LIFTS);
   const [rangeKey, setRangeKey] = useState<RangeKey>("1m");
   const [fromInput, setFromInput] = useState(() =>
     toInputDate(new Date(Date.now() - 30 * DAY_MS)),
@@ -124,30 +137,43 @@ export function AnalyticsExplorer() {
     return { fromMs: Math.min(from, to), toMs: Math.max(from, to) };
   }, [fromInput, toInput]);
 
-  const athlete = athletesWithData.find((a) => a.id === athleteId);
-  const lifts = liftsFor(athleteId);
+  const team: TrainingGroup | undefined = trainingGroups.find(
+    (g) => g.id === clientId,
+  );
+  const athlete = team
+    ? undefined
+    : athletesWithData.find((a) => a.id === clientId);
+  const athleteId = athlete?.id ?? "";
+  const lifts = athlete ? liftsFor(athlete.id) : [];
+  const allLifts = lift === ALL_LIFTS;
+
   const allPoints: LiftPoint[] =
-    lift.length > 0 ? (liftHistory[athleteId]?.[lift] ?? []) : [];
+    athlete && !allLifts ? (liftHistory[athleteId]?.[lift] ?? []) : [];
   const points = allPoints.filter((p) => {
     const t = new Date(p.date).getTime();
     return t >= fromMs && t <= toMs;
   });
-  const allSummaries: SessionSummary[] = trainingSummaries[athleteId] ?? [];
+  const allSummaries: SessionSummary[] = athlete
+    ? (trainingSummaries[athleteId] ?? [])
+    : [];
   const summaries = allSummaries.filter((s) => {
     const t = new Date(s.date).getTime();
     return t >= fromMs && t <= toMs;
   });
-  const repMaxes = lift.length > 0 ? prsByRepMax(lift, athleteId) : [];
-  const stats = complianceStats(athleteId, fromMs, toMs);
+  const stats = athlete ? complianceStats(athleteId, fromMs, toMs) : null;
   const rangeLabel = `${shortDay.format(fromMs)} – ${shortDay.format(toMs)}`;
   const loginLabel =
-    new Date(stats.lastLogin).getTime() > Date.now()
+    stats && new Date(stats.lastLogin).getTime() > Date.now()
       ? "Today"
-      : relTime(stats.lastLogin);
+      : stats
+        ? relTime(stats.lastLogin)
+        : "";
 
-  function handleAthleteChange(id: string) {
-    setAthleteId(id);
-    setLift(liftsFor(id)[0] ?? "");
+  function handleClientChange(id: string) {
+    setClientId(id);
+    if (!trainingGroups.some((g) => g.id === id)) {
+      setLift(liftsFor(id)[0] ?? ALL_LIFTS);
+    }
   }
 
   function selectPreset(key: RangeKey, days: number) {
@@ -156,55 +182,189 @@ export function AnalyticsExplorer() {
     setToInput(toInputDate(new Date()));
   }
 
+  /* -------------------------------------------------------------- */
+  /* Panels (order changes when "All lifts" makes the summary the    */
+  /* headline)                                                       */
+  /* -------------------------------------------------------------- */
+
+  const summaryCard = athlete ? (
+    <Card key="summary">
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg">Training summary</h2>
+            <p className="text-sm text-muted-foreground">
+              {athlete.name} — session-by-session totals over the selected
+              range, including how long each one actually took. Click a column
+              to sort.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {allLifts ? (
+              <Pill tone="brand" icon={<Layers className="h-3.5 w-3.5" />}>
+                All lifts · headline
+              </Pill>
+            ) : (
+              <Pill tone="brand" icon={<Timer className="h-3.5 w-3.5" />}>
+                Duration tracked
+              </Pill>
+            )}
+            <Pill tone="neutral">{rangeLabel}</Pill>
+          </div>
+        </div>
+        {summaries.length > 0 ? (
+          <TrainingSummary summaries={summaries} />
+        ) : (
+          <RangeEmpty
+            what="logged sessions"
+            hint={`${athlete.name} has ${allSummaries.length} sessions on file — widen the date range to see them.`}
+          />
+        )}
+        <p className="text-xs text-muted-foreground">
+          Duration is the column TrainHeroic never showed — LPS logs it
+          automatically on every session.
+        </p>
+      </CardContent>
+    </Card>
+  ) : null;
+
+  const e1rmCard = athlete ? (
+    <Card key="e1rm">
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg">Estimated 1RM</h2>
+            <p className="text-sm text-muted-foreground">
+              {athlete.name}
+              {allLifts
+                ? " · all lifts"
+                : lift
+                  ? ` · ${lift}`
+                  : " · no tested lifts yet"}{" "}
+              — tested sets in the selected range
+            </p>
+          </div>
+          <Pill tone="neutral">{rangeLabel}</Pill>
+        </div>
+        {allLifts ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface/50 p-8 text-center">
+            <p className="text-sm font-medium">All lifts selected</p>
+            <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+              The e1RM curve tracks one lift at a time — the training summary
+              above is the headline across every lift. Pick a single lift to
+              chart its progression.
+            </p>
+          </div>
+        ) : points.length > 0 ? (
+          <LiftProgression
+            points={points}
+            testedMax={athleteMaxes[athleteId]?.[lift]}
+          />
+        ) : allPoints.length > 0 ? (
+          <RangeEmpty
+            what="tested sets"
+            hint={`${athlete.name} has ${allPoints.length} tested ${lift} sets on file — widen the date range to see them.`}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-surface/50 p-8 text-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+              <Dumbbell className="h-5 w-5 text-muted-foreground" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-medium">No tested lifts yet</p>
+              <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
+                {athlete.name} hasn&apos;t logged a tested top set. Once
+                testing week lands, the estimated-1RM curve builds itself.
+              </p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  ) : null;
+
+  const repMaxCard = athlete ? (
+    <Card key="repmax">
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg">PRs by rep-max</h2>
+            <p className="text-sm text-muted-foreground">
+              Best single, double, triple, 5 and 10-rep sets on record
+              {allLifts ? " for every lift" : lift ? ` for ${lift}` : ""} —
+              real dates, not &ldquo;30d ago&rdquo;.
+            </p>
+          </div>
+          <Pill tone="brand" icon={<Trophy className="h-3.5 w-3.5" />}>
+            All-time bests
+          </Pill>
+        </div>
+        {allLifts ? (
+          <div className="flex flex-col gap-4">
+            {lifts.map((l) => (
+              <div key={l} className="flex flex-col gap-2">
+                <span className="text-sm font-semibold">{l}</span>
+                <RepMaxGrid entries={prsByRepMax(l, athleteId)} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <RepMaxGrid entries={lift ? prsByRepMax(lift, athleteId) : []} />
+        )}
+      </CardContent>
+    </Card>
+  ) : null;
+
   return (
     <section className="flex flex-col gap-4">
-      {/* Controls: athlete + lift + date range (presets and custom from–to) */}
-      <div className="flex flex-wrap items-end gap-3">
+      {/* Controls: client + lift + date range (presets and custom from–to) */}
+      <div className="no-print flex flex-wrap items-end gap-3">
         <div className="flex w-full flex-col gap-1.5 sm:w-56">
           <label className="text-xs font-medium text-muted-foreground">
-            Athlete
+            Client
           </label>
-          <Select value={athleteId} onValueChange={handleAthleteChange}>
+          <Select value={clientId} onValueChange={handleClientChange}>
             <SelectTrigger>
-              <SelectValue placeholder="Pick an athlete" />
+              <SelectValue placeholder="Pick a client" />
             </SelectTrigger>
             <SelectContent>
-              {athletesWithData.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel>Athletes</SelectLabel>
+                {athletesWithData.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Teams</SelectLabel>
+                {trainingGroups.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
-        <div className="flex w-full flex-col gap-1.5 sm:w-56">
+        <div className="flex w-full flex-col gap-1.5 sm:w-64">
           <label className="text-xs font-medium text-muted-foreground">
             Lift
           </label>
-          {lifts.length > 0 ? (
-            <Select value={lift} onValueChange={setLift}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pick a lift" />
-              </SelectTrigger>
-              <SelectContent>
-                {lifts.map((l) => (
-                  <SelectItem key={l} value={l}>
-                    {l}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="flex h-9 w-full items-center rounded-md border border-input px-3 text-sm text-muted-foreground opacity-70">
-              No tested lifts yet
-            </div>
-          )}
+          <LiftCombobox
+            lifts={lifts}
+            value={lift}
+            onChange={setLift}
+            disabled={Boolean(team)}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-muted-foreground">
             Date range
           </label>
-          <div className="flex flex-wrap items-center gap-2">
+          {/* gap-4 — the client asked for extra room between the preset
+              chips and the from–to inputs */}
+          <div className="flex flex-wrap items-center gap-4">
             <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
               {RANGE_PRESETS.map(({ key, label, days }) => {
                 const active = rangeKey === key;
@@ -217,7 +377,7 @@ export function AnalyticsExplorer() {
                     className={cn(
                       "rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
                       active
-                        ? "bg-card text-foreground shadow-soft"
+                        ? "bg-brand text-brand-foreground shadow-soft"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -265,130 +425,46 @@ export function AnalyticsExplorer() {
         ) : null}
       </div>
 
-      {/* Row 1 — Estimated 1RM: chart + tested-set table side by side on xl */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg">Estimated 1RM</h2>
-              <p className="text-sm text-muted-foreground">
-                {athlete?.name}
-                {lift ? ` · ${lift}` : " · no tested lifts yet"} — tested sets
-                in the selected range
-              </p>
-            </div>
-            <Pill tone="neutral">{rangeLabel}</Pill>
-          </div>
-          {points.length > 0 && athlete ? (
-            <LiftProgression
-              points={points}
-              testedMax={athleteMaxes[athleteId]?.[lift]}
-            />
-          ) : allPoints.length > 0 ? (
-            <RangeEmpty
-              what="tested sets"
-              hint={`${athlete?.name ?? "This athlete"} has ${allPoints.length} tested ${lift} sets on file — widen the date range to see them.`}
-            />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-surface/50 p-8 text-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
-                <Dumbbell
-                  className="h-5 w-5 text-muted-foreground"
-                  aria-hidden
-                />
-              </span>
-              <div>
-                <p className="text-sm font-medium">No tested lifts yet</p>
-                <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
-                  {athlete?.name ?? "This athlete"} hasn&apos;t logged a tested
-                  top set. Once testing week lands, the estimated-1RM curve
-                  builds itself.
+      {team ? (
+        <>
+          <TeamViewCard team={team} rangeLabel={rangeLabel} />
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg">Estimated 1RM</h2>
+                <Pill tone="info" icon={<Users className="h-3.5 w-3.5" />}>
+                  Team view
+                </Pill>
+              </div>
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface/50 p-8 text-center">
+                <p className="text-sm font-medium">
+                  Pick an individual client for lift charts
+                </p>
+                <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+                  Lift progressions, rep-max PRs and personal training
+                  summaries are per-athlete — team members each log their own
+                  numbers against the shared program.
                 </p>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </>
+      ) : allLifts ? (
+        <>
+          {summaryCard}
+          {e1rmCard}
+          {repMaxCard}
+        </>
+      ) : (
+        <>
+          {e1rmCard}
+          {repMaxCard}
+          {summaryCard}
+        </>
+      )}
 
-      {/* Row 2 — PRs by rep-max (C21): best 1/2/3/5/10RM with real dates */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg">PRs by rep-max</h2>
-              <p className="text-sm text-muted-foreground">
-                Best single, double, triple, 5 and 10-rep sets on record
-                {lift ? ` for ${lift}` : ""} — real dates, not &ldquo;30d
-                ago&rdquo;.
-              </p>
-            </div>
-            <Pill tone="brand" icon={<Trophy className="h-3.5 w-3.5" />}>
-              All-time bests
-            </Pill>
-          </div>
-          {repMaxes.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              {repMaxes.map((r) => (
-                <div
-                  key={r.reps}
-                  className="rounded-lg border border-border bg-surface/50 p-4"
-                >
-                  <span className="eyebrow">{r.reps}-rep max</span>
-                  <div className="mt-1.5 flex items-baseline gap-1.5">
-                    <span className="tnum font-display text-2xl font-extrabold tracking-tight">
-                      {r.weight}
-                    </span>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {r.unit} × {r.reps}
-                    </span>
-                  </div>
-                  <p className="tnum mt-1 text-xs text-muted-foreground">
-                    {fmtFullDay(r.date)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed border-border bg-surface/50 p-6 text-center text-sm text-muted-foreground">
-              No rep-max history yet — PRs derive automatically from logged
-              tested sets.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Row 3 — Training summary over the selected range */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg">Training summary</h2>
-              <p className="text-sm text-muted-foreground">
-                Session-by-session totals over the selected range — including
-                how long each one actually took.
-              </p>
-            </div>
-            <Pill tone="brand" icon={<Timer className="h-3.5 w-3.5" />}>
-              Duration tracked · new
-            </Pill>
-          </div>
-          {summaries.length > 0 ? (
-            <TrainingSummary summaries={summaries} />
-          ) : (
-            <RangeEmpty
-              what="logged sessions"
-              hint={`${athlete?.name ?? "This athlete"} has ${allSummaries.length} sessions on file — widen the date range to see them.`}
-            />
-          )}
-          <p className="text-xs text-muted-foreground">
-            Duration is the column TrainHeroic never showed — LPS logs it
-            automatically on every session.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Row 4 — Compliance (C22): booking, fill-in, last scheduled, last login */}
-      {athlete ? (
+      {/* Compliance (C22): booking, fill-in, last scheduled, last login */}
+      {athlete && stats ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -435,6 +511,217 @@ export function AnalyticsExplorer() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Lift combobox (C36) — searchable, with an "All lifts" option        */
+/* ------------------------------------------------------------------ */
+
+function LiftCombobox({
+  lifts,
+  value,
+  onChange,
+  disabled,
+}: {
+  lifts: string[];
+  value: string;
+  onChange: (lift: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  if (disabled) {
+    return (
+      <div className="flex h-9 w-full items-center rounded-md border border-input px-3 text-sm text-muted-foreground opacity-70">
+        Team view — no single lift
+      </div>
+    );
+  }
+
+  const display = value === ALL_LIFTS ? "All lifts" : value || "";
+  const q = query.trim().toLowerCase();
+  const filtered = lifts.filter((l) => l.toLowerCase().includes(q));
+  const showAllOption = q.length === 0 || "all lifts".includes(q);
+
+  function pick(next: string) {
+    onChange(next);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div className="relative">
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden
+      />
+      <Input
+        value={open ? query : display}
+        placeholder="Search lifts…"
+        aria-label="Search lifts"
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        className="h-9 pl-8 pr-8"
+      />
+      <ChevronDown
+        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden
+      />
+      {open ? (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            aria-hidden
+            onClick={() => setOpen(false)}
+          />
+          <ul
+            role="listbox"
+            aria-label="Lifts"
+            className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-raised"
+          >
+            {showAllOption ? (
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === ALL_LIFTS}
+                  onClick={() => pick(ALL_LIFTS)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent",
+                    value === ALL_LIFTS && "font-semibold",
+                  )}
+                >
+                  <Layers
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  All lifts
+                  <span className="ml-auto text-[0.65rem] text-muted-foreground">
+                    summary headline
+                  </span>
+                </button>
+              </li>
+            ) : null}
+            {filtered.map((l) => (
+              <li key={l}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={l === value}
+                  onClick={() => pick(l)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent",
+                    l === value && "font-semibold",
+                  )}
+                >
+                  <Dumbbell
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {l}
+                </button>
+              </li>
+            ))}
+            {filtered.length === 0 && !showAllOption ? (
+              <li className="px-2.5 py-2 text-xs text-muted-foreground">
+                No lifts match &ldquo;{query}&rdquo;
+              </li>
+            ) : null}
+            <li
+              aria-hidden
+              className="mt-1 border-t border-border px-2.5 py-1.5 text-[0.65rem] text-muted-foreground"
+            >
+              Type to search — the production library holds hundreds of lifts.
+            </li>
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Team view (C36 — teams are clients too)                             */
+/* ------------------------------------------------------------------ */
+
+function TeamViewCard({
+  team,
+  rangeLabel,
+}: {
+  team: TrainingGroup;
+  rangeLabel: string;
+}) {
+  const pct = Math.round((team.compliance.filled / team.compliance.total) * 100);
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg">{team.name}</h2>
+            <p className="text-sm text-muted-foreground">
+              {team.focus} · {team.program}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Pill tone="info" icon={<Users className="h-3.5 w-3.5" />}>
+              Team view
+            </Pill>
+            <Pill tone="neutral">{rangeLabel}</Pill>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-surface/50 p-4">
+            <span className="eyebrow">Members</span>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="tnum font-display text-2xl font-extrabold tracking-tight">
+                {team.athleteCount}
+              </span>
+              <span className="text-sm text-muted-foreground">athletes</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              each logs their own data on the shared program
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-surface/50 p-4">
+            <span className="eyebrow">Group compliance</span>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="tnum font-display text-2xl font-extrabold tracking-tight">
+                {pct}%
+              </span>
+              <span className="tnum text-sm text-muted-foreground">
+                {team.compliance.filled}/{team.compliance.total} filled in
+              </span>
+            </div>
+            <Progress
+              value={pct}
+              tone={pct >= 60 ? "brand" : "warning"}
+              className="mt-2"
+            />
+          </div>
+          <div className="rounded-lg border border-border bg-surface/50 p-4">
+            <span className="eyebrow">Last session</span>
+            <div className="mt-1.5 text-2xl font-extrabold tracking-tight">
+              {relTime(team.lastSession)}
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              Coaches: {team.coachNames.join(", ")}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Team analytics roll up group compliance — pick an individual member
+          from the Client selector for lift charts and personal summaries.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Shared empty state for range-filtered panels                        */
 /* ------------------------------------------------------------------ */
 
@@ -443,6 +730,48 @@ function RangeEmpty({ what, hint }: { what: string; hint: string }) {
     <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface/50 p-8 text-center">
       <p className="text-sm font-medium">No {what} in this range</p>
       <p className="mx-auto max-w-sm text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Rep-max grid (shared by single-lift and all-lifts views)            */
+/* ------------------------------------------------------------------ */
+
+function RepMaxGrid({
+  entries,
+}: {
+  entries: ReturnType<typeof prsByRepMax>;
+}) {
+  if (entries.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-border bg-surface/50 p-6 text-center text-sm text-muted-foreground">
+        No rep-max history yet — PRs derive automatically from logged tested
+        sets.
+      </p>
+    );
+  }
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {entries.map((r) => (
+        <div
+          key={r.reps}
+          className="rounded-lg border border-border bg-surface/50 p-4"
+        >
+          <span className="eyebrow">{r.reps}-rep max</span>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="tnum font-display text-2xl font-extrabold tracking-tight">
+              {r.weight}
+            </span>
+            <span className="text-sm font-medium text-muted-foreground">
+              {r.unit} × {r.reps}
+            </span>
+          </div>
+          <p className="tnum mt-1 text-xs text-muted-foreground">
+            {fmtFullDay(r.date)}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -510,7 +839,7 @@ function LiftProgression({
       </div>
 
       {/* Tested-set history */}
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -544,12 +873,53 @@ function LiftProgression({
 }
 
 /* ------------------------------------------------------------------ */
-/* Training summary panel body                                         */
+/* Training summary panel body — sortable columns (C36)                */
 /* ------------------------------------------------------------------ */
 
+type SummarySortKey = "date" | "title" | "reps" | "volume" | "duration";
+
+const SUMMARY_SORTERS: Record<
+  SummarySortKey,
+  (s: SessionSummary) => number | string
+> = {
+  date: (s) => new Date(s.date).getTime(),
+  title: (s) => s.title.toLowerCase(),
+  reps: (s) => s.reps,
+  volume: (s) => s.volumeKg,
+  duration: (s) => s.durationMin,
+};
+
 function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
-  // Data arrives newest-first; the volume chart wants oldest → newest.
-  const chrono = [...summaries].reverse();
+  const [sortKey, setSortKey] = useState<SummarySortKey>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function toggleSort(key: SummarySortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "title" ? "asc" : "desc");
+    }
+  }
+
+  const sorted = useMemo(() => {
+    const sorter = SUMMARY_SORTERS[sortKey];
+    const out = [...summaries].sort((a, b) => {
+      const va = sorter(a);
+      const vb = sorter(b);
+      const cmp =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return out;
+  }, [summaries, sortKey, sortDir]);
+
+  // The volume chart wants oldest → newest regardless of table sort.
+  const chrono = [...summaries].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
   const totalReps = summaries.reduce((n, s) => n + s.reps, 0);
   const totalVolume = summaries.reduce((n, s) => n + s.volumeKg, 0);
   const avgDuration = summaries.length
@@ -579,21 +949,59 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
         />
       </div>
 
-      {/* Per-session table */}
-      <div className="overflow-hidden rounded-lg border border-border">
+      {/* Per-session table — click a header to sort */}
+      <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead>Date</TableHead>
-              <TableHead>Session</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Reps</TableHead>
-              <TableHead className="text-right">Volume (kg)</TableHead>
-              <TableHead className="text-right">Duration</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Blocks</TableHead>
+              <SortableHead
+                label="Date"
+                sortKey="date"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
+                label="Session"
+                sortKey="title"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
+                label="Reps"
+                sortKey="reps"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="hidden text-right sm:table-cell"
+                align="right"
+              />
+              <SortableHead
+                label="Volume (kg)"
+                sortKey="volume"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="text-right"
+                align="right"
+              />
+              <SortableHead
+                label="Duration"
+                sortKey="duration"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="text-right"
+                align="right"
+              />
+              <TableHead className="hidden text-right sm:table-cell">
+                Blocks
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {summaries.map((s) => {
+            {sorted.map((s) => {
               const [done, prescribed] = s.blocksCompleted.split("/");
               const partial = done !== prescribed;
               return (
@@ -640,5 +1048,49 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
         </Table>
       </div>
     </div>
+  );
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  current,
+  dir,
+  onSort,
+  className,
+  align,
+}: {
+  label: string;
+  sortKey: SummarySortKey;
+  current: SummarySortKey;
+  dir: "asc" | "desc";
+  onSort: (key: SummarySortKey) => void;
+  className?: string;
+  align?: "right";
+}) {
+  const active = current === sortKey;
+  const Icon = !active ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          align === "right" && "justify-end",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <Icon
+          className={cn(
+            "h-3 w-3",
+            active ? "text-brand-ink" : "text-muted-foreground/60",
+          )}
+          aria-hidden
+        />
+      </button>
+    </TableHead>
   );
 }

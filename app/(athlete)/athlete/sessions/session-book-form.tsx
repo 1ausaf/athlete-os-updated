@@ -15,13 +15,16 @@ import {
   Info,
   ListChecks,
   Lock,
+  Repeat2,
   RotateCcw,
   ShieldCheck,
   Undo2,
+  UserRound,
   X,
 } from "lucide-react";
 
 import { Progress } from "@/components/app/progress";
+import { TabBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill, type PillTone } from "@/components/ui/pill";
@@ -29,6 +32,7 @@ import {
   SESSION_TYPE_INFO,
   type BookableSlot,
   type MyBooking,
+  type PastBooking,
 } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
@@ -99,9 +103,15 @@ const byStart = (a: MyBooking, b: MyBooking) =>
 /* Main client component                                               */
 /* ------------------------------------------------------------------ */
 
+type SessionsTab = "book" | "booked" | "past";
+
+/** Round 5 (A10): "book this pattern for the next N weeks" options. */
+const REPEAT_OPTIONS = [2, 4, 6, 8, 12] as const;
+
 export function SessionBooking({
   slots,
   initialBookings,
+  pastSessions,
   frequencyPerWeek,
   bookedThisWeek,
   frequencyLabel,
@@ -112,6 +122,8 @@ export function SessionBooking({
   slots: BookableSlot[];
   /** Already-booked upcoming sessions. */
   initialBookings: MyBooking[];
+  /** Attended / no-show history — the "Past sessions" tab (round 5, A9). */
+  pastSessions: PastBooking[];
   frequencyPerWeek: number;
   bookedThisWeek: number;
   /** e.g. "3×/week" */
@@ -158,6 +170,10 @@ export function SessionBooking({
   );
   const [flash, setFlash] = useState<Flash | null>(null);
   const [rescheduling, setRescheduling] = useState<MyBooking | null>(null);
+  /** The three-tab layout: Book / Booked / Past (round 5, A9). */
+  const [tab, setTab] = useState<SessionsTab>("book");
+  /** 1 = just the ticked slots; N = repeat the pattern for N weeks (A10). */
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
 
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const availableRef = useRef<HTMLDivElement | null>(null);
@@ -248,29 +264,74 @@ export function SessionBooking({
     });
   }
 
+  /**
+   * Round 5 (A10): the same weekday/time pattern, k weeks later. Prefer the
+   * real generated slot (so it reads "Booked" in the available list); fall
+   * back to a shifted time if that week isn't in the 12-week window.
+   */
+  function repeatTimesFor(
+    orig: BookableSlot,
+    k: number,
+  ): { startsAt: string; endsAt: string } {
+    const targetStart = new Date(
+      new Date(orig.startsAt).getTime() + k * WEEK_MS,
+    );
+    const match = slots.find((s) => {
+      if (s.label !== orig.label) return false;
+      const d = new Date(s.startsAt);
+      return (
+        weekOf(s.startsAt) === weekStartMs(targetStart) &&
+        d.getDay() === targetStart.getDay() &&
+        d.getHours() === targetStart.getHours() &&
+        d.getMinutes() === targetStart.getMinutes()
+      );
+    });
+    if (match) return { startsAt: match.startsAt, endsAt: match.endsAt };
+    return {
+      startsAt: targetStart.toISOString(),
+      endsAt: new Date(
+        new Date(orig.endsAt).getTime() + k * WEEK_MS,
+      ).toISOString(),
+    };
+  }
+
   function bookSelected() {
     if (overdue || selectedSlots.length === 0) return;
     const releasing = rescheduling;
-    const newBookings: MyBooking[] = selectedSlots.map((s) => ({
-      id: `bk-${s.id}`,
-      startsAt: s.startsAt,
-      endsAt: s.endsAt,
-      label: s.label,
-      status: "confirmed",
-    }));
+    const newBookings: MyBooking[] = [];
+    const takenStarts = new Set(bookedStarts);
+    for (const s of selectedSlots) {
+      for (let k = 0; k < Math.max(1, repeatWeeks); k++) {
+        const times = k === 0 ? { startsAt: s.startsAt, endsAt: s.endsAt } : repeatTimesFor(s, k);
+        if (takenStarts.has(times.startsAt)) continue;
+        takenStarts.add(times.startsAt);
+        newBookings.push({
+          id: `bk-${s.id}-w${k}`,
+          startsAt: times.startsAt,
+          endsAt: times.endsAt,
+          label: s.label,
+          status: "confirmed",
+        });
+      }
+    }
     setBookings((prev) =>
       [...prev.filter((b) => b.id !== releasing?.id), ...newBookings].sort(
         byStart,
       ),
     );
+    const patternSize = selectedSlots.length;
+    const weeks = Math.max(1, repeatWeeks);
     setSelected(new Set());
     setRescheduling(null);
+    setRepeatWeeks(1);
     const n = newBookings.length;
     showFlash({
       tone: "success",
       text: releasing
         ? `Rescheduled — ${n} new ${n === 1 ? "time" : "times"} booked and ${fmtDay(releasing.startsAt)} · ${fmtTime(releasing.startsAt)} released.`
-        : `${n} ${n === 1 ? "session" : "sessions"} booked — see them under "Your booked sessions" above.`,
+        : weeks > 1
+          ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total) — see them in the Booked tab.`
+          : `${n} ${n === 1 ? "session" : "sessions"} booked — see them in the Booked tab.`,
     });
   }
 
@@ -314,6 +375,8 @@ export function SessionBooking({
 
   function startReschedule(b: MyBooking) {
     setRescheduling(b);
+    // The available-times list lives in the Book tab.
+    setTab("book");
     requestAnimationFrame(() =>
       availableRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -369,6 +432,19 @@ export function SessionBooking({
         </Card>
       ) : null}
 
+      {/* Three tabs: Book / Booked / Past (round 5, A9 — line style) */}
+      <TabBar<SessionsTab>
+        tabs={[
+          { value: "book", label: "Book sessions" },
+          { value: "booked", label: "Booked", count: bookings.length },
+          { value: "past", label: "Past sessions", count: pastSessions.length },
+        ]}
+        active={tab}
+        onSelect={setTab}
+      />
+
+      {tab === "book" ? (
+      <>
       {/* Weekly cadence meter (FR-10) */}
       <Card className="bg-brand-sheen">
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
@@ -394,7 +470,11 @@ export function SessionBooking({
         </CardContent>
       </Card>
 
-      {/* Your booked sessions — cancel / reschedule */}
+      </>
+      ) : null}
+
+      {/* Your booked sessions — cancel / reschedule (Booked tab) */}
+      {tab === "booked" ? (
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg">Your booked sessions</h2>
@@ -402,8 +482,8 @@ export function SessionBooking({
         </div>
         {bookings.length === 0 ? (
           <Empty>
-            Nothing booked yet — check the times you want below and book them
-            all at once.
+            Nothing booked yet — flip to the Book sessions tab, check the
+            times you want and book them all at once.
           </Empty>
         ) : (
           <Card>
@@ -470,8 +550,74 @@ export function SessionBooking({
           </Card>
         )}
       </section>
+      ) : null}
 
-      {/* Available times — the check-check-check list */}
+      {/* Past sessions — attendance history (round 5, A9) */}
+      {tab === "past" ? (
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg">Past sessions</h2>
+        </div>
+        <p className="tnum text-sm text-muted-foreground">
+          {pastSessions.length}{" "}
+          {pastSessions.length === 1 ? "session" : "sessions"} ·{" "}
+          {pastSessions.filter((p) => p.attended).length} attended
+          {pastSessions.some((p) => !p.attended)
+            ? ` · ${pastSessions.filter((p) => !p.attended).length} no-show`
+            : ""}
+        </p>
+        {pastSessions.length === 0 ? (
+          <Empty>No past sessions yet — your history builds here.</Empty>
+        ) : (
+          <Card>
+            <ul className="divide-y divide-border">
+              {pastSessions.map((p) => {
+                const d = new Date(p.startsAt);
+                return (
+                  <li
+                    key={p.id}
+                    className="flex flex-wrap items-center gap-3 p-3 sm:px-4"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-center">
+                      <span className="text-[0.6rem] uppercase text-muted-foreground">
+                        {d.toLocaleDateString("en-US", { month: "short" })}
+                      </span>
+                      <span className="tnum text-sm font-bold leading-none">
+                        {d.getDate()}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                        {p.label}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span className="tnum">
+                          {fmtDay(p.startsAt)} · {fmtRange(p.startsAt, p.endsAt)}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <UserRound className="h-3 w-3" aria-hidden />
+                          {p.coach}
+                        </span>
+                      </div>
+                    </div>
+                    {p.attended ? (
+                      <Pill tone="success" icon={<Check className="h-3 w-3" />}>
+                        Attended
+                      </Pill>
+                    ) : (
+                      <Pill tone="danger">No-show</Pill>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        )}
+      </section>
+      ) : null}
+
+      {/* Available times — the check-check-check list (Book tab) */}
+      {tab === "book" ? (
       <section
         ref={availableRef}
         className="flex scroll-mt-24 flex-col gap-3"
@@ -588,35 +734,70 @@ export function SessionBooking({
           );
         })}
       </section>
+      ) : null}
 
       {/* Sticky action bar / toast-like confirmation */}
       <div className="pointer-events-none sticky bottom-4 z-30">
         {selected.size > 0 && !overdue ? (
-          <div className="pointer-events-auto mx-auto flex w-full max-w-xl flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-glow">
-            <ListChecks className="h-5 w-5 shrink-0 text-brand-ink" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="tnum text-sm font-semibold">
-                {selected.size} selected
-              </p>
-              <p className="tnum text-xs text-muted-foreground">
-                {selectedThisWeek > 0
-                  ? `${selectedThisWeek} this week · ${selected.size - selectedThisWeek} in later weeks`
-                  : "all in later weeks"}
-              </p>
+          <div className="pointer-events-auto mx-auto flex w-full max-w-xl flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-glow">
+            <div className="flex flex-wrap items-center gap-3">
+              <ListChecks className="h-5 w-5 shrink-0 text-brand-ink" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="tnum text-sm font-semibold">
+                  {selected.size} selected
+                </p>
+                <p className="tnum text-xs text-muted-foreground">
+                  {selectedThisWeek > 0
+                    ? `${selectedThisWeek} this week · ${selected.size - selectedThisWeek} in later weeks`
+                    : "all in later weeks"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelected(new Set())}
+              >
+                Clear
+              </Button>
+              <Button type="button" variant="brand" size="sm" onClick={bookSelected}>
+                <CheckCheck className="h-4 w-4" aria-hidden />
+                Book {selected.size} selected{" "}
+                {selected.size === 1 ? "session" : "sessions"}
+                {repeatWeeks > 1 ? ` × ${repeatWeeks} wks` : ""}
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelected(new Set())}
-            >
-              Clear
-            </Button>
-            <Button type="button" variant="brand" size="sm" onClick={bookSelected}>
-              <CheckCheck className="h-4 w-4" aria-hidden />
-              Book {selected.size} selected{" "}
-              {selected.size === 1 ? "session" : "sessions"}
-            </Button>
+            {/* Repeat the ticked weekday/time pattern for N weeks (A10) */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+              <Repeat2
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <label
+                htmlFor="repeat-weeks"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Repeat
+              </label>
+              <select
+                id="repeat-weeks"
+                value={repeatWeeks}
+                onChange={(e) => setRepeatWeeks(Number(e.target.value))}
+                className="h-7 rounded-md border border-border bg-surface/60 px-2 text-xs font-medium text-foreground outline-none transition-colors focus:border-brand/50"
+              >
+                <option value={1}>Don&apos;t repeat</option>
+                {REPEAT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    for {n} weeks
+                  </option>
+                ))}
+              </select>
+              <span className="min-w-0 flex-1 text-[0.7rem] text-muted-foreground">
+                {repeatWeeks > 1
+                  ? `Books the same weekday & time pattern for ${repeatWeeks} weeks in one go.`
+                  : "Ticked a weekly pattern? Book it for weeks ahead in one go."}
+              </span>
+            </div>
           </div>
         ) : flash ? (
           <div

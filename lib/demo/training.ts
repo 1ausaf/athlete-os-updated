@@ -414,17 +414,6 @@ export const exerciseLibrary: LibraryExercise[] = [
     createdBy: "LPS Athletic",
   },
   {
-    id: "ex-a-skip",
-    name: "A-Skips",
-    tags: ["Agility", "Speed"],
-    videoUrl: "https://youtu.be/ASkip001",
-    pointsOfPerformance: ["Knee punches up.", "Snap the foot down under the hip."],
-    referenceMax: null,
-    defaultLoadMode: "bw",
-    defaultRepMode: "distance",
-    createdBy: "LPS Athletic",
-  },
-  {
     id: "ex-mb-slam",
     name: "Med Ball Slam",
     tags: ["Power", "Med Ball"],
@@ -762,6 +751,253 @@ export const jordanProgramDays: ProgramDay[] = [
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Per-athlete published days (round 5, P7 — no more Jordan-only data)  */
+/* ------------------------------------------------------------------ */
+
+/** Maya Okafor — Off-Season Hypertrophy, Block A (kept deliberately small). */
+export const mayaProgramDays: ProgramDay[] = [
+  {
+    id: "maya-day-1",
+    dayNumber: 1,
+    title: "Full Body A",
+    location: "gym",
+    focus: "Accumulation — controlled tempo, leave 2 in the tank",
+    sections: [
+      {
+        title: "Warm-up",
+        exercises: [
+          {
+            slot: "A",
+            exerciseId: "ex-dyn-warmup",
+            instructions: "For completion",
+            repMode: "reps",
+            sets: [rx("1 round", null, "bw")],
+          },
+        ],
+      },
+      {
+        title: "Strength",
+        exercises: [
+          {
+            slot: "B",
+            exerciseId: "ex-back-squat",
+            instructions: "3ct down, drive up tall",
+            repMode: "reps",
+            sets: [rx("8", 95, "lb"), rx("8", 105, "lb"), rx("8", 105, "lb")],
+          },
+          {
+            slot: "C1",
+            exerciseId: "ex-db-bench-neutral",
+            instructions: "Elbows 45°",
+            repMode: "reps",
+            sets: [rx("10", 30, "lb"), rx("10", 30, "lb"), rx("10", 32.5, "lb")],
+          },
+          {
+            slot: "C2",
+            exerciseId: "ex-cs-row",
+            instructions: "Squeeze 1ct at the top",
+            repMode: "reps",
+            sets: [rx("10", 40, "lb"), rx("10", 40, "lb"), rx("10", 45, "lb")],
+          },
+        ],
+      },
+      {
+        title: "Accessory",
+        exercises: [
+          {
+            slot: "D",
+            exerciseId: "ex-split-squat",
+            instructions: "Knee tracks the toe — post-ankle, build slow",
+            repMode: "reps",
+            sets: [rx("8/side", 20, "lb"), rx("8/side", 20, "lb")],
+          },
+          {
+            slot: "E",
+            exerciseId: "ex-pallof",
+            instructions: "Ribs down, no lean",
+            repMode: "reps",
+            sets: [rx("10/side", 25, "lb"), rx("10/side", 25, "lb")],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "maya-day-2",
+    dayNumber: 2,
+    title: "Jump & Core",
+    location: "home",
+    focus: "Elastic work + trunk — do this one at home",
+    sections: [
+      {
+        title: "Circuit",
+        exercises: [
+          {
+            slot: "A1",
+            exerciseId: "ex-pogo",
+            instructions: "Stiff ankles, quiet landings",
+            repMode: "time",
+            sets: [rx("0:20", null, "bw"), rx("0:20", null, "bw"), rx("0:20", null, "bw")],
+          },
+          {
+            slot: "A2",
+            exerciseId: "ex-dead-bug",
+            instructions: "Low back stays glued down",
+            repMode: "reps",
+            sets: [rx("10/side", null, "bw"), rx("10/side", null, "bw"), rx("10/side", null, "bw")],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "maya-day-3",
+    dayNumber: 3,
+    title: "Full Body B",
+    location: "gym",
+    focus: "Accumulation — same lifts, add a rep or 5 lb",
+    sections: [
+      {
+        title: "Warm-up",
+        exercises: [
+          {
+            slot: "A",
+            exerciseId: "ex-dyn-warmup",
+            instructions: "For completion",
+            repMode: "reps",
+            sets: [rx("1 round", null, "bw")],
+          },
+        ],
+      },
+      {
+        title: "Strength",
+        exercises: [
+          {
+            slot: "B",
+            exerciseId: "ex-trapbar-dl",
+            instructions: "Flat back, push the floor away",
+            repMode: "reps",
+            sets: [rx("6", 135, "lb"), rx("6", 155, "lb"), rx("6", 155, "lb")],
+          },
+          {
+            slot: "C",
+            exerciseId: "ex-step-up",
+            instructions: "Full foot on the box",
+            repMode: "reps",
+            sets: [rx("8/side", 25, "lb"), rx("8/side", 25, "lb")],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+/** Noah Okafor — Academy Foundations (age 11: technique + play). */
+export const noahProgramDays: ProgramDay[] = [
+  {
+    id: "noah-day-1",
+    dayNumber: 1,
+    title: "Movement Skills A",
+    location: "gym",
+    focus: "Foundations — jump, land, sprint, carry",
+    sections: [
+      {
+        title: "Warm-up",
+        exercises: [
+          {
+            slot: "A",
+            exerciseId: "ex-dyn-warmup",
+            instructions: "For completion — have fun with it",
+            repMode: "reps",
+            sets: [rx("1 round", null, "bw")],
+          },
+        ],
+      },
+      {
+        title: "Skills",
+        exercises: [
+          {
+            slot: "B",
+            exerciseId: "ex-broad-jump",
+            instructions: "Stick every landing for 2ct",
+            repMode: "reps",
+            sets: [rx("5", null, "bw"), rx("5", null, "bw")],
+          },
+          {
+            slot: "C",
+            exerciseId: "ex-a-skip",
+            instructions: "Tall posture, big arms",
+            repMode: "distance",
+            sets: [rx("15 yd", null, "bw"), rx("15 yd", null, "bw"), rx("15 yd", null, "bw")],
+          },
+          {
+            slot: "D",
+            exerciseId: "ex-farmer-walk",
+            instructions: "Shoulders back, no leaning",
+            repMode: "distance",
+            sets: [rx("20 yd", 15, "lb"), rx("20 yd", 15, "lb")],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "noah-day-2",
+    dayNumber: 2,
+    title: "Movement Skills B",
+    location: "gym",
+    focus: "Foundations — throw, push, balance",
+    sections: [
+      {
+        title: "Skills",
+        exercises: [
+          {
+            slot: "A",
+            exerciseId: "ex-mb-slam",
+            instructions: "Whole body, slam hard",
+            repMode: "reps",
+            sets: [rx("6", 6, "lb"), rx("6", 6, "lb"), rx("6", 6, "lb")],
+          },
+          {
+            slot: "B",
+            exerciseId: "ex-sled-push",
+            instructions: "Low and powerful",
+            repMode: "distance",
+            sets: [rx("15 yd", 45, "lb"), rx("15 yd", 45, "lb")],
+          },
+          {
+            slot: "C",
+            exerciseId: "ex-dead-bug",
+            instructions: "Slow and steady",
+            repMode: "reps",
+            sets: [rx("8/side", null, "bw"), rx("8/side", null, "bw")],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * The published days for a given athlete — every athlete surface must resolve
+ * through this instead of reaching for `jordanProgramDays` (the round-5 parent
+ * video caught Maya's portal showing Jordan's program).
+ */
+export function programDaysFor(athleteId: string): ProgramDay[] {
+  switch (athleteId) {
+    case "ath-jordan":
+      return jordanProgramDays;
+    case "ath-maya":
+      return mayaProgramDays;
+    case "ath-noah":
+      return noahProgramDays;
+    default:
+      // Unseeded athletes get Maya's generic block so the demo always works.
+      return mayaProgramDays;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Multi-week program (C10/C16) — weeks + auto-publish                 */

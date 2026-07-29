@@ -19,6 +19,8 @@ import {
 } from "@/lib/demo/training";
 import { isStaff } from "@/lib/rbac";
 
+import { TemplateLabels } from "./template-labels";
+
 /**
  * Master-template editor (C10) — the program builder in TEMPLATE mode.
  * `templateId` "new" scaffolds an empty program from the New-program modal's
@@ -60,7 +62,8 @@ export default async function TemplateBuilderPage({
     });
   }
 
-  const backHref = "/staff/programming" as Route;
+  // C25 — real URL per template; back returns to the library tab.
+  const backHref = "/staff/programming?tab=programs" as Route;
 
   return (
     <div className="flex flex-col gap-6">
@@ -90,10 +93,13 @@ export default async function TemplateBuilderPage({
         }
       />
 
+      {/* C25 — audience labels live on the template header */}
+      <TemplateLabels initial={tpl?.labels ?? []} />
+
       <p className="flex items-start gap-2 rounded-lg border border-info/30 bg-info/[0.07] px-3 py-2.5 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" />
-        Editing master template — copies onto athletes keep their own loads.
-        Changes here never touch programs already copied to an athlete.
+        Editing master template — copies onto clients keep their own loads.
+        Changes here never touch programs already applied to a client.
       </p>
 
       <ProgramBuilder

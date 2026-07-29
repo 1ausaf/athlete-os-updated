@@ -21,6 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { fmtDay } from "@/lib/demo/data";
 import type { StaffMember } from "@/lib/demo/staff";
 
+import { EnablePushButton } from "../team/push-permission";
+
 /**
  * The coach's own profile ("we're missing the Profile tab" on the coaching
  * side): contact details, bio + photo, notification preferences, and their
@@ -129,6 +131,7 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
               />
             </label>
           ))}
+          <EnablePushButton hint="Most coaches are on their phones — accept notifications from this website so session changes reach this device." />
         </CardContent>
       </Card>
 

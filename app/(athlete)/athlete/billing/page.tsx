@@ -6,6 +6,7 @@ import {
   Landmark,
   Receipt,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
@@ -13,11 +14,51 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireAthleteContext } from "@/lib/demo/session";
-import { fmtDay, invoices, money2, plans } from "@/lib/demo/data";
+import { athleteProfileById, fmtDay, invoices, money2, plans } from "@/lib/demo/data";
 import { billingMeta } from "@/lib/demo/status";
 
 export default async function AthleteBillingPage() {
-  const { athlete } = requireAthleteContext();
+  const { athlete, isParentView } = requireAthleteContext();
+
+  // Round 5 (P4): parents handle a minor's billing. A minor's own login gets
+  // a friendly hand-off instead of card UI; the parent view is unchanged.
+  if (athlete.isMinor && !isParentView) {
+    const guardianName = athleteProfileById(athlete.id)?.guardian?.name;
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          eyebrow="Athlete Portal · Billing"
+          title="Billing"
+          description="Membership and payments for your training."
+        />
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/20 bg-brand/10 text-brand-ink">
+              <UserRound className="h-6 w-6" aria-hidden />
+            </span>
+            <p className="text-base font-semibold">
+              Billing is handled by your parent
+            </p>
+            <p className="max-w-md text-sm text-muted-foreground text-pretty">
+              Statements, invoices and payment methods live on
+              {guardianName ? ` ${guardianName}'s` : " your parent's"} account
+              — nothing for you to manage here. Questions about your
+              membership? Ask your parent or message your coach.
+            </p>
+          </CardContent>
+        </Card>
+        <p className="text-xs text-muted-foreground">
+          <Link
+            href={"/athlete/dashboard" as Route}
+            className="underline-offset-4 hover:underline"
+          >
+            Back to dashboard
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
   const billing = billingMeta[athlete.billing.state];
   const plan = plans.find((p) => athlete.planName.startsWith(p.name));
   const amountDue = athlete.billing.amountDueCents;

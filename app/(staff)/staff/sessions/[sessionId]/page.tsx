@@ -1,14 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Clipboard,
-  Clock,
-  MapPin,
-  UserCog,
-} from "lucide-react";
+import { ArrowLeft, Clipboard, Clock, MapPin, UserCog } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PageHeader } from "@/components/app/page-header";
@@ -19,14 +12,16 @@ import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isStaff } from "@/lib/rbac";
 import {
+  athletes,
   athleteById,
   fmtDay,
   fmtTime,
   sessions,
   type Athlete,
-  type BookingState,
 } from "@/lib/demo/data";
-import { billingMeta, bookingMeta, seasonMeta } from "@/lib/demo/status";
+import { seasonMeta } from "@/lib/demo/status";
+
+import { RosterManager, type RosterAthlete } from "./roster-manager";
 
 interface PageProps {
   params: { sessionId: string };
@@ -43,11 +38,25 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
   const pending = session.roster.filter((r) => r.state === "pending").length;
   const fillPct = Math.round((session.roster.length / session.capacity) * 100);
 
-  const roster = session.roster
-    .map((r) => ({ athlete: athleteById(r.athleteId), state: r.state }))
-    .filter((r): r is { athlete: Athlete; state: BookingState } =>
-      Boolean(r.athlete),
-    );
+  // Every athlete the add-client picker can offer (C33) — active clients
+  // plus anyone already rostered, serialized down to what the row shows.
+  const rosterIds = new Set(session.roster.map((r) => r.athleteId));
+  const pool: RosterAthlete[] = athletes
+    .filter((a) => a.status === "active" || rosterIds.has(a.id))
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      initials: a.initials,
+      hue: a.hue,
+      focus: a.sport,
+      age: a.age,
+      sex: a.gender,
+      plan: a.frequency,
+      season: seasonMeta[a.season].label,
+      isMinor: a.isMinor,
+      injuryFlags: a.injuryFlags,
+      billingState: a.billing.state,
+    }));
 
   const waitlist = session.waitlist
     .map((id) => athleteById(id))
@@ -58,13 +67,17 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
       <PageHeader
         eyebrow="Staff Workspace · Session"
         title={session.title}
-        description={`${fmtDay(session.startsAt)} · ${session.type} block`}
+        description={fmtDay(session.startsAt)}
         actions={
           <>
             <Button asChild variant="brand" size="sm">
-              <Link href={"/staff/sessions/huddle-brief" as Route}>
+              <Link
+                href={
+                  `/staff/sessions/huddle-brief?sessions=${session.id}` as Route
+                }
+              >
                 <Clipboard className="h-4 w-4" />
-                Open huddle brief
+                Huddle brief
               </Link>
             </Button>
             <Button asChild variant="ghost" size="sm">
@@ -128,27 +141,8 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      {/* Roster */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg">Roster</h2>
-          <span className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">
-            {roster.length} athlete{roster.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {roster.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
-            No athletes booked on this session yet.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {roster.map(({ athlete, state }) => (
-              <RosterRow key={athlete.id} athlete={athlete} state={state} />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Roster — add / remove / approve (C33) */}
+      <RosterManager initialRoster={session.roster} pool={pool} />
 
       {/* Waitlist */}
       {waitlist.length > 0 ? (
@@ -180,50 +174,5 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
         </section>
       ) : null}
     </div>
-  );
-}
-
-function RosterRow({ athlete, state }: { athlete: Athlete; state: BookingState }) {
-  const booking = bookingMeta[state];
-  const billing = billingMeta[athlete.billing.state];
-  const season = seasonMeta[athlete.season];
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="lg" />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display font-bold">{athlete.name}</span>
-              {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {athlete.sport} · {athlete.frequency}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {athlete.program.name} · Day {athlete.program.day}/
-              {athlete.program.totalDays} · {athlete.program.phase} phase
-            </p>
-            {athlete.injuryFlags.map((f) => (
-              <span
-                key={f}
-                className="mt-2 inline-flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                {f}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-end">
-          <Pill tone={booking.tone} dot>
-            {booking.label}
-          </Pill>
-          <Pill tone={billing.tone}>{billing.label}</Pill>
-          <Pill tone={season.tone}>{season.label}</Pill>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

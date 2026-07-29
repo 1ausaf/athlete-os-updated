@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Progress } from "@/components/app/progress";
+import { TabBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import {
   Select,
@@ -55,25 +57,67 @@ const programmingCoaches = staffMembers.filter((s) =>
 );
 
 /**
- * Client queue (C9/C12/C13): every client — individual athletes AND teams —
- * sorted by program runway, filterable by responsible (programming) coach.
+ * Demo program runway per team — how many days until the shared program's
+ * last published day is trained. (Wish: a real runway field on TrainingGroup.)
+ */
+const TEAM_RUNWAY: Record<string, number> = {
+  "grp-golf": 9,
+  "grp-track": 2,
+  "grp-tigers": 5,
+};
+
+type QueueEntry =
+  | { kind: "athlete"; runway: number; athlete: Athlete }
+  | { kind: "team"; runway: number; group: TrainingGroup };
+
+type TypeFilter = "all" | "athletes" | "teams";
+
+/**
+ * Client queue (C14/C15): every client — individual athletes AND teams — in
+ * ONE list sorted by program runway, with search, a type filter and a
+ * responsible-coach filter.
  */
 export function ClientQueue({ viewerId }: { viewerId: string }) {
   const [coachFilter, setCoachFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [query, setQuery] = useState("");
 
-  const queue = useMemo(() => {
-    // Away/paused/inactive members have no program runway — active only (R4).
-    const sorted = athletes
+  const { entries, athleteCount, teamCount } = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const coachId = coachFilter === "mine" ? viewerId : coachFilter;
+    const coachName = coachFilter === "all" ? null : staffById(coachId)?.name;
+
+    // Paused/inactive members have no program runway — active only (R4).
+    const athleteEntries: QueueEntry[] = athletes
       .filter((a) => a.status === "active")
-      .sort((a, b) => a.programDueInDays - b.programDueInDays);
-    if (coachFilter === "all") return sorted;
-    const target = coachFilter === "mine" ? viewerId : coachFilter;
-    return sorted.filter((a) => programmingCoachIdFor(a.id) === target);
-  }, [coachFilter, viewerId]);
+      .filter((a) => !q || a.name.toLowerCase().includes(q))
+      .filter(
+        (a) => coachFilter === "all" || programmingCoachIdFor(a.id) === coachId,
+      )
+      .map((a) => ({ kind: "athlete", runway: a.programDueInDays, athlete: a }));
 
-  const filterName =
-    coachFilter === "mine" ? "you" : staffById(coachFilter)?.name ?? "";
-  const showTeams = coachFilter === "all";
+    // Teams are clients too (C15) — one shared program each.
+    const teamEntries: QueueEntry[] = trainingGroups
+      .filter((g) => !q || g.name.toLowerCase().includes(q))
+      .filter(
+        (g) => coachFilter === "all" || (coachName != null && g.coachNames.includes(coachName)),
+      )
+      .map((g) => ({ kind: "team", runway: TEAM_RUNWAY[g.id] ?? 7, group: g }));
+
+    const merged = [...athleteEntries, ...teamEntries].sort(
+      (a, b) => a.runway - b.runway,
+    );
+    return {
+      entries:
+        typeFilter === "all"
+          ? merged
+          : merged.filter((e) =>
+              typeFilter === "athletes" ? e.kind === "athlete" : e.kind === "team",
+            ),
+      athleteCount: athleteEntries.length,
+      teamCount: teamEntries.length,
+    };
+  }, [coachFilter, query, typeFilter, viewerId]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -82,52 +126,66 @@ export function ClientQueue({ viewerId }: { viewerId: string }) {
           Sorted by program runway — a client hits zero when their last
           published day is trained. Write the next block before they run out.
         </p>
-        <Select value={coachFilter} onValueChange={setCoachFilter}>
-          <SelectTrigger
-            className="w-full sm:w-52"
-            aria-label="Filter by responsible coach"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All coaches</SelectItem>
-            <SelectItem value="mine">Only mine</SelectItem>
-            {programmingCoaches.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="flex flex-wrap items-center gap-2">
+          {/* C14 — type-to-filter search over clients and teams */}
+          <span className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search clients…"
+              className="h-9 w-full pl-9 sm:w-52"
+              aria-label="Search the client queue"
+            />
+          </span>
+          <Select value={coachFilter} onValueChange={setCoachFilter}>
+            <SelectTrigger
+              className="h-9 w-full sm:w-44"
+              aria-label="Filter by responsible coach"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All coaches</SelectItem>
+              <SelectItem value="mine">Only mine</SelectItem>
+              {programmingCoaches.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </span>
       </div>
 
-      {queue.map((a) => (
-        <QueueRow key={a.id} athlete={a} />
-      ))}
-      {queue.length === 0 ? (
+      {/* C15 — one list; filter by client type */}
+      <TabBar<TypeFilter>
+        tabs={[
+          { value: "all", label: "All", count: athleteCount + teamCount },
+          { value: "athletes", label: "Athletes", count: athleteCount },
+          { value: "teams", label: "Teams", count: teamCount },
+        ]}
+        active={typeFilter}
+        onSelect={setTypeFilter}
+      />
+
+      {entries.map((entry) =>
+        entry.kind === "athlete" ? (
+          <QueueRow key={entry.athlete.id} athlete={entry.athlete} />
+        ) : (
+          <TeamRow
+            key={entry.group.id}
+            group={entry.group}
+            runway={entry.runway}
+          />
+        ),
+      )}
+      {entries.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border bg-surface/50 p-6 text-center text-sm text-muted-foreground">
-          No clients with {filterName || "that coach"} as programming coach.
+          No clients match — clear the search or filters.
         </p>
       ) : null}
-
-      {/* Teams appear as clients too (C12) — one shared program each */}
-      {showTeams ? (
-        <>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="eyebrow">Teams</span>
-            <span className="text-xs text-muted-foreground">
-              Teams are clients too — one program, many athletes.
-            </span>
-          </div>
-          {trainingGroups.map((g) => (
-            <TeamRow key={g.id} group={g} />
-          ))}
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Team clients are listed under &ldquo;All coaches&rdquo;.
-        </p>
-      )}
     </div>
   );
 }
@@ -186,8 +244,8 @@ function QueueRow({ athlete }: { athlete: Athlete }) {
   );
 }
 
-/** A team styled as a client row — "Tigers HPP [A] · Team · 12 athletes" (C12). */
-function TeamRow({ group }: { group: TrainingGroup }) {
+/** A team styled as a client row — "Tigers HPP [A] · Team · 12 members" (C15). */
+function TeamRow({ group, runway }: { group: TrainingGroup; runway: number }) {
   const tpl = templateForProgramName(group.program);
   const href = tpl
     ? (`/staff/programming/templates/${tpl.id}` as Route)
@@ -209,7 +267,7 @@ function TeamRow({ group }: { group: TrainingGroup }) {
               <Pill tone="brand">Team</Pill>
             </div>
             <p className="text-sm text-muted-foreground">
-              {group.athleteCount} athletes · one shared program
+              {group.athleteCount} members · {group.focus}
             </p>
           </div>
         </div>
@@ -225,14 +283,14 @@ function TeamRow({ group }: { group: TrainingGroup }) {
           <Progress value={pct} />
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {phase ? <Pill tone="info">{phase}</Pill> : null}
-            <span className="text-xs text-muted-foreground">this week</span>
+            <span className="text-xs text-muted-foreground">
+              last session {relTime(group.lastSession)}
+            </span>
           </div>
         </div>
 
-        {/* Last session */}
-        <span className="whitespace-nowrap text-xs text-muted-foreground md:justify-self-end">
-          last session {relTime(group.lastSession)}
-        </span>
+        {/* Runway */}
+        <div className="md:justify-self-end">{runwayPill(runway)}</div>
 
         {/* Action */}
         <Button asChild variant="outline" size="sm" className="md:justify-self-end">

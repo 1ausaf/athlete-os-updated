@@ -1,22 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CalendarClock,
+  Camera,
+  Check,
   CheckSquare,
   IdCard,
+  LinkIcon,
+  Plus,
   Target,
   Trash2,
   UserCog,
+  X,
 } from "lucide-react";
 
+import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Progress } from "@/components/app/progress";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  athletes,
   bucketLabel,
   fmtDay,
+  programDueDate,
   statusLabel,
   type Athlete,
   type AthleteStatus,
@@ -29,10 +39,8 @@ import {
   type AthleteChecklist,
 } from "@/lib/demo/checklists";
 import {
-  COACH_ROLE_LABEL,
   assignmentsForAthlete,
   staffMembers,
-  type CoachRole,
 } from "@/lib/demo/staff";
 import { cn } from "@/lib/utils";
 
@@ -138,15 +146,20 @@ export function StatusCard({ athlete }: { athlete: Athlete }) {
 }
 
 export function CoachesCard({ athlete }: { athlete: Athlete }) {
-  const [assignments, setAssignments] = useState<Record<CoachRole, string>>(
-    () => {
-      const base = assignmentsForAthlete(athlete.id);
-      return {
-        programming: base.find((a) => a.role === "programming")?.staffId ?? "",
-        management: base.find((a) => a.role === "management")?.staffId ?? "",
-        assistant: base.find((a) => a.role === "assistant")?.staffId ?? "",
-      };
-    },
+  const base = assignmentsForAthlete(athlete.id);
+  const [programming, setProgramming] = useState(
+    base.find((a) => a.role === "programming")?.staffId ?? "",
+  );
+  const [management, setManagement] = useState(
+    base.find((a) => a.role === "management")?.staffId ?? "",
+  );
+  // C9: MULTIPLE assistant coaches — add appends underneath, each removable.
+  const [assistants, setAssistants] = useState<string[]>(
+    base.filter((a) => a.role === "assistant").map((a) => a.staffId),
+  );
+
+  const availableAssistants = staffMembers.filter(
+    (s) => !assistants.includes(s.id),
   );
 
   return (
@@ -157,20 +170,23 @@ export function CoachesCard({ athlete }: { athlete: Athlete }) {
           <h3 className="text-base">Coaches</h3>
         </div>
         <div className="flex flex-col gap-1.5">
-          {(Object.keys(COACH_ROLE_LABEL) as CoachRole[]).map((role) => (
+          {(
+            [
+              { label: "Programming", value: programming, set: setProgramming },
+              { label: "Management", value: management, set: setManagement },
+            ] as const
+          ).map(({ label, value, set }) => (
             <div
-              key={role}
+              key={label}
               className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2"
             >
               <span className="text-xs font-medium text-muted-foreground">
-                {COACH_ROLE_LABEL[role]}
+                {label}
               </span>
               <select
-                value={assignments[role]}
-                aria-label={COACH_ROLE_LABEL[role]}
-                onChange={(e) =>
-                  setAssignments((prev) => ({ ...prev, [role]: e.target.value }))
-                }
+                value={value}
+                aria-label={`${label} coach`}
+                onChange={(e) => set(e.target.value)}
                 className="h-8 rounded-md border border-input bg-surface px-2 text-sm"
               >
                 <option value="">—</option>
@@ -182,10 +198,64 @@ export function CoachesCard({ athlete }: { athlete: Athlete }) {
               </select>
             </div>
           ))}
+
+          {/* Assistant coaches — a list, not a single slot (C9) */}
+          <div className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-start gap-2">
+            <span className="pt-1.5 text-xs font-medium text-muted-foreground">
+              Assistants
+            </span>
+            <div className="flex flex-col gap-1.5">
+              {assistants.map((id) => {
+                const s = staffMembers.find((m) => m.id === id);
+                if (!s) return null;
+                return (
+                  <span
+                    key={id}
+                    className="flex items-center gap-2 rounded-md border border-border bg-surface/60 px-2 py-1 text-sm"
+                  >
+                    <AthleteAvatar
+                      initials={s.initials}
+                      hue={s.hue}
+                      size="sm"
+                      className="h-6 w-6 text-[0.55rem]"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s.name} as assistant`}
+                      onClick={() =>
+                        setAssistants((prev) => prev.filter((a) => a !== id))
+                      }
+                      className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                );
+              })}
+              <select
+                value=""
+                aria-label="Add assistant coach"
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setAssistants((prev) => [...prev, e.target.value]);
+                  }
+                }}
+                className="h-8 rounded-md border border-dashed border-input bg-surface px-2 text-xs text-muted-foreground"
+              >
+                <option value="">+ Add assistant…</option>
+                {availableAssistants.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
         <p className="text-[0.7rem] text-muted-foreground">
           Assignments drive who&apos;s in this member&apos;s chat thread and
-          whose queue they appear in.
+          whose queue they appear in. Saves locally in this demo.
         </p>
       </CardContent>
     </Card>
@@ -312,7 +382,7 @@ export function DetailsCard({ athlete }: { athlete: Athlete }) {
     sport: athlete.sport,
     yob: athlete.yearOfBirth,
     gender: athlete.gender,
-    dueDays: athlete.programDueInDays,
+    dueDate: programDueDate(athlete).slice(0, 10),
     nutrition: athlete.nutrition,
   });
 
@@ -339,11 +409,7 @@ export function DetailsCard({ athlete }: { athlete: Athlete }) {
             }))}
             onChange={(v) => patch("bucket", v as MemberBucket)}
           />
-          <FieldInput
-            label="Sport"
-            value={a.sport}
-            onCommit={(v) => patch("sport", v || a.sport)}
-          />
+          <FocusField value={a.sport} onChange={(v) => patch("sport", v)} />
           <FieldInput
             label="YOB"
             value={String(a.yob)}
@@ -354,7 +420,7 @@ export function DetailsCard({ athlete }: { athlete: Athlete }) {
             }}
           />
           <FieldSelect
-            label="Gender"
+            label="Sex"
             value={a.gender}
             options={[
               { value: "M", label: "M" },
@@ -362,27 +428,102 @@ export function DetailsCard({ athlete }: { athlete: Athlete }) {
             ]}
             onChange={(v) => patch("gender", v as "M" | "F")}
           />
-          <FieldInput
-            label="Due (days)"
-            value={String(a.dueDays)}
-            numeric
-            onCommit={(v) => {
-              const n = Number(v);
-              if (Number.isFinite(n) && n >= 0) patch("dueDays", n);
-            }}
-          />
+          {/* C7: a real DATE picker — the days-remaining chip stays derived */}
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+              Program due
+            </span>
+            <input
+              type="date"
+              value={a.dueDate}
+              onChange={(e) => patch("dueDate", e.target.value)}
+              className="tnum h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input focus:border-input focus:outline-none"
+            />
+          </label>
           <FieldSelect
             label="Nutrition"
             value={a.nutrition}
             options={[
-              { value: "pro", label: "Pro" },
               { value: "none", label: "None" },
+              { value: "standard", label: "Standard" },
+              { value: "pro", label: "Pro" },
             ]}
-            onChange={(v) => patch("nutrition", v as "pro" | "none")}
+            onChange={(v) => patch("nutrition", v as Athlete["nutrition"])}
           />
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+const ADD_NEW_FOCUS = "__add-new__";
+
+/**
+ * C5: Focus is a dropdown of EXISTING values (alphabetical) + "Add new…" —
+ * no free-text typos fragmenting the filter list.
+ */
+function FocusField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [addingNew, setAddingNew] = useState(false);
+  const [draft, setDraft] = useState("");
+  const options = Array.from(
+    new Set([...athletes.map((x) => x.sport), value]),
+  ).sort();
+
+  function commitNew() {
+    const v = draft.trim();
+    if (v) onChange(v);
+    setAddingNew(false);
+    setDraft("");
+  }
+
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        Focus
+      </span>
+      {addingNew ? (
+        <input
+          autoFocus
+          value={draft}
+          placeholder="New focus…"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitNew}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") {
+              setDraft("");
+              setAddingNew(false);
+            }
+          }}
+          className="h-8 rounded-md border border-input bg-surface/60 px-1.5 text-xs font-semibold focus:outline-none"
+        />
+      ) : (
+        <select
+          value={value}
+          onChange={(e) => {
+            if (e.target.value === ADD_NEW_FOCUS) {
+              setAddingNew(true);
+            } else {
+              onChange(e.target.value);
+            }
+          }}
+          className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input"
+        >
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+          <option value={ADD_NEW_FOCUS}>+ Add new…</option>
+        </select>
+      )}
+    </label>
   );
 }
 
@@ -509,6 +650,210 @@ export function CompactProgramCard({ athlete }: { athlete: Athlete }) {
         <Progress value={pct} />
       </CardContent>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* C3 — dynamic link chips ("we never know what software we're gonna   */
+/* change to"): default stack, add custom label+URL, remove any.       */
+/* ------------------------------------------------------------------ */
+
+interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+const DEFAULT_LINKS: ProfileLink[] = [
+  { label: "Drive", url: "https://drive.google.com" },
+  { label: "Quo", url: "https://quo.com" },
+  { label: "Google Contact", url: "https://contacts.google.com" },
+  { label: "Brevo", url: "https://brevo.com" },
+  { label: "Square", url: "https://squareup.com" },
+];
+
+export function LinkChips({ athleteId }: { athleteId: string }) {
+  const storageKey = `aos-links-${athleteId}`;
+  const [links, setLinks] = useState<ProfileLink[]>(DEFAULT_LINKS);
+  const [loaded, setLoaded] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) setLinks(JSON.parse(raw) as ProfileLink[]);
+    } catch {
+      /* corrupted storage — keep defaults */
+    }
+    setLoaded(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(links));
+    } catch {
+      /* storage full/blocked — chips still work in-memory */
+    }
+  }, [links, loaded, storageKey]);
+
+  function addLink() {
+    const l = label.trim();
+    if (!l) return;
+    const u = url.trim();
+    setLinks((prev) => [
+      ...prev,
+      { label: l, url: u && !/^https?:\/\//.test(u) ? `https://${u}` : u },
+    ]);
+    setLabel("");
+    setUrl("");
+    setAdding(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5">
+        {links.map((link, i) => (
+          <span
+            key={`${link.label}-${i}`}
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+          >
+            <LinkIcon className="h-3 w-3" aria-hidden />
+            {link.url ? (
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </a>
+            ) : (
+              link.label
+            )}
+            <button
+              type="button"
+              aria-label={`Remove ${link.label} link`}
+              onClick={() =>
+                setLinks((prev) => prev.filter((_, j) => j !== i))
+              }
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-destructive"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        {!adding ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+          >
+            <Plus className="h-3 w-3" />
+            Add link
+          </button>
+        ) : null}
+      </div>
+      {adding ? (
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-brand/30 bg-brand/[0.03] p-2.5">
+          <div className="grid gap-1">
+            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+              Label
+            </span>
+            <Input
+              autoFocus
+              value={label}
+              placeholder="e.g. TrueCoach"
+              className="h-8 w-36 text-xs"
+              onChange={(e) => setLabel(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1">
+            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+              URL
+            </span>
+            <Input
+              value={url}
+              placeholder="https://…"
+              className="h-8 w-48 text-xs"
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addLink();
+              }}
+            />
+          </div>
+          <Button
+            variant="brand"
+            size="sm"
+            disabled={!label.trim()}
+            onClick={addLink}
+          >
+            Add
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <p className="text-[0.7rem] text-muted-foreground">
+          The external stack changes — add or remove links any time. Saves
+          locally in this demo.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* C11 — avatar with an upload affordance (staff can change a client's */
+/* photo; avatars surface on the roster + huddle so coaches recognize  */
+/* faces).                                                             */
+/* ------------------------------------------------------------------ */
+
+export function AvatarUpload({
+  initials,
+  hue,
+  name,
+}: {
+  initials: string;
+  hue: number;
+  name: string;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [updated, setUpdated] = useState(false);
+
+  return (
+    <span className="relative inline-flex shrink-0">
+      <AthleteAvatar initials={initials} hue={hue} size="xl" />
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        aria-label={`Change ${name}'s photo`}
+        title={
+          updated
+            ? "Photo updated (saves locally in this demo)"
+            : "Change photo"
+        }
+        className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
+      >
+        {updated ? (
+          <Check className="h-3.5 w-3.5 text-success" />
+        ) : (
+          <Camera className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) setUpdated(true);
+          e.target.value = "";
+        }}
+      />
+    </span>
   );
 }
 

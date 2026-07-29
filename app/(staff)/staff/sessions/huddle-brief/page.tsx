@@ -83,11 +83,13 @@ export default function HuddleBriefPage({
 }
 
 function SessionBrief({ session }: { session: TrainingSession }) {
+  // C34: alphabetical — coaches scan the brief like a class list.
   const roster = session.roster
     .map((r) => ({ athlete: athleteById(r.athleteId), state: r.state }))
     .filter((r): r is { athlete: Athlete; state: typeof r.state } =>
       Boolean(r.athlete),
-    );
+    )
+    .sort((a, b) => a.athlete.name.localeCompare(b.athlete.name));
 
   const flags = {
     billing: roster.filter((r) => r.athlete.billing.state === "overdue").length,
@@ -152,8 +154,8 @@ function SessionBrief({ session }: { session: TrainingSession }) {
 
       {/* Per-athlete briefs */}
       <div className="flex flex-col gap-4">
-        {roster.map(({ athlete, state }) => (
-          <AthleteBrief key={athlete.id} athlete={athlete} state={state} />
+        {roster.map(({ athlete }) => (
+          <AthleteBrief key={athlete.id} athlete={athlete} />
         ))}
       </div>
     </section>
@@ -188,13 +190,17 @@ function OpenLoop({
   );
 }
 
-function AthleteBrief({
-  athlete,
-  state,
-}: {
-  athlete: Athlete;
-  state: string;
-}) {
+/** "PR · 385 lb Trap-bar — 6 days ago" (C34: real days, not "this week"). */
+function daysAgo(iso: string): string {
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000),
+  );
+  if (days === 0) return "today";
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function AthleteBrief({ athlete }: { athlete: Athlete }) {
   const billing = billingMeta[athlete.billing.state];
   const season = seasonMeta[athlete.season];
   const lastNote = athlete.notes[0];
@@ -212,13 +218,14 @@ function AthleteBrief({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-display text-lg font-bold">{athlete.name}</span>
-                {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
+                {athlete.isMinor ? (
+                  <Pill tone="info">
+                    {athlete.age} · Minor
+                  </Pill>
+                ) : null}
               </div>
               <p className="text-sm text-muted-foreground">
                 {athlete.sport} · {athlete.frequency}
-                {"  "}
-                <span className="text-muted-foreground/60">·</span> Booking:{" "}
-                {state}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Pill tone={billing.tone} dot>
@@ -277,8 +284,8 @@ function AthleteBrief({
                   className="inline-flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-2.5 py-1.5 text-xs font-medium text-success"
                 >
                   <Trophy className="h-3.5 w-3.5 shrink-0" />
-                  PR this week · {pr.lift} {pr.value} {pr.unit}
-                  {pr.reps ? ` × ${pr.reps}` : ""}
+                  PR · {pr.value} {pr.unit} {pr.lift}
+                  {pr.reps ? ` × ${pr.reps}` : ""} — {daysAgo(pr.date)}
                 </span>
               ))}
           </div>

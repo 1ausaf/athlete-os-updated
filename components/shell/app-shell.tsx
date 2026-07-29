@@ -181,7 +181,9 @@ export function AppShell({
             {workspaceLabel}
           </p>
 
-          <div className="ml-auto flex items-center gap-2">
+          {/* min-w-0 + overflow keep the parent controls (child switcher,
+              badges) from pushing the page wider than the viewport on phones */}
+          <div className="ml-auto flex min-w-0 items-center gap-2 overflow-x-auto">
             {headerExtra}
             <PersonaSwitcher current={role} options={personaOptions} />
             <AccentToggle />

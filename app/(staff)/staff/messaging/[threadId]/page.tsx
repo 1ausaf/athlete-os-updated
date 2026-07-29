@@ -50,7 +50,9 @@ export default async function StaffThreadPage({ params }: PageProps) {
   const canPost = involved || admin;
 
   return (
-    <div className="flex flex-col gap-6">
+    // C35: the thread fills the screen to the bottom — the message pane
+    // stretches, scrolls internally, and the composer pins at the bottom.
+    <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-9rem)]">
       <PageHeader
         eyebrow="Staff Workspace · Messaging"
         title={thread.subject}
@@ -70,15 +72,15 @@ export default async function StaffThreadPage({ params }: PageProps) {
       {isBroadcast ? (
         <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/[0.06] px-3 py-2 text-xs text-info">
           <Megaphone className="h-4 w-4 shrink-0" />
-          Broadcast announcement — sent to all athletes. Replies route privately
+          Broadcast announcement — sent to all members. Replies route privately
           to staff.
         </div>
       ) : (
         <RuleOfTwoBanner participants={thread.participants} />
       )}
 
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5">
+      <Card className="flex min-h-0 flex-1 flex-col">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="eyebrow">Participants</span>
             {thread.participants.map((p) => (
@@ -111,6 +113,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
             }}
             canPost={canPost}
             canDelete={admin}
+            canJoin={!canPost}
           />
         </CardContent>
       </Card>

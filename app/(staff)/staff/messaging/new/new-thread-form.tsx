@@ -58,23 +58,20 @@ export function NewThreadForm() {
 
   const athlete = athletes.find((a) => a.id === athleteId) ?? null;
 
-  // The athlete participant derived from the current selection.
-  const athleteParticipant: ThreadParticipant | null = athlete
-    ? {
+  // Full live participant list: me (coach) + athlete + any added adults.
+  const participants: ThreadParticipant[] = useMemo(() => {
+    const list: ThreadParticipant[] = [ME];
+    if (athlete) {
+      list.push({
         id: athlete.id,
         name: athlete.name,
         role: "athlete",
         isMinor: athlete.isMinor,
-      }
-    : null;
-
-  // Full live participant list: me (coach) + athlete + any added adults.
-  const participants: ThreadParticipant[] = useMemo(() => {
-    const list: ThreadParticipant[] = [ME];
-    if (athleteParticipant) list.push(athleteParticipant);
+      });
+    }
     list.push(...added);
     return list;
-  }, [athleteParticipant, added]);
+  }, [athlete, added]);
 
   // Rule-of-Two compliance mirrors RuleOfTwoBanner's own logic.
   const hasMinor = participants.some((p) => p.isMinor);

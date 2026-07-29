@@ -19,7 +19,7 @@ import { Pill } from "@/components/ui/pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireAthleteContext } from "@/lib/demo/session";
-import { jordanTeamChannel } from "@/lib/demo/chat";
+import { teamChannelFor } from "@/lib/demo/chat";
 import {
   fmtFullDay,
   fmtRange,
@@ -29,13 +29,22 @@ import {
 } from "@/lib/demo/data";
 import {
   announcements,
-  jordanProgramDays,
+  programDaysFor,
   LOCATION_LABEL,
   myBookings,
 } from "@/lib/demo/training";
 import { billingMeta } from "@/lib/demo/status";
 
 import { NoProgramNotice } from "../status-notice";
+
+/** The shape the "next sessions" cards need — real program day or placeholder. */
+interface NextDayCard {
+  id: string;
+  dayNumber: number;
+  title: string;
+  focus: string;
+  location: "gym" | "home";
+}
 
 export default async function AthleteDashboardPage() {
   const { athlete } = requireAthleteContext();
@@ -44,12 +53,12 @@ export default async function AthleteDashboardPage() {
   // Plain "Coaching" bookings — no coach names or session-type jargon.
   const upcoming = myBookings.slice(0, 3);
 
-  // Shared team-channel seed — the preview always shows the true latest
-  // message and its real sender (client flagged a misattributed preview).
-  const channel = jordanTeamChannel();
-  const latestMessage = channel.messages[channel.messages.length - 1];
+  // Per-athlete channel (round 5, B2/P7: a parent managing Maya used to see
+  // Jordan's chat here) — preview always shows the true latest messages.
+  const channel = teamChannelFor(athlete.id);
+  const latestMessages = channel.messages.slice(-3);
   const unread = channel.unread;
-  const latestAnnouncement = announcements[0];
+  const topAnnouncements = announcements.slice(0, 3);
 
   const billing = billingMeta[athlete.billing.state];
   const plan = plans.find((p) => athlete.planName.startsWith(p.name));
@@ -62,11 +71,20 @@ export default async function AthleteDashboardPage() {
   ).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   // Programs run as a numbered sequence, not a calendar — surface the next
-  // three days so athletes always know which one to start (and which remote
-  // day to skip when they make it into LPS).
-  const nextDays = jordanProgramDays.slice(0, 3);
+  // three days so athletes always know which one to start.
+  // Round 5 (B2/P7 bug fix): the cards come from the SELECTED athlete's own
+  // published days, so the banner and the cards always agree — and the same
+  // days appear on their Training page.
+  const ownDays = programDaysFor(athlete.id);
+  const nextDays: NextDayCard[] = ownDays.slice(0, 3).map((d) => ({
+    id: d.id,
+    dayNumber: d.dayNumber,
+    title: d.title,
+    focus: d.focus,
+    location: d.location,
+  }));
   const progressPct = Math.round(
-    (athlete.program.day / athlete.program.totalDays) * 100,
+    (athlete.program.day / Math.max(1, athlete.program.totalDays)) * 100,
   );
 
   // Away/paused members keep their portal — but no program runs (round 4).
@@ -78,12 +96,95 @@ export default async function AthleteDashboardPage() {
       <PageHeader
         eyebrow="Athlete Portal"
         title={`Good to see you, ${firstName}.`}
-        description="Your program comes first — then sessions, messages, billing and your latest wins."
+        description="Facility news and your chat up top — then training, sessions, wins and billing."
       />
 
       {!hasProgram ? <NoProgramNotice athlete={athlete} /> : null}
 
-      {/* Program hero (primary content — FR-02) */}
+      {/* 1 · Announcements  +  2 · Chat (round 5, A1 order) */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-5">
+            <TileHeader
+              icon={Megaphone}
+              title="Announcements"
+              href={"/athlete/messages?tab=announcements" as Route}
+              cta="All news"
+            />
+            {topAnnouncements.length === 0 ? (
+              <Empty>No announcements right now.</Empty>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {topAnnouncements.map((a) => (
+                  <li key={a.id}>
+                    <Link
+                      href={"/athlete/messages?tab=announcements" as Route}
+                      className="flex items-center gap-2.5 rounded-lg border border-border bg-surface/50 px-3 py-2.5 transition-colors hover:bg-accent/50"
+                    >
+                      <Megaphone
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">
+                          {a.title}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {a.author}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[0.7rem] text-muted-foreground">
+                        {relTime(a.at)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-5">
+            <TileHeader
+              icon={MessagesSquare}
+              title="Chat"
+              href={"/athlete/messages" as Route}
+              cta="Open"
+              badge={unread}
+            />
+            {latestMessages.length === 0 ? (
+              <Empty>No messages yet — say hi to your coaching staff.</Empty>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {latestMessages.map((m) => (
+                  <li key={m.id}>
+                    <Link
+                      href={"/athlete/messages" as Route}
+                      className="flex flex-col gap-1 rounded-lg border border-border bg-surface/50 px-3 py-2.5 transition-colors hover:bg-accent/50"
+                    >
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 truncate text-xs font-semibold">
+                          {m.senderName}
+                        </span>
+                        <span className="ml-auto shrink-0 text-[0.7rem] text-muted-foreground">
+                          {relTime(m.at)}
+                        </span>
+                      </span>
+                      <span className="line-clamp-1 text-xs text-muted-foreground">
+                        {m.body ||
+                          (m.attachments?.length ? "Sent an attachment" : "")}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 3 · Next training sessions (program hero) */}
       {hasProgram ? (
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-5 p-6">
@@ -174,8 +275,8 @@ export default async function AthleteDashboardPage() {
       </Card>
       ) : null}
 
+      {/* 4 · Upcoming booked sessions  +  5 · PRs  +  6 · Billing (last) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Upcoming sessions */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
@@ -219,85 +320,6 @@ export default async function AthleteDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Chat + announcements */}
-        <Card>
-          <CardContent className="flex flex-col gap-4 p-5">
-            <TileHeader
-              icon={MessagesSquare}
-              title="Chat"
-              href={"/athlete/messages" as Route}
-              cta="Open"
-              badge={unread}
-            />
-            {latestMessage ? (
-              <Link
-                href={"/athlete/messages" as Route}
-                className="flex flex-col gap-2 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:bg-accent/50"
-              >
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  {latestMessage.senderName}
-                </div>
-                <p className="line-clamp-2 text-xs text-muted-foreground">
-                  {latestMessage.body}
-                </p>
-                <span className="text-[0.7rem] text-muted-foreground">
-                  {relTime(latestMessage.at)}
-                </span>
-              </Link>
-            ) : (
-              <Empty>You&apos;re all caught up.</Empty>
-            )}
-            {latestAnnouncement ? (
-              <Link
-                href={"/athlete/messages" as Route}
-                className="flex items-center gap-2.5 rounded-lg border border-border bg-surface/30 px-3 py-2.5 transition-colors hover:bg-accent/50"
-              >
-                <Megaphone
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-xs">
-                  <span className="font-semibold">Announcement</span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {latestAnnouncement.title}
-                  </span>
-                </span>
-                <span className="shrink-0 text-[0.7rem] text-muted-foreground">
-                  {relTime(latestAnnouncement.at)}
-                </span>
-              </Link>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {/* Billing */}
-        <Card>
-          <CardContent className="flex flex-col gap-4 p-5">
-            <TileHeader
-              icon={CreditCard}
-              title="Billing"
-              href={"/athlete/billing" as Route}
-              cta="Details"
-            />
-            <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-4">
-              <div>
-                <Pill tone={billing.tone} dot>
-                  {billing.label}
-                </Pill>
-                <p className="mt-2 text-sm font-semibold">{athlete.planName}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Next invoice</p>
-                <p className="tnum text-sm font-semibold">
-                  {nextInvoiceDay} · {money(nextInvoiceAmount)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PRs */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
@@ -339,6 +361,31 @@ export default async function AthleteDashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Billing stays LAST (round 5, A1) */}
+        <Card className="lg:col-span-2">
+          <CardContent className="flex flex-col gap-4 p-5">
+            <TileHeader
+              icon={CreditCard}
+              title="Billing"
+              href={"/athlete/billing" as Route}
+              cta="Details"
+            />
+            <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-4">
+              <div>
+                <Pill tone={billing.tone} dot>
+                  {billing.label}
+                </Pill>
+                <p className="mt-2 text-sm font-semibold">{athlete.planName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Next invoice</p>
+                <p className="tnum text-sm font-semibold">
+                  {nextInvoiceDay} · {money(nextInvoiceAmount)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import { TabBar } from "@/components/app/tab-bar";
 import { Input } from "@/components/ui/input";
 import { Pill, type PillTone } from "@/components/ui/pill";
-import { cn } from "@/lib/utils";
 import {
   relTime,
   type Thread,
@@ -38,7 +38,7 @@ type InboxFilter = "involved" | "subscribed" | "everything";
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: "involved", label: "Involved" },
   { key: "subscribed", label: "Subscribed" },
-  { key: "everything", label: "Everything" },
+  { key: "everything", label: "All" },
 ];
 
 function hueFor(id: string): number {
@@ -110,47 +110,32 @@ export function MessagingInbox({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter tabs + person search */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
-          {FILTERS.map(({ key, label }) => {
-            const active = filter === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setFilter(key)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-card text-foreground shadow-soft"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}{" "}
-                <span className="tnum text-xs opacity-60">{counts[key]}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="relative w-full max-w-xs sm:ml-auto">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search people…"
-            aria-label="Search threads by person"
-            className="pl-8"
-          />
-        </div>
+      {/* Filter tabs (shared line style, CM2) + person search */}
+      <TabBar
+        tabs={FILTERS.map(({ key, label }) => ({
+          value: key,
+          label,
+          count: counts[key],
+        }))}
+        active={filter}
+        onSelect={setFilter}
+      />
+      <div className="relative w-full max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search people…"
+          aria-label="Search threads by person"
+          className="pl-8"
+        />
       </div>
 
       {!admin ? (
         <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Threads are created automatically when you&rsquo;re assigned to an
-          athlete — coaches can&rsquo;t start private chats (Safe-Sport).
+          Threads are created automatically when you&rsquo;re assigned to a
+          client — coaches can&rsquo;t start private chats (Safe-Sport).
         </p>
       ) : null}
 
@@ -162,7 +147,7 @@ export function MessagingInbox({
         {visible.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
             {filter === "involved" && counts.involved === 0
-              ? "No assigned threads yet — a thread opens automatically when you're assigned to an athlete."
+              ? "No assigned threads yet — a thread opens automatically when you're assigned to a client."
               : filter === "subscribed" && counts.subscribed === 0
                 ? "You're not subscribed to any extra threads."
                 : "No threads match."}

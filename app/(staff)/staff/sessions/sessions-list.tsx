@@ -56,7 +56,8 @@ export function SessionsList({ groups }: { groups: SessionDayGroup[] }) {
               {group.items.length} session{group.items.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          {/* C32: tile grid — 3-4 across on wide screens */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {group.items.map((s) => (
               <SessionCard
                 key={s.id}
@@ -123,7 +124,7 @@ function SessionCard({
         selected && "border-brand/60 bg-brand/[0.03]",
       )}
     >
-      <CardContent className="flex flex-col gap-4 p-5">
+      <CardContent className="flex h-full flex-col gap-3.5 p-4">
         <div className="flex items-start justify-between gap-3">
           <label className="flex min-w-0 cursor-pointer items-start gap-2.5">
             <input
@@ -134,10 +135,17 @@ function SessionCard({
               className="mt-1 h-4 w-4 shrink-0 accent-[hsl(var(--brand))]"
             />
             <span className="min-w-0">
-              <span className="block text-base font-bold">{session.title}</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {fmtTime(session.startsAt)}–{fmtTime(session.endsAt)} ·{" "}
-                {session.coach}
+              <span className="block text-base font-bold leading-snug">
+                {session.title}
+              </span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                <span className="tnum">
+                  {fmtTime(session.startsAt)}–{fmtTime(session.endsAt)}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {session.location}
+                </span>
               </span>
             </span>
           </label>
@@ -145,11 +153,6 @@ function SessionCard({
             <Pill tone="info">{session.waitlist.length} waitlist</Pill>
           ) : null}
         </div>
-
-        <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {session.location}
-        </p>
 
         <div>
           <div className="mb-1.5 flex items-center justify-between text-xs">
@@ -173,11 +176,23 @@ function SessionCard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <ComingVsCoach roster={roster} coachName={session.coach} />
+        {/* Coaches stay prominent — Coming vs Coach on every tile */}
+        <ComingVsCoach roster={roster} coachName={session.coach} />
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2.5">
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              href={
+                `/staff/sessions/huddle-brief?sessions=${session.id}` as Route
+              }
+            >
+              <Clipboard className="h-3.5 w-3.5" />
+              Huddle brief
+            </Link>
+          </Button>
           <Button asChild variant="ghost" size="sm">
             <Link href={`/staff/sessions/${session.id}` as Route}>
-              Roster
+              Open session
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </Button>

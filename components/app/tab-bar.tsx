@@ -33,7 +33,12 @@ export function TabBar<T extends string>({
   right?: ReactNode;
 }) {
   return (
-    <div className={cn("flex items-center gap-1 border-b border-border", className)}>
+    <div
+      className={cn(
+        "flex items-center gap-1 overflow-x-auto border-b border-border",
+        className,
+      )}
+    >
       {tabs.map((t) => (
         <button
           key={t.value}
@@ -41,7 +46,7 @@ export function TabBar<T extends string>({
           onClick={() => onSelect(t.value)}
           aria-pressed={active === t.value}
           className={cn(
-            "-mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
+            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
             active === t.value
               ? "border-brand text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
@@ -53,7 +58,7 @@ export function TabBar<T extends string>({
           ) : null}
         </button>
       ))}
-      {right ? <div className="ml-auto pb-1">{right}</div> : null}
+      {right ? <div className="ml-auto shrink-0 pb-1 pl-2">{right}</div> : null}
     </div>
   );
 }
@@ -66,14 +71,19 @@ export function TabLinkBar({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-1 border-b border-border", className)}>
+    <div
+      className={cn(
+        "flex items-center gap-1 overflow-x-auto border-b border-border",
+        className,
+      )}
+    >
       {tabs.map((t) => (
         <Link
           key={t.label}
           href={t.href}
           aria-current={t.active ? "page" : undefined}
           className={cn(
-            "-mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
+            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
             t.active
               ? "border-brand text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",

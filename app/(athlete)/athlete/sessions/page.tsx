@@ -7,6 +7,7 @@ import { requireAthleteContext } from "@/lib/demo/session";
 import {
   generateBookableSlots,
   myBookings,
+  pastBookings,
   restrictedSessionTypesFor,
 } from "@/lib/demo/training";
 
@@ -21,7 +22,7 @@ export default async function AthleteSessionsPage() {
       <PageHeader
         eyebrow="Athlete Portal · Schedule"
         title="Sessions"
-        description="Check every time you want across the next 12 weeks, then book them all in one go. Your plan cadence and billing status are enforced automatically."
+        description="Book times across the next 12 weeks, keep an eye on what's booked, and count your past sessions — all in one place."
         actions={
           <Pill tone="brand" dot>
             {athlete.planName}
@@ -32,6 +33,7 @@ export default async function AthleteSessionsPage() {
       <SessionBooking
         slots={slots}
         initialBookings={myBookings}
+        pastSessions={pastBookings}
         frequencyPerWeek={athlete.frequencyPerWeek}
         bookedThisWeek={athlete.bookedThisWeek}
         frequencyLabel={athlete.frequency}

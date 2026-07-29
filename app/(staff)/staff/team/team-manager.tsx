@@ -2,14 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   Award,
   Bell,
   BadgeCheck,
   Camera,
   CheckCircle2,
   ChevronDown,
+  FileText,
   Mail,
   Phone,
+  Plus,
   ShieldAlert,
   ShieldCheck,
   Upload,
@@ -27,18 +30,32 @@ import { Pill, type PillTone } from "@/components/ui/pill";
 import { cn } from "@/lib/utils";
 import { fmtFullDay } from "@/lib/demo/data";
 import {
-  ACCESS_LEVEL_LABEL,
+  STAFF_ROLE_LABEL,
+  STAFF_ROLE_ORDER,
+  STAFF_ROLE_PERMISSIONS,
   athleteIdsForStaff,
   staffMembers,
-  type StaffAccessLevel,
   type StaffCertification,
   type StaffMember,
+  type StaffRole,
 } from "@/lib/demo/staff";
+
+import { EnablePushButton } from "./push-permission";
 
 /** Local, mutable copy of a staff row (demo state lives in the browser). */
 type LocalStaff = StaffMember & { isLocal?: boolean };
 
-const ACCESS_LEVELS = Object.keys(ACCESS_LEVEL_LABEL) as StaffAccessLevel[];
+/** Roles the owner can hand out — there's exactly one owner. */
+const ASSIGNABLE_ROLES = STAFF_ROLE_ORDER.filter((r) => r !== "owner");
+
+/** O6 — status derived from the expiry date when a cert is added. */
+function certStatusFor(expiresIso: string): StaffCertification["status"] {
+  const days =
+    (new Date(`${expiresIso}T12:00:00`).getTime() - Date.now()) / 86_400_000;
+  if (days < 0) return "expired";
+  if (days < 45) return "expiring";
+  return "valid";
+}
 
 const ROLE_PILL: Record<StaffMember["role"], { label: string; tone: PillTone }> =
   {
@@ -55,7 +72,7 @@ const CERT_PILL: Record<
 > = {
   valid: { label: "Valid", tone: "success" },
   expiring: { label: "Expiring soon", tone: "warning" },
-  expired: { label: "Expired", tone: "danger" },
+  expired: { label: "Expired — invalid", tone: "danger" },
 };
 
 function hueFrom(id: string): number {
@@ -85,7 +102,7 @@ export function TeamManager() {
   const [form, setForm] = useState({
     name: "",
     title: "",
-    accessLevel: "coaching" as StaffAccessLevel,
+    role: "coach" as StaffRole,
   });
 
   const [flash, setFlash] = useState<string | null>(null);
@@ -106,10 +123,34 @@ export function TeamManager() {
     setStaff((prev) => prev.map((s) => (s.id === id ? patch(s) : s)));
   }
 
-  function setAccess(member: LocalStaff, level: StaffAccessLevel) {
-    patchStaff(member.id, (s) => ({ ...s, accessLevel: level }));
+  function setRole(member: LocalStaff, role: StaffRole) {
+    patchStaff(member.id, (s) => ({ ...s, role }));
     showFlash(
-      `Access updated — ${member.name} is now ${ACCESS_LEVEL_LABEL[level]}`,
+      `Role updated — ${member.name} is now ${STAFF_ROLE_LABEL[role]}`,
+    );
+  }
+
+  /** O6 — append a certification with its status computed from the expiry. */
+  function addCertification(
+    member: LocalStaff,
+    cert: { name: string; expires: string },
+  ) {
+    const status = certStatusFor(cert.expires);
+    patchStaff(member.id, (s) => ({
+      ...s,
+      certifications: [
+        ...s.certifications,
+        {
+          name: cert.name,
+          expires: new Date(`${cert.expires}T12:00:00`).toISOString(),
+          status,
+        },
+      ],
+    }));
+    showFlash(
+      status === "expired"
+        ? `${cert.name} added for ${member.name} — already expired, flagged`
+        : `${cert.name} added for ${member.name}`,
     );
   }
 
@@ -147,9 +188,9 @@ export function TeamManager() {
       name,
       initials: initialsFrom(name),
       hue: hueFrom(name),
-      role: "coach",
-      accessLevel: form.accessLevel,
-      title: form.title.trim() || "Coach",
+      role: form.role,
+      accessLevel: "coaching",
+      title: form.title.trim() || STAFF_ROLE_LABEL[form.role],
       email: "",
       phone: "",
       bio: "New staff member — profile pending.",
@@ -159,7 +200,7 @@ export function TeamManager() {
       isLocal: true,
     };
     setStaff((prev) => [...prev, member]);
-    setForm({ name: "", title: "", accessLevel: "coaching" });
+    setForm({ name: "", title: "", role: "coach" });
     setAdding(false);
     setExpandedId(member.id);
     showFlash(`${name} added to the team`);
@@ -187,7 +228,7 @@ export function TeamManager() {
           hint={
             kpis.expired > 0
               ? `+ ${kpis.expired} already expired`
-              : "within 60 days"
+              : "within 45 days"
           }
         />
         <StatTile
@@ -240,19 +281,19 @@ export function TeamManager() {
                 aria-label="Title"
               />
               <select
-                value={form.accessLevel}
-                aria-label="Access level"
+                value={form.role}
+                aria-label="Role"
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    accessLevel: e.target.value as StaffAccessLevel,
+                    role: e.target.value as StaffRole,
                   }))
                 }
                 className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
               >
-                {ACCESS_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {ACCESS_LEVEL_LABEL[level]}
+                {ASSIGNABLE_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {STAFF_ROLE_LABEL[role]}
                   </option>
                 ))}
               </select>
@@ -267,8 +308,9 @@ export function TeamManager() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              New staff start as a coach — they appear in assignments and
-              messaging once an admin assigns them to athletes.
+              The role sets what they can do — see the permission matrix below.
+              They appear in assignments and messaging once an admin assigns
+              them to clients.
             </p>
           </CardContent>
         </Card>
@@ -285,15 +327,62 @@ export function TeamManager() {
               onToggle={() =>
                 setExpandedId((cur) => (cur === member.id ? null : member.id))
               }
-              onAccessChange={(level) => setAccess(member, level)}
+              onRoleChange={(role) => setRole(member, role)}
               onToggleNotification={(channel) =>
                 toggleNotification(member.id, channel)
               }
               onUploadVs={() => uploadVulnerableSector(member)}
+              onAddCert={(cert) => addCertification(member, cert)}
             />
           ))}
         </div>
       </Card>
+
+      {/* Permission matrix (O4) — what each rung of the ladder can do */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-lg">What each role can do</h2>
+          <p className="text-sm text-muted-foreground">
+            The five-tier ladder — pick a role above and these permissions
+            apply immediately.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {STAFF_ROLE_ORDER.map((role) => (
+            <div
+              key={role}
+              className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-4"
+            >
+              <Pill tone={ROLE_PILL[role].tone} className="self-start">
+                {ROLE_PILL[role].label}
+              </Pill>
+              <ul className="flex flex-col gap-1.5 text-xs">
+                {STAFF_ROLE_PERMISSIONS[role].map((perm) => {
+                  const masked = perm.toLowerCase().includes("masked");
+                  return (
+                    <li
+                      key={perm}
+                      className={cn(
+                        "flex items-start gap-1.5",
+                        masked
+                          ? "font-semibold text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {masked ? (
+                        <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0 text-success/70" />
+                      )}
+                      <span>{perm}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Success flash */}
       {flash ? (
@@ -317,17 +406,20 @@ function StaffRow({
   member,
   expanded,
   onToggle,
-  onAccessChange,
+  onRoleChange,
   onToggleNotification,
   onUploadVs,
+  onAddCert,
 }: {
   member: LocalStaff;
   expanded: boolean;
   onToggle: () => void;
-  onAccessChange: (level: StaffAccessLevel) => void;
+  onRoleChange: (role: StaffRole) => void;
   onToggleNotification: (channel: "push" | "email") => void;
   onUploadVs: () => void;
+  onAddCert: (cert: { name: string; expires: string }) => void;
 }) {
+  const [addingCert, setAddingCert] = useState(false);
   const role = ROLE_PILL[member.role];
   const athleteCount = member.isLocal ? 0 : athleteIdsForStaff(member.id).size;
   const hasExpired = member.certifications.some((c) => c.status === "expired");
@@ -357,6 +449,17 @@ function StaffRow({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate font-semibold">{member.name}</span>
+              {hasExpired ? (
+                <span
+                  title="Certifications expired — needs attention"
+                  className="inline-flex text-destructive"
+                >
+                  <AlertCircle className="h-4 w-4" aria-hidden />
+                  <span className="sr-only">
+                    Certifications expired — needs attention
+                  </span>
+                </span>
+              ) : null}
               <Pill tone={role.tone}>{role.label}</Pill>
               {member.isLocal ? <Pill tone="brand">New</Pill> : null}
               {recordsIssue ? (
@@ -376,26 +479,26 @@ function StaffRow({
         </button>
 
         <div className="flex items-center gap-2">
-          <span className="eyebrow hidden sm:inline">Access</span>
+          <span className="eyebrow hidden sm:inline">Role</span>
           <select
-            value={member.accessLevel}
-            aria-label={`Access level for ${member.name}`}
+            value={member.role}
+            aria-label={`Role for ${member.name}`}
             disabled={member.role === "owner"}
             title={
               member.role === "owner"
                 ? "The owner always has full access"
                 : undefined
             }
-            onChange={(e) =>
-              onAccessChange(e.target.value as StaffAccessLevel)
-            }
+            onChange={(e) => onRoleChange(e.target.value as StaffRole)}
             className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {ACCESS_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                {ACCESS_LEVEL_LABEL[level]}
-              </option>
-            ))}
+            {(member.role === "owner" ? STAFF_ROLE_ORDER : ASSIGNABLE_ROLES).map(
+              (r) => (
+                <option key={r} value={r}>
+                  {STAFF_ROLE_LABEL[r]}
+                </option>
+              ),
+            )}
           </select>
         </div>
       </div>
@@ -450,15 +553,38 @@ function StaffRow({
                 checked={member.notifications.email}
                 onToggle={() => onToggleNotification("email")}
               />
+              <EnablePushButton hint="Most coaches are on their phones — accept notifications from this website to get pings on this device." />
             </div>
           </div>
 
-          {/* Certifications */}
+          {/* Certifications (O6 — add flow + expired flags) */}
           <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-            <span className="eyebrow inline-flex items-center gap-1.5">
-              <Award className="h-3.5 w-3.5" />
-              Certifications
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="eyebrow inline-flex items-center gap-1.5">
+                <Award className="h-3.5 w-3.5" />
+                Certifications
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAddingCert((v) => !v)}
+              >
+                {addingCert ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                {addingCert ? "Cancel" : "Add certification"}
+              </Button>
+            </div>
+            {addingCert ? (
+              <AddCertificationForm
+                onAdd={(cert) => {
+                  onAddCert(cert);
+                  setAddingCert(false);
+                }}
+              />
+            ) : null}
             {member.certifications.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
                 No certifications on file yet.
@@ -467,17 +593,23 @@ function StaffRow({
               <ul className="flex flex-col gap-2">
                 {member.certifications.map((cert) => {
                   const pill = CERT_PILL[cert.status];
+                  const expired = cert.status === "expired";
                   return (
                     <li
                       key={cert.name}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface/50 px-3 py-2"
+                      className={cn(
+                        "flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2",
+                        expired
+                          ? "border-destructive/40 bg-destructive/[0.05]"
+                          : "border-border bg-surface/50",
+                      )}
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">
                           {cert.name}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {cert.status === "expired" ? "Expired" : "Expires"}{" "}
+                          {expired ? "Expired" : "Expires"}{" "}
                           {fmtFullDay(cert.expires)}
                         </div>
                       </div>
@@ -535,6 +667,81 @@ function StaffRow({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * O6 — inline add-certification flow: name, a document upload affordance
+ * (demo — the file never leaves the browser) and an expiry date. The status
+ * pill derives from the date: valid, expiring within 45 days, or expired.
+ */
+function AddCertificationForm({
+  onAdd,
+}: {
+  onAdd: (cert: { name: string; expires: string }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [expires, setExpires] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-brand/30 bg-surface/50 p-3">
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Certification name (e.g. Standard First Aid + CPR-C)"
+        aria-label="Certification name"
+        autoFocus
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-accent/50">
+          <Upload className="h-4 w-4 text-muted-foreground" aria-hidden />
+          Upload document (demo)
+          <input
+            type="file"
+            className="sr-only"
+            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+          />
+        </label>
+        {fileName ? (
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{fileName}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            PDF or photo of the card
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground">
+            Expiry date
+          </span>
+          <Input
+            type="date"
+            value={expires}
+            onChange={(e) => setExpires(e.target.value)}
+            aria-label="Certification expiry date"
+            className="h-9 w-[10rem]"
+          />
+        </div>
+        <Button
+          variant="brand"
+          size="sm"
+          className="h-9"
+          disabled={!name.trim() || !expires}
+          onClick={() => onAdd({ name: name.trim(), expires })}
+        >
+          Add
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        An expired date flags the certification as invalid and marks the staff
+        member for attention. Saves locally in this demo.
+      </p>
     </div>
   );
 }

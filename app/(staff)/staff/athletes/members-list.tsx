@@ -7,21 +7,21 @@ import {
   ArrowUp,
   CalendarClock,
   Filter,
-  Mail,
-  MailWarning,
   Plus,
   Search,
   Trash2,
-  X,
+  Users,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import { TabBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import {
   bucketLabel,
+  daysSinceLastNote,
   fmtDay,
   statusLabel,
   type Athlete,
@@ -33,16 +33,19 @@ import {
   athleteIdsForStaff,
   staffMembers,
 } from "@/lib/demo/staff";
+import {
+  trainingGroups,
+  type TrainingGroup,
+} from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
 import { programDueMeta } from "./program-due";
 
 /**
- * Round-4 members list — the client slept on the Trello board and killed it:
- * "you don't need the boards… more like the client queue". One table, status
- * tabs (Active / Paused / Inactive — round 5 dropped Away), search + coach +
- * checkbox filters, sortable columns, and rows that go STRAIGHT into the full
- * client profile — no card modal in between.
+ * Round-5 members list: one table for EVERY client — athletes AND teams
+ * (C13: "teams are clients too"). Status tabs use the shared line style with
+ * bracketed counts that react to the filters (CM9), every column sorts (CM3)
+ * and the "Last commented" column replaces the inactivity digest (CM4).
  */
 
 const STATUS_TABS: AthleteStatus[] = ["active", "paused", "inactive"];
@@ -53,16 +56,25 @@ const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutr
   inactive: "neutral",
 };
 
-type SortKey = "name" | "sport" | "age" | "due";
+type SortKey =
+  | "name"
+  | "focus"
+  | "age"
+  | "sex"
+  | "programming"
+  | "management"
+  | "membership"
+  | "due"
+  | "lastNote";
 type SortDir = "asc" | "desc";
-
-function daysSinceLastNote(a: Athlete): number {
-  const last = a.notes[0]?.date;
-  if (!last) return 999;
-  return Math.floor((Date.now() - new Date(last).getTime()) / 86_400_000);
-}
+type TypeFilter = "all" | "athletes" | "teams";
 
 const STALE_DAYS = 14;
+
+/** A list row is either an athlete or a training team (C13/C15). */
+type Row =
+  | { kind: "athlete"; a: Athlete }
+  | { kind: "team"; g: TrainingGroup };
 
 function coachOf(athleteId: string, role: "programming" | "management"): string {
   const id = assignmentsForAthlete(athleteId).find((a) => a.role === role)?.staffId;
@@ -80,6 +92,23 @@ function dueValue(a: Athlete): number {
   return 9999;
 }
 
+/* --- sort accessors across the mixed athlete/team rows --- */
+const rowName = (r: Row) => (r.kind === "athlete" ? r.a.name : r.g.name);
+const rowFocus = (r: Row) => (r.kind === "athlete" ? r.a.sport : r.g.focus);
+const rowAge = (r: Row) => (r.kind === "athlete" ? r.a.age : -1);
+const rowSex = (r: Row) => (r.kind === "athlete" ? r.a.gender : "~");
+const rowProgramming = (r: Row) =>
+  r.kind === "athlete"
+    ? coachOf(r.a.id, "programming")
+    : (r.g.coachNames[0] ?? "—");
+const rowManagement = (r: Row) =>
+  r.kind === "athlete" ? coachOf(r.a.id, "management") : "—";
+const rowMembership = (r: Row) =>
+  r.kind === "athlete" ? bucketLabel[r.a.bucket] : "Team";
+const rowDue = (r: Row) => (r.kind === "athlete" ? dueValue(r.a) : 9998);
+const rowLastNote = (r: Row) =>
+  r.kind === "athlete" ? daysSinceLastNote(r.a) : 9999;
+
 export function MembersList({
   athletes,
   viewerStaffId,
@@ -92,43 +121,28 @@ export function MembersList({
   const [tab, setTab] = useState<AthleteStatus>("active");
   const [query, setQuery] = useState("");
   const [coachFilter, setCoachFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sportChecks, setSportChecks] = useState<Set<string>>(new Set());
   const [bucketChecks, setBucketChecks] = useState<Set<MemberBucket>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("due");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [digestOpen, setDigestOpen] = useState(false);
   const [adding, setAdding] = useState(false);
 
-  const sports = useMemo(
+  const focusOptions = useMemo(
     () => Array.from(new Set(list.map((a) => a.sport))).sort(),
     [list],
   );
-  const coaches = staffMembers.filter(
-    (s) => s.role === "coach" || s.role === "coach-manager",
-  );
+  const coaches = staffMembers
+    .filter((s) => s.role === "coach" || s.role === "coach-manager")
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const counts = useMemo(() => {
-    const c: Record<AthleteStatus, number> = {
-      active: 0,
-      paused: 0,
-      inactive: 0,
-    };
-    for (const a of list) c[a.status] += 1;
-    return c;
-  }, [list]);
-
-  const stale = useMemo(
-    () =>
-      list.filter(
-        (a) => a.status === "active" && daysSinceLastNote(a) >= STALE_DAYS,
-      ),
-    [list],
-  );
-
-  const rows = useMemo(() => {
+  /** Athletes matching every filter EXCEPT the status tab (drives CM9 counts). */
+  const baseAthletes = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let out = list.filter((a) => a.status === tab);
+    let out = list;
+    if (typeFilter === "teams") return [] as Athlete[];
     if (q) {
       out = out.filter(
         (a) =>
@@ -149,21 +163,83 @@ export function MembersList({
     if (bucketChecks.size > 0) {
       out = out.filter((a) => bucketChecks.has(a.bucket));
     }
+    return out;
+  }, [list, typeFilter, query, coachFilter, sportChecks, bucketChecks, viewerStaffId]);
+
+  /** Teams matching the filters — they live under the Active tab (C13). */
+  const baseTeams = useMemo(() => {
+    if (typeFilter === "athletes") return [] as TrainingGroup[];
+    // Membership buckets are athlete-only — a bucket filter excludes teams.
+    if (bucketChecks.size > 0) return [] as TrainingGroup[];
+    const q = query.trim().toLowerCase();
+    let out = trainingGroups;
+    if (q) {
+      out = out.filter(
+        (g) =>
+          g.name.toLowerCase().includes(q) ||
+          g.focus.toLowerCase().includes(q) ||
+          g.program.toLowerCase().includes(q) ||
+          g.coachNames.join(" ").toLowerCase().includes(q),
+      );
+    }
+    if (coachFilter !== "all") {
+      const staffId = coachFilter === "mine" ? viewerStaffId : coachFilter;
+      const name = staffMembers.find((s) => s.id === staffId)?.name;
+      out = out.filter((g) => (name ? g.coachNames.includes(name) : false));
+    }
+    if (sportChecks.size > 0) {
+      out = out.filter((g) =>
+        [...sportChecks].some((s) =>
+          g.focus.toLowerCase().includes(s.toLowerCase()),
+        ),
+      );
+    }
+    return out;
+  }, [typeFilter, bucketChecks, query, coachFilter, sportChecks, viewerStaffId]);
+
+  /** CM9 — bracketed tab counts that react to search + filters. */
+  const counts = useMemo(() => {
+    const c: Record<AthleteStatus, number> = {
+      active: baseTeams.length,
+      paused: 0,
+      inactive: 0,
+    };
+    for (const a of baseAthletes) c[a.status] += 1;
+    return c;
+  }, [baseAthletes, baseTeams]);
+
+  const rows = useMemo(() => {
+    const out: Row[] = baseAthletes
+      .filter((a) => a.status === tab)
+      .map((a) => ({ kind: "athlete", a }) as Row);
+    if (tab === "active") {
+      for (const g of baseTeams) out.push({ kind: "team", g });
+    }
     const dir = sortDir === "asc" ? 1 : -1;
-    out = out.slice().sort((a, b) => {
+    out.sort((x, y) => {
       switch (sortKey) {
         case "name":
-          return dir * a.name.localeCompare(b.name);
-        case "sport":
-          return dir * a.sport.localeCompare(b.sport);
+          return dir * rowName(x).localeCompare(rowName(y));
+        case "focus":
+          return dir * rowFocus(x).localeCompare(rowFocus(y));
         case "age":
-          return dir * (a.age - b.age);
+          return dir * (rowAge(x) - rowAge(y));
+        case "sex":
+          return dir * rowSex(x).localeCompare(rowSex(y));
+        case "programming":
+          return dir * rowProgramming(x).localeCompare(rowProgramming(y));
+        case "management":
+          return dir * rowManagement(x).localeCompare(rowManagement(y));
+        case "membership":
+          return dir * rowMembership(x).localeCompare(rowMembership(y));
         case "due":
-          return dir * (dueValue(a) - dueValue(b));
+          return dir * (rowDue(x) - rowDue(y));
+        case "lastNote":
+          return dir * (rowLastNote(x) - rowLastNote(y));
       }
     });
     return out;
-  }, [list, tab, query, coachFilter, sportChecks, bucketChecks, sortKey, sortDir, viewerStaffId]);
+  }, [baseAthletes, baseTeams, tab, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -219,7 +295,7 @@ export function MembersList({
       attendancePct: 0,
       injuryFlags: [],
       season: "off-season",
-      reminders: ["New member — run the onboarding checklist"],
+      reminders: ["New client — run the onboarding checklist"],
       guardians: [],
       lastActive: new Date().toISOString(),
       notes: [],
@@ -233,51 +309,22 @@ export function MembersList({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Status tabs — the client-queue pattern the client asked for */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-border">
-        {STATUS_TABS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setTab(s)}
-            aria-pressed={tab === s}
-            className={cn(
-              "-mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
-              tab === s
-                ? "border-brand text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {statusLabel[s]}
-            <span
-              className={cn(
-                "tnum rounded-full px-1.5 text-[0.65rem] font-bold",
-                tab === s
-                  ? "bg-brand/10 text-brand-ink"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {counts[s]}
-            </span>
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2 pb-1.5">
-          {stale.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setDigestOpen(true)}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15"
-            >
-              <MailWarning className="h-3.5 w-3.5" />
-              {stale.length} need attention
-            </button>
-          ) : null}
+      {/* Status tabs — shared line style (CM2) with reactive counts (CM9) */}
+      <TabBar
+        tabs={STATUS_TABS.map((s) => ({
+          value: s,
+          label: statusLabel[s],
+          count: counts[s],
+        }))}
+        active={tab}
+        onSelect={setTab}
+        right={
           <Button variant="brand" size="sm" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
-            Add member
+            Add client
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Search + filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -285,11 +332,21 @@ export function MembersList({
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            placeholder="Search name, sport, or coach…"
+            placeholder="Search name, focus, or coach…"
             className="border-border/60 bg-surface pl-8"
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+          aria-label="Filter by client type"
+          className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
+        >
+          <option value="all">All clients</option>
+          <option value="athletes">Athletes</option>
+          <option value="teams">Teams</option>
+        </select>
         <select
           value={coachFilter}
           onChange={(e) => setCoachFilter(e.target.value)}
@@ -297,7 +354,7 @@ export function MembersList({
           className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
         >
           <option value="all">All coaches</option>
-          <option value="mine">Only my athletes</option>
+          <option value="mine">Only my clients</option>
           {coaches.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -332,9 +389,9 @@ export function MembersList({
                 onClick={() => setFiltersOpen(false)}
               />
               <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-3 shadow-raised">
-                <p className="eyebrow mb-1.5">Sport</p>
+                <p className="eyebrow mb-1.5">Focus</p>
                 <div className="grid grid-cols-2 gap-x-2">
-                  {sports.map((s) => (
+                  {focusOptions.map((s) => (
                     <label
                       key={s}
                       className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/50"
@@ -388,36 +445,38 @@ export function MembersList({
         </div>
       </div>
 
-      {/* Add-member inline form (O2 kept from the board) */}
+      {/* Add-client inline form */}
       {adding ? (
-        <AddMemberForm onAdd={addAthlete} onCancel={() => setAdding(false)} />
+        <AddMemberForm
+          focusOptions={focusOptions}
+          onAdd={addAthlete}
+          onCancel={() => setAdding(false)}
+        />
       ) : null}
 
-      {/* The list — sortable like the exercise library */}
+      {/* The list — every column sortable (CM3) */}
       <div className="overflow-x-auto rounded-xl border border-border scrollbar-slim">
-        <table className="w-full min-w-[860px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
-              <SortHeader label="Athlete" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-              <SortHeader label="Sport" active={sortKey === "sport"} dir={sortDir} onClick={() => toggleSort("sport")} />
+              <SortHeader label="Client" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
+              <SortHeader label="Focus" active={sortKey === "focus"} dir={sortDir} onClick={() => toggleSort("focus")} />
               <SortHeader label="Age" active={sortKey === "age"} dir={sortDir} onClick={() => toggleSort("age")} />
-              <th className="px-3 py-2.5 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                Gender
-              </th>
-              <th className="px-3 py-2.5 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                Programming coach
-              </th>
-              <th className="px-3 py-2.5 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                Management coach
-              </th>
-              <th className="px-3 py-2.5 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                Membership
-              </th>
+              <SortHeader label="Sex" active={sortKey === "sex"} dir={sortDir} onClick={() => toggleSort("sex")} />
+              <SortHeader label="Programming" active={sortKey === "programming"} dir={sortDir} onClick={() => toggleSort("programming")} />
+              <SortHeader label="Management" active={sortKey === "management"} dir={sortDir} onClick={() => toggleSort("management")} />
+              <SortHeader label="Membership" active={sortKey === "membership"} dir={sortDir} onClick={() => toggleSort("membership")} />
               <SortHeader
                 label={tab === "active" ? "Program due" : "Follow up"}
                 active={sortKey === "due"}
                 dir={sortDir}
                 onClick={() => toggleSort("due")}
+              />
+              <SortHeader
+                label="Last commented"
+                active={sortKey === "lastNote"}
+                dir={sortDir}
+                onClick={() => toggleSort("lastNote")}
               />
               {tab === "inactive" ? (
                 <th className="w-10 px-3 py-2.5" aria-label="Actions" />
@@ -425,26 +484,35 @@ export function MembersList({
             </tr>
           </thead>
           <tbody>
-            {rows.map((a) => (
-              <MemberRow
-                key={a.id}
-                athlete={a}
-                tab={tab}
-                onOpen={() =>
-                  router.push(`/staff/athletes/${a.id}` as Route)
-                }
-                onDelete={() => deleteAthlete(a.id)}
-                stale={a.status === "active" && daysSinceLastNote(a) >= STALE_DAYS}
-              />
-            ))}
+            {rows.map((row) =>
+              row.kind === "athlete" ? (
+                <MemberRow
+                  key={row.a.id}
+                  athlete={row.a}
+                  tab={tab}
+                  onOpen={() =>
+                    router.push(`/staff/athletes/${row.a.id}` as Route)
+                  }
+                  onDelete={() => deleteAthlete(row.a.id)}
+                />
+              ) : (
+                <TeamRow
+                  key={row.g.id}
+                  group={row.g}
+                  onOpen={() =>
+                    router.push(`/staff/teams/${row.g.id}` as Route)
+                  }
+                />
+              ),
+            )}
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-3 py-10 text-center text-sm text-muted-foreground"
                 >
-                  No {statusLabel[tab].toLowerCase()} members
-                  {query || filterCount > 0 || coachFilter !== "all"
+                  No {statusLabel[tab].toLowerCase()} clients
+                  {query || filterCount > 0 || coachFilter !== "all" || typeFilter !== "all"
                     ? " match the filters."
                     : "."}
                 </td>
@@ -457,15 +525,11 @@ export function MembersList({
       {/* Status semantics helper line */}
       <p className="text-xs text-muted-foreground text-pretty">
         {tab === "active"
-          ? "Click a member to open their full profile — notes, checklists, program, billing, everything."
+          ? "Click a client to open their full profile — teams open the team profile with roster and contacts."
           : tab === "paused"
             ? "Paused members keep their login — no programs run. The follow-up date is the retention call that brings them back."
             : "Inactive accounts are disabled (no login) but the record is kept. Delete only when it should be gone for good."}
       </p>
-
-      {digestOpen ? (
-        <DigestModal stale={stale} onClose={() => setDigestOpen(false)} />
-      ) : null}
     </div>
   );
 }
@@ -509,16 +573,34 @@ function SortHeader({
   );
 }
 
+/** "Last commented" cell — days since the last coach note (CM4). */
+function LastNoteCell({ days }: { days: number }) {
+  return (
+    <td className="tnum px-3 py-2.5">
+      {days >= 999 ? (
+        <span className="text-xs text-muted-foreground">—</span>
+      ) : (
+        <span
+          className={cn(
+            days >= STALE_DAYS && "font-semibold text-warning",
+          )}
+          title={days >= STALE_DAYS ? "No note in 14+ days" : undefined}
+        >
+          {days}d
+        </span>
+      )}
+    </td>
+  );
+}
+
 function MemberRow({
   athlete,
   tab,
-  stale,
   onOpen,
   onDelete,
 }: {
   athlete: Athlete;
   tab: AthleteStatus;
-  stale: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -535,13 +617,6 @@ function MemberRow({
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
               {athlete.name}
-              {athlete.isMinor ? <Pill tone="info">Minor</Pill> : null}
-              {stale ? (
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-warning"
-                  title="No note in 14+ days"
-                />
-              ) : null}
             </span>
             <span className="block text-xs text-muted-foreground">
               {athlete.planName}
@@ -576,6 +651,7 @@ function MemberRow({
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
+      <LastNoteCell days={daysSinceLastNote(athlete)} />
       {tab === "inactive" ? (
         <td className="px-3 py-2.5">
           <button
@@ -598,17 +674,77 @@ function MemberRow({
   );
 }
 
+/** A team-as-client row (C13) — opens the team profile. */
+function TeamRow({
+  group,
+  onOpen,
+}: {
+  group: TrainingGroup;
+  onOpen: () => void;
+}) {
+  return (
+    <tr
+      onClick={onOpen}
+      className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
+    >
+      <td className="px-3 py-2.5">
+        <span className="flex items-center gap-2.5">
+          <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-semibold">
+              {group.name}
+              <Pill tone="info" icon={<Users className="h-3 w-3" />}>
+                Team
+              </Pill>
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {group.program}
+            </span>
+          </span>
+        </span>
+      </td>
+      <td className="px-3 py-2.5">{group.focus}</td>
+      <td className="tnum px-3 py-2.5 text-muted-foreground">
+        {group.athleteCount}
+        <span className="ml-0.5 text-xs">athletes</span>
+      </td>
+      <td className="px-3 py-2.5 text-muted-foreground">—</td>
+      <td className="px-3 py-2.5 text-muted-foreground">
+        {group.coachNames.join(", ")}
+      </td>
+      <td className="px-3 py-2.5 text-muted-foreground">—</td>
+      <td className="px-3 py-2.5">
+        <Pill tone="info">Team</Pill>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-xs text-muted-foreground">
+          Last session {fmtDay(group.lastSession)}
+        </span>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-xs text-muted-foreground">—</span>
+      </td>
+    </tr>
+  );
+}
+
+const ADD_NEW = "__add-new__";
+
 function AddMemberForm({
+  focusOptions,
   onAdd,
   onCancel,
 }: {
+  focusOptions: string[];
   onAdd: (name: string, sport: string, yob: number) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
-  const [sport, setSport] = useState("");
+  const [focus, setFocus] = useState("");
+  const [customFocus, setCustomFocus] = useState("");
   const [yob, setYob] = useState("");
   const canAdd = name.trim().length > 1;
+  const resolvedFocus = focus === ADD_NEW ? customFocus.trim() : focus;
 
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-xl border border-brand/30 bg-brand/[0.03] p-3">
@@ -625,14 +761,37 @@ function AddMemberForm({
       </div>
       <div className="grid gap-1">
         <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-          Sport
+          Focus
         </span>
-        <Input
-          value={sport}
-          className="h-9 w-36"
-          onChange={(e) => setSport(e.target.value)}
-        />
+        {/* C5: pick from existing values — no free-text typos */}
+        <select
+          value={focus}
+          aria-label="Focus"
+          onChange={(e) => setFocus(e.target.value)}
+          className="h-9 w-40 rounded-md border border-input bg-surface px-2 text-sm"
+        >
+          <option value="">Select focus…</option>
+          {focusOptions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+          <option value={ADD_NEW}>+ Add new…</option>
+        </select>
       </div>
+      {focus === ADD_NEW ? (
+        <div className="grid gap-1">
+          <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+            New focus
+          </span>
+          <Input
+            value={customFocus}
+            placeholder="e.g. Weight loss"
+            className="h-9 w-36"
+            onChange={(e) => setCustomFocus(e.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="grid gap-1">
         <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           Year of birth
@@ -649,108 +808,17 @@ function AddMemberForm({
         size="sm"
         disabled={!canAdd}
         onClick={() =>
-          onAdd(name.trim(), sport.trim(), Number(yob) || new Date().getFullYear() - 16)
+          onAdd(name.trim(), resolvedFocus, Number(yob) || new Date().getFullYear() - 16)
         }
       >
-        Add member
+        Add client
       </Button>
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
       <span className="ml-auto text-xs text-muted-foreground">
-        New members land in Active with the onboarding checklist ready.
+        New clients land in Active with the onboarding checklist ready.
       </span>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Inactivity digest — kept from the board (C3), active members only   */
-/* ------------------------------------------------------------------ */
-
-function DigestModal({
-  stale,
-  onClose,
-}: {
-  stale: Athlete[];
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/70 p-4 backdrop-blur-sm md:py-12"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Member inactivity report"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-card shadow-raised"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-b border-border bg-surface/60 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-brand-ink">
-                <Mail className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold">
-                  AOS Reports{" "}
-                  <span className="font-normal text-muted-foreground">
-                    &lt;reports@lpsathletic.com&gt;
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  to coaches · daily at 6:00 AM
-                </p>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close report">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="flex flex-col gap-4 p-5">
-          <h3 className="text-lg font-bold text-destructive">
-            Member Inactivity Report
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            The following active members have not received a note in the last{" "}
-            {STALE_DAYS} days.
-          </p>
-          <ul className="flex flex-col gap-1">
-            {stale.map((a) => {
-              const coaches = assignmentsForAthlete(a.id)
-                .map((as) => staffMembers.find((s) => s.id === as.staffId)?.name)
-                .filter(Boolean);
-              return (
-                <li key={a.id} className="text-sm">
-                  <span className="font-semibold">
-                    {a.name} [{a.sport}, {a.gender}, {a.yearOfBirth}]
-                  </span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    — {coaches.length > 0 ? coaches.join(", ") : "Unassigned"} ·{" "}
-                    {daysSinceLastNote(a)}d quiet
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            In production this digest emails every coach automatically — here
-            it&apos;s simulated from the live member list.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

@@ -1,16 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, Send, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  BellRing,
+  Download,
+  Eye,
+  Film,
+  ImageIcon,
+  Link2,
+  Paperclip,
+  Trash2,
+} from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import {
+  ChatComposer,
+  renderChatBody,
+  VoiceNoteBubble,
+} from "@/components/app/chat-composer";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import type { ChatAttachment } from "@/lib/demo/chat";
 import type { Message, MessageRole, ThreadParticipant } from "@/lib/demo/data";
 
 /** A message plus local moderation state (O3: admin delete → tombstone). */
-type ConvoMessage = Message & { removedAt?: string };
+type ConvoMessage = Message & {
+  removedAt?: string;
+  attachments?: ChatAttachment[];
+};
 
 /** Deterministic hue from an id so avatars stay stable across renders. */
 function hueFor(id: string): number {
@@ -38,6 +55,7 @@ export function ThreadConversation({
   me,
   canPost = true,
   canDelete = false,
+  canJoin = false,
 }: {
   initialMessages: Message[];
   participants: ThreadParticipant[];
@@ -47,13 +65,22 @@ export function ThreadConversation({
   canPost?: boolean;
   /** True for admins/owners — enables per-message removal (O3). */
   canDelete?: boolean;
+  /** C35: a viewing coach can JOIN the chat + get notified (local state). */
+  canJoin?: boolean;
 }) {
   const [messages, setMessages] = useState<ConvoMessage[]>(initialMessages);
-  const [draft, setDraft] = useState("");
+  const [joined, setJoined] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  function send() {
-    const body = draft.trim();
-    if (!body) return;
+  const posting = canPost || joined;
+
+  useEffect(() => {
+    // Keep the newest message in view — the pane is a fixed-height scroller.
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [messages.length]);
+
+  function send(body: string, attachments: ChatAttachment[]) {
+    if (!body && attachments.length === 0) return;
     setMessages((prev) => [
       ...prev,
       {
@@ -63,9 +90,9 @@ export function ThreadConversation({
         senderRole: me.role,
         body,
         at: new Date().toISOString(),
+        attachments: attachments.length > 0 ? attachments : undefined,
       },
     ]);
-    setDraft("");
   }
 
   function removeMessage(id: string) {
@@ -77,8 +104,12 @@ export function ThreadConversation({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {/* Message list — fills the pane, scrolls independently (C35) */}
+      <div
+        ref={listRef}
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1 scrollbar-slim"
+      >
         {messages.map((m) => {
           const mine = m.senderId === me.id;
           const removed = Boolean(m.removedAt);
@@ -124,7 +155,10 @@ export function ThreadConversation({
                           : "rounded-bl-sm border border-border bg-surface/60",
                       )}
                     >
-                      {m.body}
+                      {m.body ? renderChatBody(m.body) : null}
+                      {m.attachments?.map((a, i) => (
+                        <AttachmentView key={i} attachment={a} />
+                      ))}
                     </div>
                     <span className="px-1 text-[0.7rem] text-muted-foreground">
                       {fmtTime(m.at)}
@@ -148,44 +182,87 @@ export function ThreadConversation({
         })}
       </div>
 
-      {canPost ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-soft">
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={3}
-            placeholder="Write a message…  (⌘/Ctrl + Enter to send)"
-            className="resize-none border-0 bg-transparent p-1 shadow-none focus-visible:ring-0"
+      {/* Composer pinned at the bottom of the pane */}
+      {posting ? (
+        <div className="shrink-0">
+          {joined ? (
+            <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
+              <BellRing className="h-3.5 w-3.5" />
+              You joined this chat — you&apos;ll be notified of new messages.
+            </p>
+          ) : null}
+          <ChatComposer
+            onSend={send}
+            hint={`Messaging ${participants.length} participant${
+              participants.length === 1 ? "" : "s"
+            } · Ctrl+Enter sends`}
           />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              Messaging {participants.length} participant
-              {participants.length === 1 ? "" : "s"}
-              {canDelete ? " · hover a message to remove it (admin)" : ""}
-            </span>
+        </div>
+      ) : (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2">
+            <Eye className="h-4 w-4 shrink-0" />
+            View only — you&rsquo;re not assigned to this client.
+          </span>
+          {canJoin ? (
             <Button
               variant="brand"
               size="sm"
-              onClick={send}
-              disabled={!draft.trim()}
+              className="ml-auto"
+              onClick={() => setJoined(true)}
             >
-              <Send className="h-4 w-4" />
-              Send
+              <BellRing className="h-3.5 w-3.5" />
+              Join chat &amp; get notified
             </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          <Eye className="h-4 w-4 shrink-0" />
-          View only — you&rsquo;re not assigned to this athlete.
+          ) : null}
         </div>
       )}
     </div>
+  );
+}
+
+/** Attachment renderer: voice notes play, media downloads (mock). */
+function AttachmentView({ attachment }: { attachment: ChatAttachment }) {
+  if (attachment.kind === "voice") {
+    return <VoiceNoteBubble duration={attachment.duration} />;
+  }
+  if (attachment.kind === "link") {
+    return (
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-1.5 flex items-center gap-2 rounded-lg border border-border bg-surface/70 px-2.5 py-1.5 text-xs font-medium text-brand-ink underline-offset-2 hover:underline"
+      >
+        <Link2 className="h-3.5 w-3.5 shrink-0" />
+        {attachment.label}
+      </a>
+    );
+  }
+  const Icon =
+    attachment.kind === "video"
+      ? Film
+      : attachment.kind === "image"
+        ? ImageIcon
+        : Paperclip;
+  return (
+    <span className="mt-1.5 flex items-center gap-2 rounded-lg border border-border bg-surface/70 px-2.5 py-1.5 text-xs font-medium">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate">{attachment.name}</span>
+      {"duration" in attachment ? (
+        <span className="tnum text-muted-foreground">
+          {attachment.duration}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        title="Download (demo)"
+        aria-label={`Download ${attachment.name}`}
+        className="ml-1 inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[0.7rem] font-semibold transition-colors hover:bg-accent"
+      >
+        <Download className="h-3 w-3" />
+        Download
+      </button>
+    </span>
   );
 }

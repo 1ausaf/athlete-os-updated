@@ -36,6 +36,8 @@ export default async function AthleteProfilePage() {
       <ProfileForm
         initial={profile}
         athleteName={athlete.name}
+        initials={athlete.initials}
+        hue={athlete.hue}
         gender={athlete.gender}
         isMinor={athlete.isMinor}
         isParentView={isParentView}

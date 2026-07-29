@@ -1,4 +1,5 @@
 import {
+  athleteById,
   threadById,
   type Message,
   type ThreadParticipant,
@@ -45,12 +46,31 @@ export function teamChannelFor(athleteId: string): TeamChannel {
   }
 
   // Athletes without a seeded thread still get a working channel: their
-  // assigned coaches + admin, no history yet.
+  // assigned coaches + admin — and for minors, their guardians (Rule of Two).
+  const athlete = athleteById(athleteId);
+  const guardians: ThreadParticipant[] = (athlete?.guardians ?? []).map(
+    (g, i) => ({
+      id: `guardian-${athleteId}-${i}`,
+      name: g.name,
+      role: "guardian",
+    }),
+  );
   return {
     messages: [],
     participants: [
       { id: "coach-ellis", name: "Coach Ellis", role: "coach" },
       { id: "admin-victoria", name: "Victoria Flores", role: "admin" },
+      ...guardians,
+      ...(athlete
+        ? [
+            {
+              id: athlete.id,
+              name: athlete.name,
+              role: "athlete" as const,
+              isMinor: athlete.isMinor,
+            },
+          ]
+        : []),
     ],
     unread: 0,
   };

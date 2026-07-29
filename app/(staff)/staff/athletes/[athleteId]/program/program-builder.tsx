@@ -1,12 +1,15 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   ClipboardPaste,
   Copy,
+  CopyPlus,
   Dumbbell,
   GripVertical,
   Home,
@@ -16,6 +19,7 @@ import {
   Link2,
   Link2Off,
   Minus,
+  Pencil,
   Plus,
   Repeat2,
   Search,
@@ -23,26 +27,35 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 
 import { VideoModal } from "@/components/app/video-modal";
-import { ProgramCalendar, type CalendarWeekRow } from "@/components/program/program-calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Textarea } from "@/components/ui/textarea";
 import {
   LOCATION_LABEL,
+  SECTION_COLORS,
+  jordanProgramDays,
   kgToLb,
   lbToKg,
+  programTemplates,
+  scaffoldProgram,
   type AthleteProgram,
   type LibraryExercise,
   type LoadMode,
+  type ProgramDay,
+  type ProgramSection,
+  type ProgramTemplate,
   type ReferenceMaxEntry,
   type RepMode,
+  type SectionColor,
 } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
+import { BuilderCalendar, type BuilderCalendarWeek } from "./builder-calendar";
 import { PrintButton } from "./print-button";
 
 /* ------------------------------------------------------------------ */
@@ -61,6 +74,8 @@ interface EdExercise {
   uid: string;
   exerciseId: string;
   instructions: string;
+  /** C16 — per-program note; "" falls back to the library's points. */
+  noteOverride: string;
   repMode: RepMode;
   sets: EdSet[];
   /** True when this exercise is supersetted with the NEXT one in the section. */
@@ -68,13 +83,18 @@ interface EdExercise {
 }
 
 interface EdSection {
+  uid: string;
   title: string;
+  /** C21 — coach-picked accent color. */
+  color?: SectionColor;
   exercises: EdExercise[];
 }
 
 interface EdDay {
   id: string;
   dayNumber: number;
+  /** C17 — "1A"/"1B" when a day holds multiple sessions. */
+  dayLabel?: string;
   title: string;
   location: "gym" | "home";
   focus: string;
@@ -84,43 +104,53 @@ interface EdDay {
 
 interface EdWeek {
   weekNumber: number;
+  /** C25 — coach-renamed week ("Deload", "Test week"…). */
+  label?: string;
   days: EdDay[];
 }
 
 let uidCounter = 0;
 const uid = () => `ed-${++uidCounter}`;
 
+function sectionsToEd(sections: ProgramSection[]): EdSection[] {
+  return sections.map((s) => {
+    const exercises = s.exercises.map((e, i) => {
+      const grp = e.slot.replace(/\d+$/, "");
+      const next = s.exercises[i + 1];
+      const nextGrp = next ? next.slot.replace(/\d+$/, "") : null;
+      return {
+        uid: uid(),
+        exerciseId: e.exerciseId,
+        instructions: e.instructions ?? "",
+        noteOverride: e.noteOverride ?? "",
+        repMode: e.repMode,
+        sets: e.sets.map((set) => ({
+          target: set.target,
+          load: set.load == null ? "" : String(set.load),
+          unit: set.loadMode,
+        })),
+        linkNext: nextGrp !== null && nextGrp === grp && /\d$/.test(e.slot),
+      } satisfies EdExercise;
+    });
+    return { uid: uid(), title: s.title, color: s.color, exercises };
+  });
+}
+
 function toEditable(program: AthleteProgram): EdWeek[] {
   return program.weeks.map((w) => ({
     weekNumber: w.weekNumber,
-    days: w.days.map((d) => ({
-      id: d.id,
-      dayNumber: d.dayNumber,
-      title: d.title,
-      location: d.location,
-      focus: d.focus,
-      published: d.published ?? true,
-      sections: d.sections.map((s) => {
-        const exercises = s.exercises.map((e, i) => {
-          const grp = e.slot.replace(/\d+$/, "");
-          const next = s.exercises[i + 1];
-          const nextGrp = next ? next.slot.replace(/\d+$/, "") : null;
-          return {
-            uid: uid(),
-            exerciseId: e.exerciseId,
-            instructions: e.instructions ?? "",
-            repMode: e.repMode,
-            sets: e.sets.map((set) => ({
-              target: set.target,
-              load: set.load == null ? "" : String(set.load),
-              unit: set.loadMode,
-            })),
-            linkNext: nextGrp !== null && nextGrp === grp && /\d$/.test(e.slot),
-          } satisfies EdExercise;
-        });
-        return { title: s.title, exercises };
-      }),
-    })),
+    days: relabelDays(
+      w.days.map((d) => ({
+        id: d.id,
+        dayNumber: d.dayNumber,
+        dayLabel: d.dayLabel,
+        title: d.title,
+        location: d.location,
+        focus: d.focus,
+        published: d.published ?? true,
+        sections: sectionsToEd(d.sections),
+      })),
+    ),
   }));
 }
 
@@ -171,7 +201,9 @@ const DEFAULT_TARGET: Record<RepMode, string> = {
   velocity: "0.8 m/s",
 };
 
-/** TrainHeroic paints each block type its own color — same idea, fixed hues. */
+const DEFAULT_SECTION_TITLES = ["Warm-up", "Strength", "Accessory"];
+
+/** Legacy title-based hues — used until the coach picks a color (C21). */
 const SECTION_HUES: Record<string, number> = {
   "Warm-up": 200,
   "Speed Strength": 25,
@@ -186,6 +218,21 @@ function sectionHue(title: string): number {
   return SECTION_HUES[title] ?? 210;
 }
 
+const SECTION_COLOR_CSS: Record<SectionColor, string> = {
+  neutral: "hsl(215 15% 55%)",
+  red: "hsl(0 72% 50%)",
+  orange: "hsl(25 85% 50%)",
+  green: "hsl(150 65% 40%)",
+  blue: "hsl(210 80% 50%)",
+  purple: "hsl(270 65% 55%)",
+};
+
+function sectionAccent(section: EdSection): string {
+  return section.color
+    ? SECTION_COLOR_CSS[section.color]
+    : `hsl(${sectionHue(section.title)} 72% 48%)`;
+}
+
 /** Convert a numeric load string between units where that makes sense. */
 function convertLoad(load: string, from: LoadMode, to: LoadMode): string {
   if (load === "") return load;
@@ -196,6 +243,28 @@ function convertLoad(load: string, from: LoadMode, to: LoadMode): string {
   return load;
 }
 
+/**
+ * C17 — keep session labels consistent: a weekday with one session shows
+ * plain "Day N"; with several it becomes "1A"/"1B"/"1C". Days sort by
+ * weekday, sessions keep their insertion order within it.
+ */
+function relabelDays(days: EdDay[]): EdDay[] {
+  const sorted = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
+  const counts = new Map<number, number>();
+  for (const d of sorted) counts.set(d.dayNumber, (counts.get(d.dayNumber) ?? 0) + 1);
+  const seen = new Map<number, number>();
+  return sorted.map((d) => {
+    const total = counts.get(d.dayNumber) ?? 1;
+    if (total <= 1) {
+      return d.dayLabel == null ? d : { ...d, dayLabel: undefined };
+    }
+    const idx = seen.get(d.dayNumber) ?? 0;
+    seen.set(d.dayNumber, idx + 1);
+    const label = `${d.dayNumber}${String.fromCharCode(65 + idx)}`;
+    return d.dayLabel === label ? d : { ...d, dayLabel: label };
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Publish scheduling (C16) — "5:00 AM, N days in advance"             */
 /* ------------------------------------------------------------------ */
@@ -203,6 +272,15 @@ function convertLoad(load: string, from: LoadMode, to: LoadMode): string {
 type AutoPublishRule = AthleteProgram["autoPublish"];
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CAL_WEEKDAY = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
 
 function hourLabel(hour: number): string {
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
@@ -253,17 +331,26 @@ function publishState(
 }
 
 /* ------------------------------------------------------------------ */
-/* Cross-athlete day clipboard (C15) — survives navigation             */
+/* Cross-athlete clipboards (C15/C21) — survive navigation             */
 /* ------------------------------------------------------------------ */
 
 const CLIPBOARD_KEY = "aos-day-clipboard";
+const SECTION_CLIPBOARD_KEY = "aos-section-clipboard";
 
 interface DayClipboard {
-  v: 1;
+  v: 2;
   sourceAthleteName: string;
   dayTitle: string;
   dayNumber: number;
   sections: EdSection[];
+}
+
+interface SectionClipboard {
+  v: 1;
+  sourceName: string;
+  title: string;
+  color?: SectionColor;
+  exercises: EdExercise[];
 }
 
 function readClipboard(): DayClipboard | null {
@@ -274,7 +361,7 @@ function readClipboard(): DayClipboard | null {
     const parsed = JSON.parse(raw) as DayClipboard;
     if (
       parsed == null ||
-      parsed.v !== 1 ||
+      parsed.v !== 2 ||
       typeof parsed.sourceAthleteName !== "string" ||
       !Array.isArray(parsed.sections)
     ) {
@@ -286,13 +373,47 @@ function readClipboard(): DayClipboard | null {
   }
 }
 
-/** Deep-clone sections with fresh uids (paste / repeat-week). */
-function cloneSections(sections: EdSection[]): EdSection[] {
-  return (JSON.parse(JSON.stringify(sections)) as EdSection[]).map((s) => ({
-    ...s,
-    exercises: s.exercises.map((e) => ({ ...e, uid: uid() })),
+function readSectionClipboard(): SectionClipboard | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SECTION_CLIPBOARD_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SectionClipboard;
+    if (
+      parsed == null ||
+      parsed.v !== 1 ||
+      typeof parsed.title !== "string" ||
+      !Array.isArray(parsed.exercises)
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Deep-clone exercises with fresh uids (paste / duplicate / repeat-week). */
+function cloneExercises(list: EdExercise[]): EdExercise[] {
+  return (JSON.parse(JSON.stringify(list)) as EdExercise[]).map((e) => ({
+    ...e,
+    uid: uid(),
   }));
 }
+
+/** Deep-clone sections with fresh uids. */
+function cloneSections(sections: EdSection[]): EdSection[] {
+  return sections.map((s) => ({
+    ...s,
+    uid: uid(),
+    exercises: cloneExercises(s.exercises),
+  }));
+}
+
+const blankSections = () =>
+  DEFAULT_SECTION_TITLES.map(
+    (title): EdSection => ({ uid: uid(), title, exercises: [] }),
+  );
 
 /* ------------------------------------------------------------------ */
 /* Component                                                           */
@@ -326,7 +447,13 @@ export function ProgramBuilder({
   const [view, setView] = useState<"builder" | "calendar">("builder");
   const [autoPub, setAutoPub] = useState<AutoPublishRule>(program.autoPublish);
   const [autoPubOpen, setAutoPubOpen] = useState(false);
+  const [weekMenuOpen, setWeekMenuOpen] = useState(false);
+  const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [sectionEdit, setSectionEdit] = useState<number | null>(null);
+  const [libPick, setLibPick] = useState<"section" | "day" | "program" | null>(null);
   const [clipboard, setClipboard] = useState<DayClipboard | null>(null);
+  const [sectionClip, setSectionClip] = useState<SectionClipboard | null>(null);
   const [picker, setPicker] = useState<{ sectionIdx: number } | null>(null);
   const [video, setVideo] = useState<LibraryExercise | null>(null);
   const [drag, setDrag] = useState<{ sectionIdx: number; exIdx: number } | null>(null);
@@ -337,10 +464,11 @@ export function ProgramBuilder({
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The clipboard lives in localStorage so a day copied on Jordan's builder
-  // can be pasted on Maya's — read it once the client mounts.
+  // Clipboards live in localStorage so a day/section copied on Jordan's
+  // builder can be pasted on Maya's — read them once the client mounts.
   useEffect(() => {
     setClipboard(readClipboard());
+    setSectionClip(readSectionClipboard());
   }, []);
 
   const activeWeek =
@@ -393,20 +521,218 @@ export function ProgramBuilder({
     }));
   }
 
+  function patchSection(sectionIdx: number, fn: (s: EdSection) => EdSection) {
+    patchDay(active!.id, (d) => ({
+      ...d,
+      sections: d.sections.map((s, si) => (si === sectionIdx ? fn(s) : s)),
+    }));
+  }
+
   /* ---- week / day selection ---- */
 
   function selectWeek(week: EdWeek) {
     setActiveWeekNo(week.weekNumber);
+    setWeekMenuOpen(false);
+    setConfirmDeleteWeek(false);
+    setSectionEdit(null);
     const match =
       week.days.find((d) => d.dayNumber === active?.dayNumber) ?? week.days[0];
     if (match) setActiveDayId(match.id);
+  }
+
+  /* ---- week management (C19/C26) ---- */
+
+  const renumberWeeks = (ws: EdWeek[]): EdWeek[] =>
+    ws.map((w, i) => ({ ...w, weekNumber: i + 1 }));
+
+  function addWeek() {
+    const last = weeks[weeks.length - 1];
+    const skeleton =
+      last && last.days.length > 0
+        ? last.days.map((d) => ({
+            dayNumber: d.dayNumber,
+            title: d.title,
+            location: d.location,
+          }))
+        : [{ dayNumber: 1, title: "Day 1", location: "gym" as const }];
+    const days: EdDay[] = relabelDays(
+      skeleton.map((d) => ({
+        id: uid(),
+        dayNumber: d.dayNumber,
+        title: d.title,
+        location: d.location,
+        focus: "New week — add movements",
+        published: false,
+        sections: blankSections(),
+      })),
+    );
+    const week: EdWeek = { weekNumber: weeks.length + 1, days };
+    setWeeks((prev) => renumberWeeks([...prev, week]));
+    setActiveWeekNo(weeks.length + 1);
+    setActiveDayId(days[0]?.id ?? "");
+    say(
+      `Week ${weeks.length + 1} added — long blocks welcome, 12–16 weeks stay navigable.`,
+    );
+  }
+
+  function duplicateWeek() {
+    const src = activeWeek!;
+    const copy: EdWeek = {
+      weekNumber: 0,
+      label: src.label ? `${src.label} (copy)` : undefined,
+      days: src.days.map((d) => ({
+        ...d,
+        id: uid(),
+        published: false,
+        sections: cloneSections(d.sections),
+      })),
+    };
+    setWeeks((prev) => {
+      const idx = prev.findIndex((w) => w.weekNumber === src.weekNumber);
+      return renumberWeeks([
+        ...prev.slice(0, idx + 1),
+        copy,
+        ...prev.slice(idx + 1),
+      ]);
+    });
+    setActiveWeekNo(src.weekNumber + 1);
+    setActiveDayId(copy.days[0]?.id ?? "");
+    setWeekMenuOpen(false);
+    say(`Week ${src.weekNumber} duplicated — change the reps, keep the rest.`);
+  }
+
+  function deleteWeek() {
+    if (weeks.length <= 1) {
+      say("A program needs at least one week.");
+      return;
+    }
+    const no = activeWeek!.weekNumber;
+    const remaining = renumberWeeks(weeks.filter((w) => w.weekNumber !== no));
+    setWeeks(remaining);
+    const next = remaining[Math.min(no - 1, remaining.length - 1)];
+    setActiveWeekNo(next.weekNumber);
+    setActiveDayId(next.days[0]?.id ?? "");
+    setWeekMenuOpen(false);
+    setConfirmDeleteWeek(false);
+    say(`Week ${no} deleted — later weeks renumbered.`);
+  }
+
+  function renameWeek(label: string) {
+    const no = activeWeek!.weekNumber;
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === no ? { ...w, label: label || undefined } : w,
+      ),
+    );
+  }
+
+  /* ---- day management (C17/C19) ---- */
+
+  function addDay() {
+    const used = new Set(activeWeek!.days.map((d) => d.dayNumber));
+    let n = 1;
+    while (n <= 7 && used.has(n)) n++;
+    const dayNumber = Math.min(n, 7);
+    const newDay: EdDay = {
+      id: uid(),
+      dayNumber,
+      title: `Day ${dayNumber}`,
+      location: "gym",
+      focus: "New day — add movements",
+      published: false,
+      sections: blankSections(),
+    };
+    const weekNo = activeWeek!.weekNumber;
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === weekNo
+          ? { ...w, days: relabelDays([...w.days, newDay]) }
+          : w,
+      ),
+    );
+    setActiveDayId(newDay.id);
+    say(`Day added to Week ${weekNo}.`);
+  }
+
+  /** C17 — Day 1 becomes Day 1A/1B: weightlifters train up to 3×/day. */
+  function addSession() {
+    const siblings = activeWeek!.days.filter(
+      (d) => d.dayNumber === active!.dayNumber,
+    );
+    const letter = String.fromCharCode(65 + siblings.length);
+    const newDay: EdDay = {
+      id: uid(),
+      dayNumber: active!.dayNumber,
+      title: active!.title,
+      location: active!.location,
+      focus: "Second session — add movements",
+      published: false,
+      sections: blankSections(),
+    };
+    const weekNo = activeWeek!.weekNumber;
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === weekNo
+          ? { ...w, days: relabelDays([...w.days, newDay]) }
+          : w,
+      ),
+    );
+    setActiveDayId(newDay.id);
+    say(
+      `Session ${active!.dayNumber}${letter} added — Day ${active!.dayNumber} is now a multi-session day.`,
+    );
+  }
+
+  function removeActiveDay() {
+    if (activeWeek!.days.length <= 1) {
+      say("A week needs at least one day.");
+      return;
+    }
+    const removed = active!;
+    const weekNo = activeWeek!.weekNumber;
+    const remaining = relabelDays(
+      activeWeek!.days.filter((d) => d.id !== removed.id),
+    );
+    setWeeks((prev) =>
+      prev.map((w) => (w.weekNumber === weekNo ? { ...w, days: remaining } : w)),
+    );
+    setActiveDayId(remaining[0]?.id ?? "");
+    say(`Day ${removed.dayLabel ?? removed.dayNumber} removed from Week ${weekNo}.`);
+  }
+
+  /** C18 — a calendar chip was dropped on another cell. */
+  function moveCalendarDay(
+    fromWeekNo: number,
+    dayId: string,
+    toWeekNo: number,
+    toDayNumber: number,
+  ) {
+    const srcWeek = weeks.find((w) => w.weekNumber === fromWeekNo);
+    const moved = srcWeek?.days.find((d) => d.id === dayId);
+    if (!moved) return;
+    if (fromWeekNo === toWeekNo && moved.dayNumber === toDayNumber) return;
+    setWeeks((prev) =>
+      prev.map((w) => {
+        if (w.weekNumber !== fromWeekNo && w.weekNumber !== toWeekNo) return w;
+        let days = w.days;
+        if (w.weekNumber === fromWeekNo) days = days.filter((d) => d.id !== dayId);
+        if (w.weekNumber === toWeekNo)
+          days = [...days, { ...moved, dayNumber: toDayNumber }];
+        return { ...w, days: relabelDays(days) };
+      }),
+    );
+    say(
+      `${moved.title} moved to ${CAL_WEEKDAY[toDayNumber - 1]}${
+        toWeekNo !== fromWeekNo ? `, Week ${toWeekNo}` : ""
+      }.`,
+    );
   }
 
   /* ---- toolbar actions ---- */
 
   function copyDay() {
     const payload: DayClipboard = {
-      v: 1,
+      v: 2,
       sourceAthleteName: athleteName,
       dayTitle: active!.title,
       dayNumber: active!.dayNumber,
@@ -418,7 +744,7 @@ export function ProgramBuilder({
       // Storage blocked — the in-memory clipboard below still covers this tab.
     }
     setClipboard(payload);
-    say(`Copied Day ${active!.dayNumber} — open any athlete's builder and paste.`);
+    say(`Copied Day ${active!.dayNumber} — open any client's builder and paste.`);
   }
 
   function pasteDay() {
@@ -469,6 +795,148 @@ export function ProgramBuilder({
         ? `Day ${active!.dayNumber} unpublished — hidden from the athlete.`
         : `Day ${active!.dayNumber} published — visible to the athlete.`,
     );
+  }
+
+  /* ---- section management (C21) ---- */
+
+  function duplicateSection(sectionIdx: number) {
+    patchDay(active!.id, (d) => {
+      const src = d.sections[sectionIdx];
+      const copy = { ...cloneSections([src])[0], title: `${src.title} (copy)` };
+      const sections = [...d.sections];
+      sections.splice(sectionIdx + 1, 0, copy);
+      return { ...d, sections };
+    });
+    say("Section duplicated below.");
+  }
+
+  function deleteSection(sectionIdx: number) {
+    const title = active!.sections[sectionIdx]?.title ?? "Section";
+    setSectionEdit(null);
+    patchDay(active!.id, (d) => ({
+      ...d,
+      sections: d.sections.filter((_, si) => si !== sectionIdx),
+    }));
+    say(`"${title}" deleted.`);
+  }
+
+  function copySection(sectionIdx: number) {
+    const s = active!.sections[sectionIdx];
+    const payload: SectionClipboard = {
+      v: 1,
+      sourceName: athleteName,
+      title: s.title,
+      color: s.color,
+      exercises: s.exercises,
+    };
+    try {
+      window.localStorage.setItem(SECTION_CLIPBOARD_KEY, JSON.stringify(payload));
+    } catch {
+      // Storage blocked — in-memory clipboard still covers this tab.
+    }
+    setSectionClip(payload);
+    say(`Section "${s.title}" copied — paste it into any day, on any client.`);
+  }
+
+  function pasteSection() {
+    const clip = readSectionClipboard() ?? sectionClip;
+    if (!clip) return;
+    const section: EdSection = {
+      uid: uid(),
+      title: clip.title,
+      color: clip.color,
+      exercises: cloneExercises(clip.exercises),
+    };
+    patchDay(active!.id, (d) => ({ ...d, sections: [...d.sections, section] }));
+    setAddMenuOpen(false);
+    say(
+      clip.sourceName === athleteName
+        ? `Section "${clip.title}" pasted.`
+        : `Section "${clip.title}" pasted from ${clip.sourceName}.`,
+    );
+  }
+
+  function moveSection(sectionIdx: number, dir: -1 | 1) {
+    const to = sectionIdx + dir;
+    if (to < 0 || to >= active!.sections.length) return;
+    patchDay(active!.id, (d) => {
+      const sections = [...d.sections];
+      const [s] = sections.splice(sectionIdx, 1);
+      sections.splice(to, 0, s);
+      return { ...d, sections };
+    });
+    setSectionEdit(to);
+  }
+
+  function addBlankSection() {
+    const idx = active!.sections.length;
+    patchDay(active!.id, (d) => ({
+      ...d,
+      sections: [...d.sections, { uid: uid(), title: "New section", exercises: [] }],
+    }));
+    setAddMenuOpen(false);
+    setSectionEdit(idx);
+    say("Blank section added — name it and pick a color.");
+  }
+
+  /* ---- add from library (C22) ---- */
+
+  function addExerciseFromMenu() {
+    setAddMenuOpen(false);
+    if (active!.sections.length === 0) {
+      patchDay(active!.id, (d) => ({
+        ...d,
+        sections: [{ uid: uid(), title: "New section", exercises: [] }],
+      }));
+      setPicker({ sectionIdx: 0 });
+    } else {
+      setPicker({ sectionIdx: active!.sections.length - 1 });
+    }
+  }
+
+  function importSection(tpl: ProgramTemplate, section: ProgramSection) {
+    const ed = sectionsToEd([section])[0];
+    patchDay(active!.id, (d) => ({ ...d, sections: [...d.sections, ed] }));
+    setLibPick(null);
+    say(`"${section.title}" added from ${tpl.name}.`);
+  }
+
+  function importDay(tpl: ProgramTemplate, day: ProgramDay) {
+    patchDay(active!.id, (d) => ({
+      ...d,
+      title: day.title,
+      location: day.location,
+      focus: day.focus,
+      sections: sectionsToEd(day.sections),
+    }));
+    setLibPick(null);
+    say(`Day replaced with "${day.title}" from ${tpl.name}.`);
+  }
+
+  function applyProgram(tpl: ProgramTemplate, applyMode: "fresh" | "append") {
+    const scaffold = scaffoldProgram({
+      id: `lib-${tpl.id}-${Date.now()}`,
+      name: tpl.name,
+      weeks: tpl.weeks,
+      daysPerWeek: tpl.daysPerWeek,
+      remoteDays: tpl.remoteDays,
+      seedDays: jordanProgramDays,
+    });
+    const newWeeks = toEditable(scaffold);
+    if (applyMode === "fresh") {
+      setWeeks(newWeeks);
+      setActiveWeekNo(1);
+      setActiveDayId(newWeeks[0]?.days[0]?.id ?? "");
+      say(`${tpl.name} applied — restarted at Week 1.`);
+    } else {
+      const combined = renumberWeeks([...weeks, ...newWeeks]);
+      setWeeks(combined);
+      const firstNew = combined[weeks.length];
+      setActiveWeekNo(firstNew?.weekNumber ?? 1);
+      setActiveDayId(firstNew?.days[0]?.id ?? "");
+      say(`${tpl.name} appended after Week ${weeks.length}.`);
+    }
+    setLibPick(null);
   }
 
   /* ---- exercise/set actions ---- */
@@ -540,6 +1008,7 @@ export function ProgramBuilder({
                   uid: uid(),
                   exerciseId: lib.id,
                   instructions: "",
+                  noteOverride: "",
                   repMode: lib.defaultRepMode,
                   sets: Array.from({ length: 3 }, () => ({
                     target: DEFAULT_TARGET[lib.defaultRepMode],
@@ -564,11 +1033,13 @@ export function ProgramBuilder({
     autoPub,
   );
 
-  const calendarWeeks: CalendarWeekRow[] = weeks.map((w) => ({
+  const calendarWeeks: BuilderCalendarWeek[] = weeks.map((w) => ({
     weekNumber: w.weekNumber,
+    label: w.label,
     days: w.days.map((d) => ({
       id: d.id,
       dayNumber: d.dayNumber,
+      label: d.dayLabel ?? String(d.dayNumber),
       title: d.title,
       location: d.location,
       movements: d.sections.reduce((n, s) => n + s.exercises.length, 0),
@@ -590,31 +1061,115 @@ export function ProgramBuilder({
         </p>
       ) : null}
 
-      {/* Week tabs + Builder/Calendar view toggle */}
+      {/* Week tabs (C19 — every week stays clickable) + view toggle */}
       <div className="flex flex-wrap items-center gap-2">
         {weeks.map((w) => {
           const live = w.days.filter((d) => d.published).length;
+          const isActive = w.weekNumber === activeWeek.weekNumber;
           return (
-            <button
-              key={w.weekNumber}
-              type="button"
-              onClick={() => selectWeek(w)}
-              className={cn(
-                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors",
-                w.weekNumber === activeWeek.weekNumber
-                  ? "border-brand/40 bg-brand/10 text-foreground"
-                  : "border-border bg-surface/50 text-muted-foreground hover:bg-accent",
-              )}
-            >
-              Week {w.weekNumber}
-              <span className="tnum text-[0.65rem] font-medium text-muted-foreground">
-                {mode === "template"
-                  ? `${w.days.length}d`
-                  : `${live}/${w.days.length} live`}
-              </span>
-            </button>
+            <span key={w.weekNumber} className="relative flex items-stretch">
+              <button
+                type="button"
+                onClick={() => selectWeek(w)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors",
+                  isActive
+                    ? "rounded-r-none border-r-0 border-brand/40 bg-brand/10 text-foreground"
+                    : "border-border bg-surface/50 text-muted-foreground hover:bg-accent",
+                )}
+              >
+                {w.label ?? `Week ${w.weekNumber}`}
+                <span className="tnum text-[0.65rem] font-medium text-muted-foreground">
+                  {mode === "template"
+                    ? `${w.days.length}d`
+                    : `${live}/${w.days.length} live`}
+                </span>
+              </button>
+              {isActive ? (
+                <button
+                  type="button"
+                  aria-label={`Week ${w.weekNumber} options`}
+                  aria-expanded={weekMenuOpen}
+                  onClick={() => {
+                    setWeekMenuOpen((o) => !o);
+                    setConfirmDeleteWeek(false);
+                  }}
+                  className="flex items-center rounded-r-lg border border-l-0 border-brand/40 bg-brand/10 px-1.5 text-foreground transition-colors hover:bg-brand/20 no-print"
+                >
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      weekMenuOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+              ) : null}
+
+              {/* Week menu (C19/C25/C26) — rename, duplicate, delete */}
+              {isActive && weekMenuOpen ? (
+                <div className="absolute left-0 top-full z-40 mt-1.5 w-64 rounded-xl border border-border bg-card p-2 shadow-raised">
+                  <label
+                    htmlFor="week-name"
+                    className="block px-1 pb-1 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    Week name
+                  </label>
+                  <Input
+                    id="week-name"
+                    value={activeWeek.label ?? ""}
+                    placeholder={`Week ${activeWeek.weekNumber}`}
+                    onChange={(e) => renameWeek(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  <div className="mt-1.5 flex flex-col">
+                    <AddMenuItem
+                      icon={CopyPlus}
+                      label="Duplicate week"
+                      hint="Copy what they did, then change the reps"
+                      onClick={duplicateWeek}
+                    />
+                    <AddMenuItem
+                      icon={Plus}
+                      label="Add day to this week"
+                      onClick={() => {
+                        addDay();
+                        setWeekMenuOpen(false);
+                      }}
+                    />
+                    <AddMenuItem
+                      icon={Trash2}
+                      label={
+                        confirmDeleteWeek
+                          ? "Confirm — delete this week"
+                          : "Delete week…"
+                      }
+                      hint={
+                        confirmDeleteWeek
+                          ? "Click again to permanently remove it"
+                          : undefined
+                      }
+                      danger
+                      onClick={() =>
+                        confirmDeleteWeek ? deleteWeek() : setConfirmDeleteWeek(true)
+                      }
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </span>
           );
         })}
+
+        {/* C19/C26 — grow the block after creation */}
+        <button
+          type="button"
+          onClick={addWeek}
+          title="Add a week to the end of the block"
+          className="flex items-center gap-1 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground no-print"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Week
+        </button>
 
         <div className="ml-auto flex items-center rounded-lg border border-border bg-surface/50 p-0.5">
           <button
@@ -650,7 +1205,7 @@ export function ProgramBuilder({
 
       {view === "calendar" ? (
         <>
-          <ProgramCalendar
+          <BuilderCalendar
             weeks={calendarWeeks}
             activeDayId={active.id}
             onSelectDay={(weekNumber, dayId) => {
@@ -658,6 +1213,7 @@ export function ProgramBuilder({
               setActiveDayId(dayId);
               setView("builder");
             }}
+            onMoveDay={moveCalendarDay}
           />
           {mode === "athlete" ? (
             <p className="text-xs text-muted-foreground">
@@ -668,10 +1224,16 @@ export function ProgramBuilder({
               .
             </p>
           ) : null}
+          {flash ? (
+            <p className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm font-medium text-success animate-fade-up">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {flash}
+            </p>
+          ) : null}
         </>
       ) : (
         <>
-          {/* Day tabs */}
+          {/* Day tabs — dayLabel renders 1A/1B for multi-session days (C17) */}
           <div className="flex flex-wrap gap-2">
             {activeWeek.days.map((d) => {
               const st = publishState(
@@ -684,7 +1246,10 @@ export function ProgramBuilder({
                 <button
                   key={d.id}
                   type="button"
-                  onClick={() => setActiveDayId(d.id)}
+                  onClick={() => {
+                    setActiveDayId(d.id);
+                    setSectionEdit(null);
+                  }}
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors",
                     d.id === active.id
@@ -697,7 +1262,7 @@ export function ProgramBuilder({
                   ) : (
                     <Dumbbell className="h-3.5 w-3.5" />
                   )}
-                  Day {d.dayNumber}
+                  Day {d.dayLabel ?? d.dayNumber}
                   {mode === "athlete" ? (
                     <span
                       title={st.label}
@@ -714,6 +1279,15 @@ export function ProgramBuilder({
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={addDay}
+              title="Add a day to this week"
+              className="flex items-center gap-1 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground no-print"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Day
+            </button>
           </div>
 
           {/* Toolbar */}
@@ -731,7 +1305,7 @@ export function ProgramBuilder({
                 title={
                   clipboard
                     ? `Paste Day ${clipboard.dayNumber} from ${clipboard.sourceAthleteName}`
-                    : "Copy a day first — the clipboard works across athletes"
+                    : "Copy a day first — the clipboard works across clients"
                 }
               >
                 <ClipboardPaste className="h-4 w-4" />
@@ -874,16 +1448,129 @@ export function ProgramBuilder({
             </p>
           ) : null}
 
-          {/* Day meta */}
+          {/* Day meta — title is click-to-rename (C25) */}
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl">
-              Week {activeWeek.weekNumber} · Day {active.dayNumber} —{" "}
-              {active.title}
+            <h2 className="flex min-w-0 flex-1 basis-72 items-center gap-2 text-xl">
+              <span className="whitespace-nowrap">
+                Week {activeWeek.weekNumber} · Day{" "}
+                {active.dayLabel ?? active.dayNumber} —
+              </span>
+              <input
+                value={active.title}
+                onChange={(ev) =>
+                  patchDay(active.id, (d) => ({ ...d, title: ev.target.value }))
+                }
+                aria-label="Rename this day"
+                title="Click to rename this day"
+                className="min-w-32 flex-1 rounded-md border border-transparent bg-transparent px-1 font-display text-xl font-bold transition-colors hover:border-border focus-visible:border-border focus-visible:outline-none"
+              />
             </h2>
             <Pill tone={active.location === "home" ? "info" : "brand"}>
               {LOCATION_LABEL[active.location]}
             </Pill>
             <span className="text-sm text-muted-foreground">{active.focus}</span>
+            <span className="ml-auto flex items-center gap-1.5 no-print">
+              {/* C17 — Day 1A/1B/1C */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addSession}
+                title={`Add another session to Day ${active.dayNumber} — 1A/1B/1C`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Session
+              </Button>
+
+              {/* C22 — day-level add menu */}
+              <span className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddMenuOpen((o) => !o)}
+                  aria-expanded={addMenuOpen}
+                  className={cn(addMenuOpen && "border-brand/40 bg-brand/10")}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      addMenuOpen && "rotate-180",
+                    )}
+                  />
+                </Button>
+                {addMenuOpen ? (
+                  <div className="absolute right-0 top-full z-40 mt-1.5 w-64 rounded-xl border border-border bg-card p-1.5 shadow-raised">
+                    <AddMenuItem
+                      icon={Dumbbell}
+                      label="Exercise from library"
+                      hint="Search the full exercise library"
+                      onClick={addExerciseFromMenu}
+                    />
+                    <AddMenuItem
+                      icon={Plus}
+                      label="Blank section"
+                      hint="Name it, color it, fill it"
+                      onClick={addBlankSection}
+                    />
+                    <AddMenuItem
+                      icon={LayoutList}
+                      label="Section from library"
+                      hint="Pick a program → day → section"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setLibPick("section");
+                      }}
+                    />
+                    <AddMenuItem
+                      icon={CalendarDays}
+                      label="Day from library"
+                      hint="Replaces this day's blocks"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setLibPick("day");
+                      }}
+                    />
+                    <AddMenuItem
+                      icon={Library}
+                      label="Program from library"
+                      hint="Apply a whole master template"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setLibPick("program");
+                      }}
+                    />
+                    <AddMenuItem
+                      icon={ClipboardPaste}
+                      label={
+                        sectionClip
+                          ? `Paste section — "${sectionClip.title}"`
+                          : "Paste section"
+                      }
+                      hint={
+                        sectionClip
+                          ? `Copied from ${sectionClip.sourceName}`
+                          : "Copy a section first — works across clients"
+                      }
+                      disabled={!sectionClip}
+                      onClick={pasteSection}
+                    />
+                  </div>
+                ) : null}
+              </span>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                title="Remove this day"
+                aria-label="Remove this day"
+                disabled={activeWeek.days.length <= 1}
+                onClick={removeActiveDay}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </span>
           </div>
 
           {/* Sections — slot letters run continuously across the session */}
@@ -895,21 +1582,37 @@ export function ProgramBuilder({
                 letterOffset,
               );
               letterOffset += groups;
-              const hue = sectionHue(section.title);
+              const accent = sectionAccent(section);
               return (
-                <section key={section.title} className="flex flex-col gap-2.5">
-                  {/* TrainHeroic-style colored block header */}
+                <section key={section.uid} className="flex flex-col gap-2.5">
+                  {/* C20 — just the name + color dot (+ edit pencil) */}
                   <div className="flex items-center gap-2">
                     <span
-                      className="h-4 w-1 rounded-full"
-                      style={{ background: `hsl(${hue} 75% 52%)` }}
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: accent }}
                     />
                     <span
                       className="text-xs font-bold uppercase tracking-wider"
-                      style={{ color: `hsl(${hue} 70% 52%)` }}
+                      style={{ color: accent }}
                     >
                       {section.title}
                     </span>
+                    <button
+                      type="button"
+                      aria-label={`Edit section ${section.title}`}
+                      title="Rename, recolor, move, duplicate or delete this section"
+                      onClick={() =>
+                        setSectionEdit((prev) =>
+                          prev === sectionIdx ? null : sectionIdx,
+                        )
+                      }
+                      className={cn(
+                        "text-muted-foreground transition-colors hover:text-foreground no-print",
+                        sectionEdit === sectionIdx && "text-brand-ink",
+                      )}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -920,6 +1623,109 @@ export function ProgramBuilder({
                       Add exercise
                     </Button>
                   </div>
+
+                  {/* C21 — section editor: rename, color, move, copy… */}
+                  {sectionEdit === sectionIdx ? (
+                    <Card className="border-brand/30 no-print">
+                      <CardContent className="flex flex-col gap-3 p-3.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <Input
+                            value={section.title}
+                            onChange={(ev) =>
+                              patchSection(sectionIdx, (s) => ({
+                                ...s,
+                                title: ev.target.value,
+                              }))
+                            }
+                            aria-label="Section name"
+                            className="h-8 w-48 text-sm"
+                          />
+                          <span className="flex items-center gap-1.5">
+                            {SECTION_COLORS.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                aria-label={`Section color ${c}`}
+                                title={c}
+                                onClick={() =>
+                                  patchSection(sectionIdx, (s) => ({
+                                    ...s,
+                                    color: c,
+                                  }))
+                                }
+                                className={cn(
+                                  "h-5 w-5 rounded-full transition-transform hover:scale-110",
+                                  section.color === c
+                                    ? "ring-2 ring-brand ring-offset-2 ring-offset-card"
+                                    : "ring-1 ring-border",
+                                )}
+                                style={{ background: SECTION_COLOR_CSS[c] }}
+                              />
+                            ))}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-auto h-7 w-7"
+                            aria-label="Close section editor"
+                            onClick={() => setSectionEdit(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={sectionIdx === 0}
+                            onClick={() => moveSection(sectionIdx, -1)}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                            Move up
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={sectionIdx === active.sections.length - 1}
+                            onClick={() => moveSection(sectionIdx, 1)}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                            Move down
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => duplicateSection(sectionIdx)}
+                          >
+                            <CopyPlus className="h-3.5 w-3.5" />
+                            Duplicate
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            title="Copy this section — paste it into another day or another client's program"
+                            onClick={() => copySection(sectionIdx)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy section
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-destructive hover:text-destructive"
+                            onClick={() => deleteSection(sectionIdx)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
                   <div className="flex flex-col gap-2">
                     {section.exercises.map((ex, exIdx) => {
@@ -935,6 +1741,7 @@ export function ProgramBuilder({
                       const refMax = def?.referenceMax
                         ? maxes[def.referenceMax]
                         : undefined;
+                      const hasOverride = ex.noteOverride.trim().length > 0;
                       const isDragging =
                         drag?.sectionIdx === sectionIdx && drag.exIdx === exIdx;
                       const isDropTarget =
@@ -1155,7 +1962,7 @@ export function ProgramBuilder({
                                 ))}
                               </div>
 
-                              {/* Footer: % reference · points of performance · set +/- */}
+                              {/* Footer: % reference · instructions override · set +/- */}
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                                 {usesPct && def?.referenceMax ? (
                                   <span className="text-xs text-muted-foreground">
@@ -1168,19 +1975,57 @@ export function ProgramBuilder({
                                       : " — no ref max on file"}
                                   </span>
                                 ) : null}
-                                {def && def.pointsOfPerformance.length > 0 ? (
-                                  <details className="group min-w-0">
-                                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-                                      Points of performance
-                                      <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
-                                    </summary>
-                                    <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground">
-                                      {def.pointsOfPerformance.map((p) => (
-                                        <li key={p}>— {p}</li>
-                                      ))}
-                                    </ul>
-                                  </details>
-                                ) : null}
+                                {/* C16 — library default vs custom note */}
+                                <details className="group min-w-0 flex-1 basis-52">
+                                  <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+                                    Instructions
+                                    {hasOverride ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand/10 px-1.5 py-px text-[0.65rem] font-semibold text-brand-ink">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                                        Custom note
+                                      </span>
+                                    ) : null}
+                                    <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                                  </summary>
+                                  <div className="mt-1.5 flex flex-col gap-1.5 no-print">
+                                    <Textarea
+                                      rows={2}
+                                      value={ex.noteOverride}
+                                      placeholder={
+                                        def && def.pointsOfPerformance.length > 0
+                                          ? def.pointsOfPerformance.join("\n")
+                                          : "No library notes — write instructions for this exercise."
+                                      }
+                                      aria-label={`Instructions for ${def?.name ?? ex.exerciseId}`}
+                                      onChange={(ev) =>
+                                        patchExercise(sectionIdx, ex.uid, (e) => ({
+                                          ...e,
+                                          noteOverride: ev.target.value,
+                                        }))
+                                      }
+                                      className="text-xs"
+                                    />
+                                    {hasOverride ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          patchExercise(sectionIdx, ex.uid, (e) => ({
+                                            ...e,
+                                            noteOverride: "",
+                                          }))
+                                        }
+                                        className="self-start text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+                                      >
+                                        Reset to library default
+                                      </button>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">
+                                        Showing the library default — typing writes
+                                        a custom note for this program only.
+                                      </p>
+                                    )}
+                                  </div>
+                                </details>
                                 <span className="ml-auto flex items-center gap-1 no-print">
                                   <Button
                                     variant="outline"
@@ -1231,8 +2076,289 @@ export function ProgramBuilder({
         />
       ) : null}
 
+      {/* Library pick modal (C22) — section / day / whole program */}
+      {libPick ? (
+        <LibraryPickModal
+          kind={libPick}
+          onClose={() => setLibPick(null)}
+          onPickSection={importSection}
+          onPickDay={importDay}
+          onApplyProgram={applyProgram}
+        />
+      ) : null}
+
       {/* Inline exercise demo (C14) — no more new-tab hand-off */}
       {video ? <VideoModal lib={video} onClose={() => setVideo(null)} /> : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Small menu item used by the week + add menus                        */
+/* ------------------------------------------------------------------ */
+
+function AddMenuItem({
+  icon: Icon,
+  label,
+  hint,
+  danger = false,
+  disabled = false,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  hint?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent",
+        danger && "text-destructive",
+      )}
+    >
+      <Icon
+        className={cn(
+          "mt-0.5 h-4 w-4 shrink-0",
+          danger ? "text-destructive" : "text-muted-foreground",
+        )}
+      />
+      <span className="min-w-0">
+        <span className="block font-medium">{label}</span>
+        {hint ? (
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Library pick modal (C22) — template → day → section drill-down      */
+/* ------------------------------------------------------------------ */
+
+const PICK_TITLE: Record<"section" | "day" | "program", string> = {
+  section: "Add section from library",
+  day: "Add day from library",
+  program: "Apply program from library",
+};
+
+function LibraryPickModal({
+  kind,
+  onClose,
+  onPickSection,
+  onPickDay,
+  onApplyProgram,
+}: {
+  kind: "section" | "day" | "program";
+  onClose: () => void;
+  onPickSection: (tpl: ProgramTemplate, section: ProgramSection) => void;
+  onPickDay: (tpl: ProgramTemplate, day: ProgramDay) => void;
+  onApplyProgram: (tpl: ProgramTemplate, mode: "fresh" | "append") => void;
+}) {
+  const [tpl, setTpl] = useState<ProgramTemplate | null>(null);
+  const [day, setDay] = useState<ProgramDay | null>(null);
+  const [applyMode, setApplyMode] = useState<"fresh" | "append">("append");
+
+  // Demo: template days are scaffolded from the seed block, like the editor.
+  const tplDays = useMemo<ProgramDay[]>(() => {
+    if (!tpl) return [];
+    return (
+      scaffoldProgram({
+        id: `pick-${tpl.id}`,
+        name: tpl.name,
+        weeks: 1,
+        daysPerWeek: tpl.daysPerWeek,
+        remoteDays: tpl.remoteDays,
+        seedDays: jordanProgramDays,
+      }).weeks[0]?.days ?? []
+    );
+  }, [tpl]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={PICK_TITLE[kind]}
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-raised"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 border-b border-border p-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base">{PICK_TITLE[kind]}</h3>
+            <p className="truncate text-xs text-muted-foreground">
+              {tpl
+                ? day
+                  ? `${tpl.name} · Day ${day.dayNumber} — pick a section`
+                  : kind === "program"
+                    ? tpl.name
+                    : `${tpl.name} — pick a day`
+                : "Pick a master program"}
+            </p>
+          </div>
+          {tpl ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => (day ? setDay(null) : setTpl(null))}
+            >
+              Back
+            </Button>
+          ) : null}
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto scrollbar-slim p-2">
+          {/* Step 1 — template */}
+          {!tpl
+            ? programTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTpl(t)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <Library className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      {t.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {t.level} · {t.weeks} wk × {t.daysPerWeek}{" "}
+                      {t.daysPerWeek === 1 ? "day" : "days"}
+                    </span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-muted-foreground" />
+                </button>
+              ))
+            : null}
+
+          {/* Program mode — confirm where it lands (same care as C24) */}
+          {tpl && kind === "program" ? (
+            <div className="flex flex-col gap-2 p-2">
+              {(
+                [
+                  {
+                    value: "fresh",
+                    title: "Start as a new program (Week 1)",
+                    hint: "Replaces every current week — the block restarts.",
+                  },
+                  {
+                    value: "append",
+                    title: "Append after the current weeks",
+                    hint: "Keeps the current block — this program continues where it ends.",
+                  },
+                ] as const
+              ).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors",
+                    applyMode === opt.value
+                      ? "border-brand/40 bg-brand/10"
+                      : "border-border bg-surface/50 hover:bg-accent",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="lib-apply-mode"
+                    value={opt.value}
+                    checked={applyMode === opt.value}
+                    onChange={() => setApplyMode(opt.value)}
+                    className="mt-0.5 accent-[hsl(var(--brand))]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold">{opt.title}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {opt.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+              <div className="flex justify-end border-t border-border pt-3">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={() => onApplyProgram(tpl, applyMode)}
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Step 2 — day */}
+          {tpl && kind !== "program" && !day
+            ? tplDays.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => (kind === "day" ? onPickDay(tpl, d) : setDay(d))}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      Day {d.dayNumber} — {d.title}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {d.sections.length}{" "}
+                      {d.sections.length === 1 ? "section" : "sections"} ·{" "}
+                      {d.sections.reduce((n, s) => n + s.exercises.length, 0)}{" "}
+                      movements
+                    </span>
+                  </span>
+                  {kind === "section" ? (
+                    <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-muted-foreground" />
+                  ) : (
+                    <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </button>
+              ))
+            : null}
+
+          {/* Step 3 — section */}
+          {tpl && kind === "section" && day
+            ? day.sections.map((s, i) => (
+                <button
+                  key={`${s.title}-${i}`}
+                  type="button"
+                  onClick={() => onPickSection(tpl, s)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <LayoutList className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      {s.title}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {s.exercises.length}{" "}
+                      {s.exercises.length === 1 ? "exercise" : "exercises"}
+                    </span>
+                  </span>
+                  <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              ))
+            : null}
+        </div>
+      </div>
     </div>
   );
 }

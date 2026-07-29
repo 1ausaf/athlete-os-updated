@@ -9,7 +9,6 @@ import {
   ClipboardList,
   CreditCard,
   Dumbbell,
-  HardDrive,
   IdCard,
   MessagesSquare,
   ShieldCheck,
@@ -17,7 +16,6 @@ import {
   Trophy,
 } from "lucide-react";
 
-import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PageHeader } from "@/components/app/page-header";
 import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -43,12 +41,14 @@ import { isStaff } from "@/lib/rbac";
 import { programDueLong } from "../program-due";
 import { NotesPanel } from "./notes-panel";
 import {
+  AvatarUpload,
   ChecklistsCard,
   CoachesCard,
   CompactProgramCard,
   DetailsCard,
   FollowUpBanner,
   GoalsCard,
+  LinkChips,
   StatusCard,
 } from "./profile-panels";
 
@@ -78,10 +78,10 @@ export default async function StaffAthleteProfilePage({
         eyebrow="Staff Workspace · Athlete"
         title={
           <span className="flex items-center gap-3">
-            <AthleteAvatar
+            <AvatarUpload
               initials={athlete.initials}
               hue={athlete.hue}
-              size="xl"
+              name={athlete.name}
             />
             {athlete.name}
           </span>
@@ -460,14 +460,8 @@ function MemberRecord({
               </Link>
             </Button>
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <Pill tone="neutral" icon={<HardDrive className="h-3 w-3" />}>
-              Drive
-            </Pill>
-            <Pill tone="neutral">Quo</Pill>
-            <Pill tone="neutral">Google Contact</Pill>
-            <Pill tone="neutral">Brevo</Pill>
-            <Pill tone="neutral">Square</Pill>
+          <div className="mt-2">
+            <LinkChips athleteId={athlete.id} />
           </div>
         </div>
       </div>
