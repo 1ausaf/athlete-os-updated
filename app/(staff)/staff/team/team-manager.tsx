@@ -44,7 +44,9 @@ const ROLE_PILL: Record<StaffMember["role"], { label: string; tone: PillTone }> 
   {
     owner: { label: "Owner", tone: "brand" },
     admin: { label: "Admin", tone: "info" },
+    "coach-manager": { label: "Coach Manager", tone: "info" },
     coach: { label: "Coach", tone: "neutral" },
+    intern: { label: "Intern", tone: "neutral" },
   };
 
 const CERT_PILL: Record<

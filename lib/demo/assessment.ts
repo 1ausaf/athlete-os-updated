@@ -433,3 +433,126 @@ export const assessments: Assessment[] = [jordanAssessment()];
 export function assessmentForAthlete(athleteId: string): Assessment | undefined {
   return assessments.find((a) => a.athleteId === athleteId);
 }
+
+/* ------------------------------------------------------------------ */
+/* Round 5: multiple assessment TYPES per athlete, listed by date       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * "The remapping is one type of assessment, but we can build multiple
+ * different types" — Remapping yearly, plus combine-style testing days.
+ * Every athlete surface shows a LIST (name · performed by · date) and each
+ * entry opens its own record. A dynamic assessment builder is phase 2.
+ */
+export type AssessmentType = "remapping" | "combine";
+
+export const ASSESSMENT_TYPE_LABEL: Record<AssessmentType, string> = {
+  remapping: "LPS Remapping™ Assessment",
+  combine: "Combine Testing",
+};
+
+export interface AssessmentSummary {
+  id: string;
+  athleteId: string;
+  type: AssessmentType;
+  name: string;
+  performedBy: string;
+  date: string;
+  status: "complete" | "pending";
+}
+
+/** One measured line on a combine testing day. */
+export interface CombineResult {
+  metric: string;
+  value: number | null;
+  unit: string;
+  /** Previous test's value for the delta chip (if retested). */
+  previous?: number;
+}
+
+export interface CombineAssessment {
+  id: string;
+  athleteId: string;
+  performedBy: string;
+  date: string;
+  results: CombineResult[];
+  notes: string;
+}
+
+export const combineAssessments: CombineAssessment[] = [
+  {
+    id: "asmt-jordan-combine-2026",
+    athleteId: "ath-jordan",
+    performedBy: "Coach Nadia",
+    date: at(-95),
+    results: [
+      { metric: "Vertical Jump", value: 28, unit: "in", previous: 26.5 },
+      { metric: "Broad Jump", value: 112, unit: "in", previous: 108 },
+      { metric: "10-Yard Sprint", value: 1.72, unit: "s", previous: 1.79 },
+      { metric: "40-Yard Sprint", value: 4.92, unit: "s", previous: 5.04 },
+      { metric: "Pro Agility (5-10-5)", value: 4.38, unit: "s", previous: 4.51 },
+      { metric: "Push-ups (max)", value: 42, unit: "reps", previous: 36 },
+      { metric: "Chin-ups (max)", value: 15, unit: "reps", previous: 12 },
+    ],
+    notes:
+      "Spring testing day. Every metric up vs the winter combine — sprint gains track with the block's speed emphasis.",
+  },
+];
+
+export function combineAssessmentById(
+  id: string,
+): CombineAssessment | undefined {
+  return combineAssessments.find((c) => c.id === id);
+}
+
+/** The per-athlete assessment list (newest first). */
+export const assessmentSummaries: AssessmentSummary[] = [
+  {
+    id: "asmt-jordan-remap-2026",
+    athleteId: "ath-jordan",
+    type: "remapping",
+    name: "LPS Remapping™ Assessment — 2026",
+    performedBy: "Coach Ellis",
+    date: at(-40),
+    status: "complete",
+  },
+  {
+    id: "asmt-jordan-combine-2026",
+    athleteId: "ath-jordan",
+    type: "combine",
+    name: "Combine Testing — Spring 2026",
+    performedBy: "Coach Nadia",
+    date: at(-95),
+    status: "complete",
+  },
+  {
+    id: "asmt-jordan-remap-2025",
+    athleteId: "ath-jordan",
+    type: "remapping",
+    name: "LPS Remapping™ Assessment — 2025",
+    performedBy: "Coach Clance",
+    date: at(-400),
+    status: "complete",
+  },
+  {
+    id: "asmt-maya-remap-2026",
+    athleteId: "ath-maya",
+    type: "remapping",
+    name: "LPS Remapping™ Assessment — 2026",
+    performedBy: "Coach Ellis",
+    date: at(14),
+    status: "pending",
+  },
+];
+
+export function assessmentSummariesFor(athleteId: string): AssessmentSummary[] {
+  return assessmentSummaries
+    .filter((s) => s.athleteId === athleteId)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function assessmentSummaryById(
+  id: string,
+): AssessmentSummary | undefined {
+  return assessmentSummaries.find((s) => s.id === id);
+}

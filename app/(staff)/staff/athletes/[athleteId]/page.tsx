@@ -98,9 +98,7 @@ export default async function StaffAthleteProfilePage({
                   ? "success"
                   : athlete.status === "paused"
                     ? "warning"
-                    : athlete.status === "away"
-                      ? "info"
-                      : "neutral"
+                    : "neutral"
               }
               dot
             >

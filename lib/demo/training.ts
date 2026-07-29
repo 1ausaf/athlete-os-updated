@@ -125,7 +125,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "kg",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-hip-snatch",
@@ -136,7 +136,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: "Snatch",
     defaultLoadMode: "pct",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-power-clean",
@@ -147,7 +147,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: "Clean & Jerk",
     defaultLoadMode: "kg",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-clean-pull",
@@ -158,7 +158,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: "Clean & Jerk",
     defaultLoadMode: "pct",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-front-squat",
@@ -169,7 +169,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "kg",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-back-squat",
@@ -180,7 +180,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-trapbar-dl",
@@ -191,7 +191,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-bench",
@@ -202,7 +202,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-db-bench-neutral",
@@ -213,7 +213,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-weighted-pullup",
@@ -224,7 +224,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-chinup-supinated",
@@ -235,7 +235,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-rdl",
@@ -246,7 +246,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-cs-row",
@@ -257,7 +257,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-split-squat",
@@ -268,7 +268,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-step-up",
@@ -279,7 +279,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-back-ext",
@@ -290,7 +290,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-powell-raise",
@@ -301,7 +301,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-iron-neck",
@@ -312,7 +312,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-farmer-walk",
@@ -323,7 +323,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-box-jump",
@@ -334,7 +334,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "height",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-a-walk",
@@ -345,7 +345,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-a-skip",
@@ -356,7 +356,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-a-run",
@@ -367,7 +367,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-broad-jump",
@@ -378,7 +378,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-pallof",
@@ -389,7 +389,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "time",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-dead-bug",
@@ -400,7 +400,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-sled-push",
@@ -411,7 +411,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-a-skip",
@@ -422,7 +422,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "distance",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
   {
     id: "ex-mb-slam",
@@ -433,7 +433,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "lb",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-pogo",
@@ -444,7 +444,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "time",
-    createdBy: "Coach Clance",
+    createdBy: "AOS Global",
   },
   {
     id: "ex-dyn-warmup",
@@ -466,7 +466,7 @@ export const exerciseLibrary: LibraryExercise[] = [
     referenceMax: null,
     defaultLoadMode: "bw",
     defaultRepMode: "reps",
-    createdBy: "Coach Clance",
+    createdBy: "LPS Athletic",
   },
 ];
 
@@ -482,18 +482,42 @@ export interface ProgramExercise {
   slot: string;
   exerciseId: string;
   instructions?: string;
+  /**
+   * Round 5 (C16): a manual per-program note for this exercise instance.
+   * When set it replaces the library's points of performance; when empty the
+   * library default shows.
+   */
+  noteOverride?: string;
   repMode: RepMode;
   sets: SetRx[];
 }
 
+/** Section accent colors the coach can pick when renaming (round 5, C21). */
+export const SECTION_COLORS = [
+  "neutral",
+  "red",
+  "orange",
+  "green",
+  "blue",
+  "purple",
+] as const;
+export type SectionColor = (typeof SECTION_COLORS)[number];
+
 export interface ProgramSection {
   title: string;
+  /** Coach-picked accent for the section header (round 5). */
+  color?: SectionColor;
   exercises: ProgramExercise[];
 }
 
 export interface ProgramDay {
   id: string;
   dayNumber: number;
+  /**
+   * Round 5 (C17): weightlifters can train 3×/day — Day 1A / 1B / 1C. When
+   * set, this replaces the plain "Day N" label ("1A", "1B"…).
+   */
+  dayLabel?: string;
   title: string;
   location: "gym" | "home";
   focus: string;
@@ -1098,6 +1122,48 @@ export const myBookings: MyBooking[] = [
   { id: "bk-3", startsAt: at(3, 16), endsAt: at(3, 17, 30), label: "Coaching", status: "confirmed" },
 ];
 
+/** A session the athlete already attended (round 5, A9: the Sessions page
+ *  "Past sessions" tab — "so we can count their sessions"). */
+export interface PastBooking {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  label: BookableSlot["label"];
+  attended: boolean;
+  coach: string;
+}
+
+export const pastBookings: PastBooking[] = [
+  { id: "pb-1", startsAt: at(-2, 16), endsAt: at(-2, 17, 30), label: "Coaching", attended: true, coach: "Coach Ellis" },
+  { id: "pb-2", startsAt: at(-4, 8, 30), endsAt: at(-4, 10), label: "Coaching", attended: true, coach: "Coach Nadia" },
+  { id: "pb-3", startsAt: at(-7, 16), endsAt: at(-7, 17, 30), label: "Coaching", attended: true, coach: "Coach Ellis" },
+  { id: "pb-4", startsAt: at(-9, 16), endsAt: at(-9, 17, 30), label: "Coaching", attended: false, coach: "Coach Ellis" },
+  { id: "pb-5", startsAt: at(-11, 8, 30), endsAt: at(-11, 10), label: "Coaching", attended: true, coach: "Coach Clance" },
+  { id: "pb-6", startsAt: at(-14, 16), endsAt: at(-14, 17, 30), label: "Coaching", attended: true, coach: "Coach Ellis" },
+  { id: "pb-7", startsAt: at(-16, 16), endsAt: at(-16, 17, 30), label: "Coaching", attended: true, coach: "Coach Nadia" },
+  { id: "pb-8", startsAt: at(-18, 8, 30), endsAt: at(-18, 10), label: "Coaching", attended: true, coach: "Coach Ellis" },
+];
+
+/** A completed program day (round 5, A2: the Training page "Past completed
+ *  sessions" tab). Opens in the logger so data can be fixed after the fact. */
+export interface CompletedSession {
+  dayId: string;
+  dayNumber: number;
+  title: string;
+  completedOn: string;
+  /** e.g. "18 sets · 42 min" — the list-row summary. */
+  summary: string;
+}
+
+export const completedSessions: CompletedSession[] = [
+  { dayId: "day-1", dayNumber: 1, title: "Lower Power", completedOn: at(-2, 17), summary: "17 sets · 52 min" },
+  { dayId: "day-3", dayNumber: 3, title: "Upper Strength", completedOn: at(-4, 9), summary: "15 sets · 47 min" },
+  { dayId: "day-1", dayNumber: 1, title: "Lower Power", completedOn: at(-9, 17), summary: "17 sets · 55 min" },
+  { dayId: "day-2", dayNumber: 2, title: "Recovery & Core", completedOn: at(-10, 8), summary: "8 sets · 24 min" },
+  { dayId: "day-3", dayNumber: 3, title: "Upper Strength", completedOn: at(-11, 9), summary: "15 sets · 44 min" },
+  { dayId: "day-1", dayNumber: 1, title: "Lower Power", completedOn: at(-16, 17), summary: "16 sets · 49 min" },
+];
+
 /* ------------------------------------------------------------------ */
 /* Announcements (read-only community feed)                            */
 /* ------------------------------------------------------------------ */
@@ -1156,8 +1222,24 @@ export interface ProgramTemplate {
   createdBy: string;
   /** ISO date the master was added — powers the "Newest" library sort (C10). */
   createdAt: string;
+  /** ISO date of the last edit — powers the "Last modified" sort (round 5). */
+  lastModified?: string;
   tags: string[];
+  /** Audience labels — kids / foundation / executive / per-sport (round 5). */
+  labels?: string[];
 }
+
+/** Program-library audience labels the client asked to manage (C25). */
+export const PROGRAM_LABELS = [
+  "Kids",
+  "Foundation",
+  "Executive",
+  "Athletes",
+  "Hockey",
+  "Basketball",
+  "Golf",
+  "Track",
+] as const;
 
 export const programTemplates: ProgramTemplate[] = [
   {
@@ -1170,6 +1252,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Hybrid on-boarding block — two in-gym, two remote days per week.",
     createdBy: "Coach Clance",
     createdAt: "2026-05-18",
+    lastModified: "2026-07-18",
+    labels: ["Athletes", "Foundation"],
     tags: ["Hybrid", "On-boarding"],
   },
   {
@@ -1203,6 +1287,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Realization block — singles at RPE 8–9, taper to test.",
     createdBy: "Coach Clance",
     createdAt: "2026-06-09",
+    lastModified: "2026-07-21",
+    labels: ["Athletes"],
     tags: ["Powerlifting", "Realization"],
   },
   {
@@ -1214,6 +1300,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Overload with partials before the full-range max block.",
     createdBy: "Coach Clance",
     createdAt: "2026-06-30",
+    lastModified: "2026-07-02",
+    labels: ["Athletes"],
     tags: ["Powerlifting", "Overload"],
   },
   {
@@ -1225,6 +1313,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "SB pyramid loading with clean & jerk technique work.",
     createdBy: "Coach Clance",
     createdAt: "2026-02-12",
+    lastModified: "2026-05-30",
+    labels: ["Athletes", "Foundation"],
     tags: ["Structural Balance", "Olympic Lifts"],
   },
   {
@@ -1236,6 +1326,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Executive schedule — 2×/wk full-body with mobility finishers.",
     createdBy: "Coach Clance",
     createdAt: "2025-09-26",
+    lastModified: "2026-06-11",
+    labels: ["Executive"],
     tags: ["Structural Balance", "Executive"],
   },
   {
@@ -1247,6 +1339,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Rotational power + posterior chain for the Sunday golf group.",
     createdBy: "Coach Nadia",
     createdAt: "2026-04-07",
+    lastModified: "2026-07-12",
+    labels: ["Golf", "Executive"],
     tags: ["Golf", "Rotational Power"],
   },
   {
@@ -1258,6 +1352,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "Acceleration + max-velocity foundation for the track club.",
     createdBy: "Coach Nadia",
     createdAt: "2026-05-02",
+    lastModified: "2026-07-24",
+    labels: ["Track", "Kids"],
     tags: ["Speed", "Team"],
   },
   {
@@ -1269,6 +1365,8 @@ export const programTemplates: ProgramTemplate[] = [
     description: "GPP + arm-care foundation for the Tigers HPP group.",
     createdBy: "Coach Ellis",
     createdAt: "2026-06-16",
+    lastModified: "2026-07-08",
+    labels: ["Athletes"],
     tags: ["Baseball", "Team"],
   },
 ];
@@ -1276,6 +1374,16 @@ export const programTemplates: ProgramTemplate[] = [
 /* ------------------------------------------------------------------ */
 /* Groups (shared-program teams)                                       */
 /* ------------------------------------------------------------------ */
+
+/** A named contact on a team (round 5, C13 — mirrors the client's Trello
+ *  team cards: current + past contacts, each with phone/email). */
+export interface TeamContact {
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  active: boolean;
+}
 
 export interface TrainingGroup {
   id: string;
@@ -1286,6 +1394,14 @@ export interface TrainingGroup {
   /** Sessions filled in vs prescribed this week. */
   compliance: { filled: number; total: number };
   lastSession: string;
+  /** Round 5 (teams-as-clients): what the team trains for. */
+  focus: string;
+  /** Coaches on the team — teams carry multiple coaches (C9). */
+  coachNames: string[];
+  /** Team-level contacts (manager, head coach at the club, etc.). */
+  contacts: TeamContact[];
+  initials: string;
+  hue: number;
 }
 
 export const trainingGroups: TrainingGroup[] = [
@@ -1297,6 +1413,13 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Golf Power — Phase 2",
     compliance: { filled: 3, total: 7 },
     lastSession: at(-2, 10),
+    focus: "Golf — rotational power",
+    coachNames: ["Coach Ellis", "Coach Nadia"],
+    contacts: [
+      { name: "Grant Whitfield", role: "Group organizer", phone: "+1 (416) 555-0139", email: "grant.w@example.com", active: true },
+    ],
+    initials: "GG",
+    hue: 145,
   },
   {
     id: "grp-track",
@@ -1306,6 +1429,15 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Sprint Development — Block A",
     compliance: { filled: 9, total: 14 },
     lastSession: at(-1, 17),
+    focus: "Track — sprint development",
+    coachNames: ["Coach Clance", "Coach Ellis", "Coach Nadia"],
+    contacts: [
+      { name: "Angela Reyes", role: "Club manager", phone: "+1 (647) 555-0186", email: "angela@questtrack.ca", active: true },
+      { name: "Devon Cole", role: "Head club coach", phone: "+1 (647) 555-0121", email: "devon@questtrack.ca", active: true },
+      { name: "Marcus Obi", role: "Former manager", phone: "+1 (647) 555-0104", email: "marcus.obi@example.com", active: false },
+    ],
+    initials: "QT",
+    hue: 215,
   },
   {
     id: "grp-tigers",
@@ -1315,8 +1447,19 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Off-season Baseball — Phase 1",
     compliance: { filled: 8, total: 12 },
     lastSession: at(-3, 16),
+    focus: "Baseball — off-season",
+    coachNames: ["Coach Clance", "Coach Nadia"],
+    contacts: [
+      { name: "Rick Alvarez", role: "Program director", phone: "+1 (905) 555-0175", email: "rick@tigershpp.com", active: true },
+    ],
+    initials: "TH",
+    hue: 30,
   },
 ];
+
+export function trainingGroupById(id: string): TrainingGroup | undefined {
+  return trainingGroups.find((g) => g.id === id);
+}
 
 /* ------------------------------------------------------------------ */
 /* Analytics: session summaries + lift history                         */

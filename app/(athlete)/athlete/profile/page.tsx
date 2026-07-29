@@ -12,12 +12,16 @@ import { ProfileForm } from "./profile-form";
 export default async function AthleteProfilePage() {
   const { athlete, isParentView } = requireAthleteContext();
 
+  const [firstName = "", ...restName] = athlete.name.split(" ");
   const fallback: AthleteProfile = {
     athleteId: athlete.id,
+    firstName,
+    lastName: restName.join(" "),
     email: "",
     phone: "",
-    address: { street: "", city: "", region: "ON", postal: "" },
+    address: { street: "", city: "", region: "ON", postal: "", country: "Canada" },
     dob: `${athlete.yearOfBirth}-01-01`,
+    preferredUnit: "lb",
   };
   const profile = athleteProfileById(athlete.id) ?? fallback;
 

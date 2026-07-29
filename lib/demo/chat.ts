@@ -12,6 +12,8 @@ import {
 
 export type ChatAttachment =
   | { kind: "video"; name: string; duration: string }
+  | { kind: "image"; name: string }
+  | { kind: "voice"; name: string; duration: string }
   | { kind: "link"; url: string; label: string }
   | { kind: "file"; name: string };
 
@@ -23,6 +25,48 @@ export interface TeamChannel {
   messages: ChatMessage[];
   participants: ThreadParticipant[];
   unread: number;
+}
+
+/**
+ * Round 5 (P7 bug fix): the Messages page used to seed Jordan's channel for
+ * EVERY athlete — a parent managing Maya saw Jordan's chat, attachments and
+ * the "Adult athlete" banner. Channels are now resolved per athlete.
+ */
+export function teamChannelFor(athleteId: string): TeamChannel {
+  if (athleteId === "ath-jordan") return jordanTeamChannel();
+
+  const thread = threadById(threadIdFor(athleteId));
+  if (thread) {
+    return {
+      messages: thread.messages.map((m) => ({ ...m })),
+      participants: [...thread.participants],
+      unread: thread.unread,
+    };
+  }
+
+  // Athletes without a seeded thread still get a working channel: their
+  // assigned coaches + admin, no history yet.
+  return {
+    messages: [],
+    participants: [
+      { id: "coach-ellis", name: "Coach Ellis", role: "coach" },
+      { id: "admin-victoria", name: "Victoria Flores", role: "admin" },
+    ],
+    unread: 0,
+  };
+}
+
+function threadIdFor(athleteId: string): string {
+  switch (athleteId) {
+    case "ath-jordan":
+      return "thread-jordan";
+    case "ath-maya":
+      return "thread-maya";
+    case "ath-dre":
+      return "thread-andre";
+    default:
+      return `thread-${athleteId.replace(/^ath-/, "")}`;
+  }
 }
 
 /** Jordan's staff-wide channel: base thread + Coach Nadia's video follow-up. */

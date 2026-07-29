@@ -62,25 +62,52 @@ export interface Guardian {
  */
 export interface AthleteProfile {
   athleteId: string;
+  /** Separate first/last names (round 5 — "first name and last name, that way
+   *  it's easier"). */
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  address: { street: string; city: string; region: string; postal: string };
+  address: {
+    street: string;
+    city: string;
+    region: string;
+    postal: string;
+    /** Round 5: "we're missing province/state and country". */
+    country: string;
+  };
   instagram?: string;
   twitter?: string;
   /** HUDL recruiting profile URL. */
   hudl?: string;
   /** Full date of birth (ISO). */
   dob: string;
+  /** Preferred load unit — the logger defaults to this (round 5). */
+  preferredUnit: "lb" | "kg";
   guardian?: { name: string; relation: string; phone: string; email: string };
   emergencyContact?: { name: string; relation: string; phone: string };
 }
 
-/** A parent login that manages one or more kids' accounts. */
+/** A parent login that manages one or more kids' accounts. Round 5: parents
+ *  carry their OWN profile (photo, contacts) — it feeds the card contact info
+ *  and the minors' parent sections auto-fill from it. */
 export interface ParentAccount {
   id: string;
   name: string;
+  initials: string;
+  hue: number;
   email: string;
+  phone: string;
+  address: {
+    street: string;
+    city: string;
+    region: string;
+    postal: string;
+    country: string;
+  };
+  relation: string;
   childAthleteIds: string[];
+  notifications: { push: boolean; email: boolean };
 }
 
 /** Membership type — how the athlete trains with LPS (round 4: pure type,
@@ -95,21 +122,19 @@ export const bucketLabel: Record<MemberBucket, string> = {
 };
 
 /**
- * Member lifecycle (round 4 — replaces the Trello board lists):
+ * Member lifecycle (round 5 — "there's no need for away; they're either
+ * active, paused or inactive"):
  * - active   — training normally.
- * - away     — seasonal break (in-season elsewhere). Can still log in, keeps
- *              their profile, but no programs run. Follow-up date set for the
- *              expected return (e.g. done in September → follow up in May).
- * - paused   — membership on hold; follow-up due date drives the sales /
- *              retention call.
+ * - paused   — membership on hold (seasonal break, injury, retention hold).
+ *              Can still log in; no programs run. Follow-up date drives the
+ *              sales / retention call.
  * - inactive — account disabled (no login), record kept. Deletable when the
  *              record should be removed entirely.
  */
-export type AthleteStatus = "active" | "away" | "paused" | "inactive";
+export type AthleteStatus = "active" | "paused" | "inactive";
 
 export const statusLabel: Record<AthleteStatus, string> = {
   active: "Active",
-  away: "Away",
   paused: "Paused",
   inactive: "Inactive",
 };
@@ -133,8 +158,8 @@ export interface Athlete {
   followUpDate?: string;
   /** Days of published program remaining — 0 means a program update is due now. */
   programDueInDays: number;
-  /** Nutrition protocol tier. */
-  nutrition: "pro" | "none";
+  /** Nutrition protocol tier (round 5: None / Standard / Pro). */
+  nutrition: "pro" | "standard" | "none";
   coach: string;
   planName: string;
   frequency: string;
@@ -210,6 +235,22 @@ export interface Thread {
   updatedAt: string;
 }
 
+/** Billing cadence for membership plans (round 5 — "every 1–6 weeks, monthly,
+ *  every 2–3 months, quarterly, yearly"). */
+export const PLAN_CADENCES = [
+  "Every week",
+  "Every 2 weeks",
+  "Every 3 weeks",
+  "Every 4 weeks",
+  "Every 5 weeks",
+  "Every 6 weeks",
+  "Monthly",
+  "Every 2 months",
+  "Every 3 months",
+  "Quarterly",
+  "Yearly",
+] as const;
+
 export interface Plan {
   id: string;
   name: string;
@@ -217,6 +258,12 @@ export interface Plan {
   frequency: string;
   sessionsPerPeriod: string;
   period: string;
+  /** Billing cadence (round 5 — editable, one of PLAN_CADENCES). */
+  cadence: string;
+  /** Percent discount applied to the plan price (round 5). */
+  discountPct?: number;
+  /** Custom one-client plan vs a baseline plan offered to everyone. */
+  customFor?: string;
   access: string;
   activeMembers: number;
   popular?: boolean;
@@ -329,7 +376,7 @@ export const athletes: Athlete[] = [
     bucket: "in-gym",
     status: "active",
     programDueInDays: 18,
-    nutrition: "none",
+    nutrition: "standard",
     coach: "Coach Ellis",
     planName: "Academy — 4×/week",
     frequency: "4×/week",
@@ -720,8 +767,8 @@ export const athletes: Athlete[] = [
     prs: [{ id: "pr-lm-1", lift: "Rotational MB throw", value: 31, unit: "in", date: at(-18) }],
   },
   {
-    // AWAY — in-season with his junior team until spring; keeps his login,
-    // no programs run. Follow-up set for the expected return window.
+    // PAUSED (seasonal) — in-season with his junior team until spring; keeps
+    // his login, no programs run. Follow-up set for the expected return.
     id: "ath-marcus",
     slug: "marcus-hale",
     name: "Marcus Hale",
@@ -733,7 +780,7 @@ export const athletes: Athlete[] = [
     yearOfBirth: 2008,
     gender: "M",
     bucket: "in-gym",
-    status: "away",
+    status: "paused",
     followUpDate: at(285),
     programDueInDays: 999,
     nutrition: "none",
@@ -747,7 +794,7 @@ export const athletes: Athlete[] = [
       name: "No active program",
       day: 0,
       totalDays: 0,
-      phase: "Away",
+      phase: "Paused",
       block: "—",
       compliancePct: 0,
     },
@@ -827,43 +874,55 @@ export const athleteById = (id: string) => athletes.find((a) => a.id === id);
 export const athleteProfiles: Record<string, AthleteProfile> = {
   "ath-jordan": {
     athleteId: "ath-jordan",
+    firstName: "Jordan",
+    lastName: "Vega",
     email: "jordan.vega@lpsathletic.com",
     phone: "+1 (647) 555-0148",
-    address: { street: "48 Maplewood Ave", city: "North York", region: "ON", postal: "M2N 5X9" },
+    address: { street: "48 Maplewood Ave", city: "North York", region: "ON", postal: "M2N 5X9", country: "Canada" },
     instagram: "@jordanvega_10",
     twitter: "@jvega10",
     hudl: "hudl.com/profile/jordanvega",
     dob: "2007-07-26",
+    preferredUnit: "lb",
     emergencyContact: { name: "Elena Vega", relation: "Mother", phone: "+1 (647) 555-0121" },
   },
   "ath-maya": {
     athleteId: "ath-maya",
+    firstName: "Maya",
+    lastName: "Okafor",
     email: "maya.okafor@example.com",
     phone: "+1 (416) 555-0192",
-    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4" },
+    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4", country: "Canada" },
     instagram: "@maya.hoops",
     hudl: "hudl.com/profile/mayaokafor",
     dob: "2010-03-14",
+    preferredUnit: "lb",
     guardian: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177", email: "diane.okafor@example.com" },
     emergencyContact: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177" },
   },
   "ath-noah": {
     athleteId: "ath-noah",
+    firstName: "Noah",
+    lastName: "Okafor",
     email: "diane.okafor@example.com",
     phone: "+1 (416) 555-0177",
-    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4" },
+    address: { street: "12 Birchmount Rd", city: "Scarborough", region: "ON", postal: "M1N 3J4", country: "Canada" },
     dob: "2015-09-02",
+    preferredUnit: "lb",
     guardian: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177", email: "diane.okafor@example.com" },
     emergencyContact: { name: "Diane Okafor", relation: "Mother", phone: "+1 (416) 555-0177" },
   },
   "ath-dre": {
     athleteId: "ath-dre",
+    firstName: "Andre",
+    lastName: "Santos",
     email: "andre.santos@example.com",
     phone: "+1 (905) 555-0163",
-    address: { street: "203 Weston Rd", city: "Toronto", region: "ON", postal: "M6N 4Z4" },
+    address: { street: "203 Weston Rd", city: "Toronto", region: "ON", postal: "M6N 4Z4", country: "Canada" },
     instagram: "@dre.santos7",
     hudl: "hudl.com/profile/andresantos",
     dob: "2009-11-30",
+    preferredUnit: "lb",
     guardian: { name: "Paulo Santos", relation: "Father", phone: "+1 (905) 555-0114", email: "paulo.santos@example.com" },
     emergencyContact: { name: "Paulo Santos", relation: "Father", phone: "+1 (905) 555-0114" },
   },
@@ -873,15 +932,49 @@ export function athleteProfileById(id: string): AthleteProfile | undefined {
   return athleteProfiles[id];
 }
 
-/** Parent logins — each manages one or more kids (A1). */
+/** Parent logins — each manages one or more kids (A1). Round 5: parents have
+ *  their own profile that feeds the kids' parent-info sections. */
 export const parentAccounts: ParentAccount[] = [
   {
     id: "parent-diane",
     name: "Diane Okafor",
+    initials: "DO",
+    hue: 262,
     email: "diane.okafor@example.com",
+    phone: "+1 (416) 555-0177",
+    address: {
+      street: "12 Birchmount Rd",
+      city: "Scarborough",
+      region: "ON",
+      postal: "M1N 3J4",
+      country: "Canada",
+    },
+    relation: "Mother",
     childAthleteIds: ["ath-maya", "ath-noah"],
+    notifications: { push: true, email: true },
   },
 ];
+
+export function parentAccountById(id: string): ParentAccount | undefined {
+  return parentAccounts.find((p) => p.id === id);
+}
+
+/** Days since the last coach note — the members-list "Last commented" column
+ *  (round 5: replaces the inactivity digest). 999 = never. */
+export function daysSinceLastNote(a: Athlete): number {
+  const last = a.notes[0]?.date;
+  if (!last) return 999;
+  return Math.max(
+    0,
+    Math.floor((new Date(NOW).getTime() - new Date(last).getTime()) / 86_400_000),
+  );
+}
+
+/** Program-due date derived from the runway counter (round 5: coaches pick a
+ *  DATE, the days-remaining chip is derived). */
+export function programDueDate(a: Athlete): string {
+  return at(Math.min(a.programDueInDays, 365));
+}
 
 export const athleteGoals: Record<string, string> = {
   "ath-jordan": "Improve explosiveness and top-end speed for pro tryouts.",
@@ -1228,6 +1321,7 @@ export const plans: Plan[] = [
     frequency: "2–4×/week",
     sessionsPerPeriod: "Up to 16 / 4 weeks",
     period: "Every 4 weeks",
+    cadence: "Every 4 weeks",
     access: "Semi-private blocks",
     activeMembers: 58,
     popular: true,
@@ -1239,6 +1333,7 @@ export const plans: Plan[] = [
     frequency: "3×/week",
     sessionsPerPeriod: "12 / month",
     period: "Monthly",
+    cadence: "Monthly",
     access: "Semi-private + performance testing",
     activeMembers: 41,
   },
@@ -1249,6 +1344,7 @@ export const plans: Plan[] = [
     frequency: "Unlimited",
     sessionsPerPeriod: "Unlimited",
     period: "Monthly",
+    cadence: "Monthly",
     access: "All blocks + priority booking",
     activeMembers: 12,
   },
@@ -1259,8 +1355,24 @@ export const plans: Plan[] = [
     frequency: "2×/week",
     sessionsPerPeriod: "8 / month",
     period: "Monthly",
+    cadence: "Monthly",
     access: "Off-peak semi-private",
     activeMembers: 17,
+  },
+  {
+    // Round 5 (owner video): custom one-client plan with a discount and a
+    // non-standard cadence — "create a plan for that specific client".
+    id: "plan-quest-custom",
+    name: "Team — Quest Track Club",
+    priceCents: 190000,
+    frequency: "2×/week team blocks",
+    sessionsPerPeriod: "8 / month per athlete",
+    period: "Quarterly",
+    cadence: "Quarterly",
+    discountPct: 10,
+    customFor: "Quest Sports Track Club",
+    access: "Team programming + facility blocks",
+    activeMembers: 9,
   },
 ];
 

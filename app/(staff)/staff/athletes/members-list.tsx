@@ -40,16 +40,15 @@ import { programDueMeta } from "./program-due";
 /**
  * Round-4 members list — the client slept on the Trello board and killed it:
  * "you don't need the boards… more like the client queue". One table, status
- * tabs (Active / Away / Paused / Inactive), search + coach + checkbox filters,
- * sortable columns, and rows that go STRAIGHT into the full client profile —
- * no card modal in between.
+ * tabs (Active / Paused / Inactive — round 5 dropped Away), search + coach +
+ * checkbox filters, sortable columns, and rows that go STRAIGHT into the full
+ * client profile — no card modal in between.
  */
 
-const STATUS_TABS: AthleteStatus[] = ["active", "away", "paused", "inactive"];
+const STATUS_TABS: AthleteStatus[] = ["active", "paused", "inactive"];
 
 const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutral"> = {
   active: "success",
-  away: "info",
   paused: "warning",
   inactive: "neutral",
 };
@@ -105,12 +104,13 @@ export function MembersList({
     () => Array.from(new Set(list.map((a) => a.sport))).sort(),
     [list],
   );
-  const coaches = staffMembers.filter((s) => s.role === "coach");
+  const coaches = staffMembers.filter(
+    (s) => s.role === "coach" || s.role === "coach-manager",
+  );
 
   const counts = useMemo(() => {
     const c: Record<AthleteStatus, number> = {
       active: 0,
-      away: 0,
       paused: 0,
       inactive: 0,
     };
@@ -458,11 +458,9 @@ export function MembersList({
       <p className="text-xs text-muted-foreground text-pretty">
         {tab === "active"
           ? "Click a member to open their full profile — notes, checklists, program, billing, everything."
-          : tab === "away"
-            ? "Away members keep their login and profile — no programs run. The follow-up date is when to reach out for their return."
-            : tab === "paused"
-              ? "Paused memberships carry a follow-up due date — the retention call that brings them back."
-              : "Inactive accounts are disabled (no login) but the record is kept. Delete only when it should be gone for good."}
+          : tab === "paused"
+            ? "Paused members keep their login — no programs run. The follow-up date is the retention call that brings them back."
+            : "Inactive accounts are disabled (no login) but the record is kept. Delete only when it should be gone for good."}
       </p>
 
       {digestOpen ? (

@@ -44,15 +44,14 @@ import { cn } from "@/lib/utils";
 
 const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutral"> = {
   active: "success",
-  away: "info",
   paused: "warning",
   inactive: "neutral",
 };
 
 const STATUS_HELP: Record<AthleteStatus, string> = {
   active: "Training normally — programs, booking and billing all run.",
-  away: "Seasonal break: login stays on, profile stays, no programs run. Follow up before their season ends.",
-  paused: "Membership on hold — the follow-up date drives the retention call.",
+  paused:
+    "On hold (seasonal break or retention hold): login stays on, no programs run. The follow-up date drives the call.",
   inactive: "Account disabled — no login. The record stays unless deleted.",
 };
 
@@ -73,7 +72,7 @@ export function StatusCard({ athlete }: { athlete: Athlete }) {
     );
   }
 
-  const needsFollowUp = status === "away" || status === "paused";
+  const needsFollowUp = status === "paused";
 
   return (
     <Card>
@@ -528,10 +527,7 @@ export function FollowUpBanner({ athlete }: { athlete: Athlete }) {
       <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       <span>
         {statusLabel[athlete.status]} member — follow up{" "}
-        {fmtDay(athlete.followUpDate)}
-        {athlete.status === "away"
-          ? " to lock in their return block."
-          : " — the retention call."}
+        {fmtDay(athlete.followUpDate)} — the retention call.
       </span>
     </div>
   );

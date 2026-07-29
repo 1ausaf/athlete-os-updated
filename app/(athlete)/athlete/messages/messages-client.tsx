@@ -589,7 +589,11 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
       </span>
     );
   }
-  if (attachment.kind === "file") {
+  if (
+    attachment.kind === "file" ||
+    attachment.kind === "image" ||
+    attachment.kind === "voice"
+  ) {
     return (
       <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-left">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand-ink">
@@ -600,7 +604,11 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
             {attachment.name}
           </span>
           <span className="block text-[0.68rem] text-muted-foreground">
-            File attachment
+            {attachment.kind === "image"
+              ? "Photo"
+              : attachment.kind === "voice"
+                ? `Voice note · ${attachment.duration}`
+                : "File attachment"}
           </span>
         </span>
       </span>

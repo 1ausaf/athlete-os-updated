@@ -18,6 +18,57 @@ export const ACCESS_LEVEL_LABEL: Record<StaffAccessLevel, string> = {
   coaching: "Coaching",
 };
 
+/**
+ * Round 5 (owner video): the role ladder replaces raw access levels —
+ * "owner, admin, coach manager, coach or intern… so we can select what they
+ * can and cannot do."
+ */
+export type StaffRole = "owner" | "admin" | "coach-manager" | "coach" | "intern";
+
+export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  "coach-manager": "Coach Manager",
+  coach: "Coach",
+  intern: "Intern",
+};
+
+export const STAFF_ROLE_ORDER: StaffRole[] = [
+  "owner",
+  "admin",
+  "coach-manager",
+  "coach",
+  "intern",
+];
+
+/** What each role can do — rendered as the Team-page permission matrix. */
+export const STAFF_ROLE_PERMISSIONS: Record<StaffRole, string[]> = {
+  owner: ["Everything — full control of the business"],
+  admin: [
+    "Manage everything",
+    "Add + remove users",
+    "Billing, plans + invoices",
+    "Delete messages",
+  ],
+  "coach-manager": [
+    "Everything a coach can do",
+    "Add + edit program library masters",
+    "Add + edit exercise library",
+    "Manage tags + categories",
+  ],
+  coach: [
+    "Add / remove clients in sessions",
+    "Edit + add programs for their clients",
+    "Notes, messaging + assessments",
+  ],
+  intern: [
+    "Messaging (assigned chats only)",
+    "Write notes",
+    "View programs",
+    "NO full client contact details (number + email masked)",
+  ],
+};
+
 export interface StaffCertification {
   name: string;
   status: "valid" | "expiring" | "expired";
@@ -29,7 +80,7 @@ export interface StaffMember {
   name: string;
   initials: string;
   hue: number;
-  role: "owner" | "admin" | "coach";
+  role: StaffRole;
   accessLevel: StaffAccessLevel;
   title: string;
   email: string;
@@ -80,7 +131,7 @@ export const staffMembers: StaffMember[] = [
     name: "Coach Clance",
     initials: "CL",
     hue: 20,
-    role: "coach",
+    role: "coach-manager",
     accessLevel: "coaching",
     title: "Head of Programming",
     email: "clance@lpsathletic.com",
@@ -145,6 +196,24 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-45) },
     notifications: { push: true, email: true },
+  },
+  {
+    // Round 5: the intern tier — messages + notes only, masked client details.
+    id: "intern-sam",
+    name: "Sam Whitaker",
+    initials: "SW",
+    hue: 280,
+    role: "intern",
+    accessLevel: "coaching",
+    title: "Coaching Intern",
+    email: "sam.intern@lpsathletic.com",
+    phone: "+1 (416) 555-0107",
+    bio: "Kinesiology co-op — shadows the floor, logs notes, drafts warm-ups.",
+    certifications: [
+      { name: "Standard First Aid + CPR-C", status: "valid", expires: at(300) },
+    ],
+    vulnerableSector: { status: "on-file", uploadedAt: at(-20) },
+    notifications: { push: true, email: false },
   },
 ];
 
