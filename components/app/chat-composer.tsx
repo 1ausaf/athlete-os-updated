@@ -37,17 +37,37 @@ export function ChatComposer({
   placeholder = "Write a message… (Enter for a new line)",
   onSend,
   hint,
+  mentionNames,
 }: {
   placeholder?: string;
   onSend: (body: string, attachments: ChatAttachment[]) => void;
   hint?: ReactNode;
+  /** Round 6 (X5): names offered by the @ button — mentions render highlighted. */
+  mentionNames?: string[];
 }) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [recording, setRecording] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
   const recordStart = useRef<number>(0);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function insertMention(name: string) {
+    const el = areaRef.current;
+    const at = `@${name} `;
+    if (!el) {
+      setValue((v) => v + at);
+    } else {
+      const s = el.selectionStart;
+      setValue((v) => v.slice(0, s) + at + v.slice(el.selectionEnd));
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(s + at.length, s + at.length);
+      });
+    }
+    setMentionOpen(false);
+  }
 
   function send() {
     const body = value.trim();
@@ -185,6 +205,33 @@ export function ChatComposer({
         >
           <Italic className="h-4 w-4" />
         </button>
+        {mentionNames && mentionNames.length > 0 ? (
+          <span className="relative">
+            <button
+              type="button"
+              title="Mention someone"
+              aria-label="Mention someone"
+              onClick={() => setMentionOpen((o) => !o)}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <span className="text-sm font-bold">@</span>
+            </button>
+            {mentionOpen ? (
+              <span className="absolute bottom-full left-0 z-30 mb-1 block w-48 rounded-lg border border-border bg-card p-1 shadow-raised">
+                {mentionNames.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => insertMention(n)}
+                    className="block w-full rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+                  >
+                    @{n}
+                  </button>
+                ))}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
         <button
           type="button"
