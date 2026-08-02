@@ -1,24 +1,28 @@
 "use client";
 
 import {
+  AtSign,
   Bold,
   Heading1,
   Heading2,
   Heading3,
   Highlighter,
   Italic,
+  Link2,
   List,
   ListOrdered,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { staffMembers } from "@/lib/demo/staff";
 import { cn } from "@/lib/utils";
 
 /**
  * Trello-style note canvas: a contentEditable surface that grows with its
- * content plus a small formatting toolbar (the exact set the client asked
- * for — bold, italic, bullets, numbers, three heading levels, highlight).
+ * content plus a small formatting toolbar — bold, italic, bullets, numbers,
+ * three heading levels, highlight, and (round 6) links + @mentions:
+ * "highlight and turn it into a URL" / "tag a team member using @".
  * Demo-local content only; the HTML never leaves the browser.
  */
 
@@ -48,6 +52,7 @@ export function RichTextComposer({
 }: RichTextComposerProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [empty, setEmpty] = useState(true);
+  const [mentionOpen, setMentionOpen] = useState(false);
 
   const emit = () => {
     const el = ref.current;
@@ -60,6 +65,32 @@ export function RichTextComposer({
   const exec = (command: string, value?: string) => {
     ref.current?.focus();
     document.execCommand(command, false, value);
+    emit();
+  };
+
+  /** Round 6 (P6): highlight text → wrap it in a link. */
+  const makeLink = () => {
+    ref.current?.focus();
+    const selected = window.getSelection()?.toString().trim() ?? "";
+    const input = window.prompt(
+      "Link URL",
+      /^https?:\/\//.test(selected) ? selected : "https://",
+    );
+    if (!input) return;
+    const url = /^https?:\/\//.test(input) ? input : `https://${input}`;
+    document.execCommand("createLink", false, url);
+    emit();
+  };
+
+  /** Round 6 (P7): insert an @mention chip for a team member. */
+  const insertMention = (name: string) => {
+    ref.current?.focus();
+    document.execCommand(
+      "insertHTML",
+      false,
+      `<strong class="mention">@${name}</strong>&nbsp;`,
+    );
+    setMentionOpen(false);
     emit();
   };
 
@@ -93,7 +124,7 @@ export function RichTextComposer({
         className,
       )}
     >
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1">
+      <div className="relative flex flex-wrap items-center gap-0.5 border-b border-border px-1.5 py-1">
         {toolBtn("Bold", () => exec("bold"), <Bold className="h-3.5 w-3.5" />)}
         {toolBtn("Italic", () => exec("italic"), <Italic className="h-3.5 w-3.5" />)}
         <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
@@ -105,6 +136,33 @@ export function RichTextComposer({
         )}
         <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
         {toolBtn("Highlight", () => exec("hiliteColor", "hsl(53 96% 74%)"), <Highlighter className="h-3.5 w-3.5" />)}
+        {toolBtn("Link (highlight text first)", makeLink, <Link2 className="h-3.5 w-3.5" />)}
+        {toolBtn(
+          "Mention a team member",
+          () => setMentionOpen((o) => !o),
+          <AtSign className="h-3.5 w-3.5" />,
+        )}
+
+        {mentionOpen ? (
+          <div className="absolute right-1 top-full z-30 mt-1 w-52 rounded-lg border border-border bg-card p-1 shadow-raised">
+            {staffMembers.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  insertMention(s.name);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+              >
+                <span className="font-medium">@{s.name}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {s.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="relative">
@@ -126,6 +184,11 @@ export function RichTextComposer({
           className="rich-text min-h-[4.5rem] px-3 py-2.5 text-sm outline-none"
           onInput={emit}
           onBlur={emit}
+          onKeyDown={(e) => {
+            // Typing "@" opens the team-member picker (round 6, P7).
+            if (e.key === "@") setMentionOpen(true);
+            else if (e.key === "Escape") setMentionOpen(false);
+          }}
           onPaste={(e) => {
             // Paste as plain text so outside formatting never leaks in.
             e.preventDefault();

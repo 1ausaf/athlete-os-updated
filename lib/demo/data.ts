@@ -180,6 +180,10 @@ export interface Athlete {
   };
   attendancePct: number;
   injuryFlags: string[];
+  /** Round 6 (P17): "PAST INJURIES" paragraph on Goals & Medical History. */
+  pastInjuries?: string;
+  /** Round 6 (P17): "CURRENT INJURIES / LIMITATIONS" — feeds the Huddle Brief. */
+  currentLimitations?: string;
   season: Season;
   reminders: string[];
   guardians: Guardian[];
@@ -326,6 +330,7 @@ export const athletes: Athlete[] = [
     },
     attendancePct: 94,
     injuryFlags: [],
+    pastInjuries: "Right scapular strain (2025) — resolved after an 8-week pull-emphasis block. Mild ankle sprain, hockey (2024).",
     season: "in-season",
     reminders: ["Birthday in 3 days", "Signed pro tryout invite — acknowledge"],
     guardians: [],
@@ -393,6 +398,8 @@ export const athletes: Athlete[] = [
     },
     attendancePct: 91,
     injuryFlags: ["Return-to-play wk 2 — bilateral landings only"],
+    pastInjuries: "Left ankle sprain, Grade II (Feb 2026) — cleared for full-court play in April.",
+    currentLimitations: "Return-to-play week 2: bilateral landings only, no reactive single-leg plyos yet.",
     season: "off-season",
     reminders: ["Parent requested check-in after session"],
     guardians: [
@@ -503,6 +510,7 @@ export const athletes: Athlete[] = [
     },
     attendancePct: 82,
     injuryFlags: [],
+    pastInjuries: "Hamstring pull, right (spring 2025) — full sprint volumes since August.",
     season: "off-season",
     reminders: ["Membership payment 4 days overdue — booking paused"],
     guardians: [
@@ -603,6 +611,8 @@ export const athletes: Athlete[] = [
     },
     attendancePct: 89,
     injuryFlags: ["Throwing volume cap — coach sign-off required"],
+    pastInjuries: "UCL irritation, throwing elbow (2025 season) — rehabbed, no surgery.",
+    currentLimitations: "Throwing volume cap in effect — overhead pressing stays light, coach sign-off before any max-effort throws.",
     season: "off-season",
     reminders: [],
     guardians: [
@@ -703,6 +713,8 @@ export const athletes: Athlete[] = [
     },
     attendancePct: 74,
     injuryFlags: [],
+    pastInjuries: "Patellar tendinopathy, left knee (2024) — settled with isometric protocol.",
+    currentLimitations: "Knee tendon still reactive on deep loading — keep squat depth to parallel, monitor morning soreness.",
     season: "off-season",
     reminders: ["No note in 16 days — follow up"],
     guardians: [],

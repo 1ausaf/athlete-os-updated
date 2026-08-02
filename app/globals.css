@@ -231,6 +231,14 @@
     border-radius: 2px;
     padding: 0 1px;
   }
+  .rich-text a {
+    @apply font-medium text-brand-ink underline underline-offset-2;
+  }
+  /* Round 6: @mention chips in notes + chat. */
+  .rich-text .mention,
+  .chat-mention {
+    @apply rounded bg-brand/10 px-1 font-semibold text-brand-ink no-underline;
+  }
 
   /* Thin brand rule used on marketing sections. */
   .rule-brand {

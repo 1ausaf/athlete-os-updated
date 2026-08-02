@@ -250,9 +250,9 @@ export function ChatComposer({
 const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
 function formatInline(text: string, keyBase: string): ReactNode[] {
-  // *bold* and _italic_, non-greedy, WhatsApp-style.
+  // *bold*, _italic_ (WhatsApp-style) and @mentions (round 6, X5).
   const parts: ReactNode[] = [];
-  const re = /(\*[^*\n]+\*|_[^_\n]+_)/g;
+  const re = /(\*[^*\n]+\*|_[^_\n]+_|@[A-Za-z][\w'-]*(?: [A-Z][\w'-]*)?)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -261,8 +261,14 @@ function formatInline(text: string, keyBase: string): ReactNode[] {
     const token = m[0];
     if (token.startsWith("*")) {
       parts.push(<strong key={`${keyBase}-b${i}`}>{token.slice(1, -1)}</strong>);
-    } else {
+    } else if (token.startsWith("_")) {
       parts.push(<em key={`${keyBase}-i${i}`}>{token.slice(1, -1)}</em>);
+    } else {
+      parts.push(
+        <span key={`${keyBase}-m${i}`} className="chat-mention">
+          {token}
+        </span>,
+      );
     }
     last = m.index + token.length;
     i += 1;

@@ -39,13 +39,17 @@ export function StaffNav({ user }: { user: AppUser }) {
       badge: unread || undefined,
     },
     { href: "/staff/analytics", label: "Analytics", icon: LineChart },
-    {
+  ];
+
+  // Round 6: coaches don't need Compliance — owners/admins keep it.
+  if (isAdmin(user)) {
+    items.push({
       href: "/staff/compliance",
       label: "Compliance",
       icon: ShieldCheck,
       badge: gaps || undefined,
-    },
-  ];
+    });
+  }
 
   if (canViewBilling(user) || canManageMemberships(user)) {
     items.push({ href: "/staff/billing", label: "Billing", icon: CreditCard });

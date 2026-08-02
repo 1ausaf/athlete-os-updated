@@ -76,6 +76,12 @@ export function teamChannelFor(athleteId: string): TeamChannel {
   };
 }
 
+/** The staff-messaging thread for an athlete (round 6: the profile "Chat"
+ *  button deep-links here). */
+export function threadIdForAthlete(athleteId: string): string {
+  return threadIdFor(athleteId);
+}
+
 function threadIdFor(athleteId: string): string {
   switch (athleteId) {
     case "ath-jordan":

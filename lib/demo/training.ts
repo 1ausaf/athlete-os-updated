@@ -1463,7 +1463,108 @@ export interface ProgramTemplate {
   tags: string[];
   /** Audience labels — kids / foundation / executive / per-sport (round 5). */
   labels?: string[];
+  /** Round 6 (G3): the Program Library "Category" column — coaches can add /
+   *  rename / delete categories. */
+  category: string;
 }
+
+/** Starter categories for the Program Library (managed in the UI, round 6). */
+export const PROGRAM_CATEGORIES = [
+  "Powerlifting",
+  "Structural Balance",
+  "Team",
+  "Golf",
+  "Speed",
+  "Foundations",
+] as const;
+
+/* ------------------------------------------------------------------ */
+/* Circuit Library (round 6, G1) — named movement circuits             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A reusable circuit: an ordered set of movements dropped into programs as
+ * one block (the dynamic warm-up is the canonical example). Programming's
+ * third library alongside Programs and Exercises.
+ */
+export interface CircuitTemplate {
+  id: string;
+  name: string;
+  category: string;
+  /** Movement name + prescription, in order. */
+  movements: { name: string; prescription: string }[];
+  createdBy: string;
+  lastModified: string;
+}
+
+export const circuitLibrary: CircuitTemplate[] = [
+  {
+    id: "cir-dyn-warmup",
+    name: "Dynamic Warm-up A",
+    category: "Warm-up",
+    movements: [
+      { name: "World's Greatest Stretch", prescription: "5/side" },
+      { name: "Leg Swings", prescription: "10/side" },
+      { name: "Walking Knee Hugs", prescription: "10 yd" },
+      { name: "A-Skips", prescription: "2×15 yd" },
+      { name: "Glute Bridge", prescription: "10" },
+      { name: "Band Pull-apart", prescription: "15" },
+    ],
+    createdBy: "LPS Athletic",
+    lastModified: "2026-07-14",
+  },
+  {
+    id: "cir-dyn-warmup-b",
+    name: "Dynamic Warm-up B (speed day)",
+    category: "Warm-up",
+    movements: [
+      { name: "Jog + Backpedal", prescription: "2×20 yd" },
+      { name: "A-Walks", prescription: "2×15 yd" },
+      { name: "A-Skips", prescription: "2×15 yd" },
+      { name: "Straight-leg Bounds", prescription: "2×15 yd" },
+      { name: "Falling Starts", prescription: "3" },
+    ],
+    createdBy: "LPS Athletic",
+    lastModified: "2026-07-02",
+  },
+  {
+    id: "cir-mb-power",
+    name: "Med Ball Power Circuit",
+    category: "Power",
+    movements: [
+      { name: "MB Chest Pass", prescription: "3×5" },
+      { name: "MB Rotational Throw", prescription: "3×5/side" },
+      { name: "MB Slam", prescription: "3×6" },
+    ],
+    createdBy: "LPS Athletic",
+    lastModified: "2026-06-20",
+  },
+  {
+    id: "cir-core-finisher",
+    name: "Core Finisher",
+    category: "Core",
+    movements: [
+      { name: "Dead-bug", prescription: "2×10/side" },
+      { name: "Pallof Press", prescription: "2×10/side" },
+      { name: "Side Plank", prescription: "2×0:30/side" },
+    ],
+    createdBy: "LPS Athletic",
+    lastModified: "2026-05-30",
+  },
+  {
+    id: "cir-arm-care",
+    name: "Arm Care (throwers)",
+    category: "Prehab",
+    movements: [
+      { name: "Band External Rotation", prescription: "2×15" },
+      { name: "Powell Raise", prescription: "2×12" },
+      { name: "Wall Slides", prescription: "2×10" },
+      { name: "Farmer Carry", prescription: "2×20 yd" },
+    ],
+    createdBy: "AOS Global",
+    lastModified: "2026-06-05",
+  },
+];
 
 /** Program-library audience labels the client asked to manage (C25). */
 export const PROGRAM_LABELS = [
@@ -1482,6 +1583,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-phase0",
     name: "AAS (4×/wk) — Phase 0 · 2× LPS / 2× Remote [Master]",
     level: "Intermediate",
+    category: "Foundations",
     weeks: 4,
     daysPerWeek: 4,
     remoteDays: 2,
@@ -1496,28 +1598,33 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-sb",
     name: "AAS — Structural Balance [Master]",
     level: "Intermediate",
+    category: "Structural Balance",
     weeks: 4,
     daysPerWeek: 4,
     description: "Foundation block — balance ratios before intensification.",
     createdBy: "Coach Clance",
     createdAt: "2025-11-03",
+    lastModified: "2026-04-10",
     tags: ["Structural Balance"],
   },
   {
     id: "tpl-sb-v1",
     name: "AAS — Structural Balance — Variation 1",
     level: "Intermediate",
+    category: "Structural Balance",
     weeks: 4,
     daysPerWeek: 3,
     description: "SB variation with rotated accessory emphasis.",
     createdBy: "Coach Clance",
     createdAt: "2026-01-21",
+    lastModified: "2026-03-02",
     tags: ["Structural Balance", "Variation"],
   },
   {
     id: "tpl-pl-max",
     name: "AAS — Powerlifting — MAX [1]",
     level: "Advanced",
+    category: "Powerlifting",
     weeks: 3,
     daysPerWeek: 4,
     description: "Realization block — singles at RPE 8–9, taper to test.",
@@ -1531,6 +1638,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-pl-max-partial",
     name: "AAS — Powerlifting — MAX Partial [1]",
     level: "Advanced",
+    category: "Powerlifting",
     weeks: 3,
     daysPerWeek: 4,
     description: "Overload with partials before the full-range max block.",
@@ -1544,6 +1652,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-sb-cj",
     name: "AAS — Structural Balance — Pyramid + CJ",
     level: "Intermediate",
+    category: "Structural Balance",
     weeks: 4,
     daysPerWeek: 4,
     description: "SB pyramid loading with clean & jerk technique work.",
@@ -1557,6 +1666,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-sb-exec",
     name: "AAS — Structural Balance — ADV Executive",
     level: "Intermediate",
+    category: "Structural Balance",
     weeks: 4,
     daysPerWeek: 2,
     description: "Executive schedule — 2×/wk full-body with mobility finishers.",
@@ -1570,6 +1680,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-golf",
     name: "Golf Power — Phase 2",
     level: "Intermediate",
+    category: "Golf",
     weeks: 4,
     daysPerWeek: 2,
     description: "Rotational power + posterior chain for the Sunday golf group.",
@@ -1583,6 +1694,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-sprint-a",
     name: "Sprint Development — Block A",
     level: "Intermediate",
+    category: "Speed",
     weeks: 6,
     daysPerWeek: 3,
     description: "Acceleration + max-velocity foundation for the track club.",
@@ -1596,6 +1708,7 @@ export const programTemplates: ProgramTemplate[] = [
     id: "tpl-baseball-1",
     name: "Off-season Baseball — Phase 1",
     level: "Intermediate",
+    category: "Team",
     weeks: 4,
     daysPerWeek: 4,
     description: "GPP + arm-care foundation for the Tigers HPP group.",
@@ -1638,6 +1751,12 @@ export interface TrainingGroup {
   contacts: TeamContact[];
   initials: string;
   hue: number;
+  /** Round 6 (M1): teams sort exactly like athletes — same membership Type,
+   *  Program/Manage coaches and program runway. */
+  bucket: import("@/lib/demo/data").MemberBucket;
+  programDueInDays: number;
+  programmingCoach: string;
+  managementCoach: string;
 }
 
 export const trainingGroups: TrainingGroup[] = [
@@ -1656,6 +1775,10 @@ export const trainingGroups: TrainingGroup[] = [
     ],
     initials: "GG",
     hue: 145,
+    bucket: "in-gym",
+    programDueInDays: 9,
+    programmingCoach: "Coach Nadia",
+    managementCoach: "Coach Ellis",
   },
   {
     id: "grp-track",
@@ -1674,6 +1797,10 @@ export const trainingGroups: TrainingGroup[] = [
     ],
     initials: "QT",
     hue: 215,
+    bucket: "online",
+    programDueInDays: 2,
+    programmingCoach: "Coach Clance",
+    managementCoach: "Coach Ellis",
   },
   {
     id: "grp-tigers",
@@ -1690,6 +1817,10 @@ export const trainingGroups: TrainingGroup[] = [
     ],
     initials: "TH",
     hue: 30,
+    bucket: "in-gym",
+    programDueInDays: 5,
+    programmingCoach: "Coach Clance",
+    managementCoach: "Coach Nadia",
   },
 ];
 
