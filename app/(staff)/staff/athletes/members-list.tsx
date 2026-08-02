@@ -637,11 +637,21 @@ function SortHeader({
 
 /** "Last Comment" cell — days since the last coach note. M3: >7 days amber,
  *  >14 days red, same urgency ramp as the due-now chip. */
-function LastNoteCell({ days }: { days: number }) {
+function LastNoteCell({ days, isTeam }: { days: number; isTeam?: boolean }) {
   return (
     <td className="tnum px-3 py-2.5">
       {days >= 999 ? (
-        <span className="text-xs text-muted-foreground">—</span>
+        isTeam ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          // Never commented is worse than 14 days — same red as due-now (M3).
+          <span
+            className="text-xs font-semibold text-destructive"
+            title="No comment on file yet"
+          >
+            Never
+          </span>
+        )
       ) : (
         <span
           className={cn(
@@ -769,7 +779,7 @@ function TeamRow({
               Team: {group.name}
             </span>
             <span className="block text-xs text-muted-foreground">
-              {group.program}
+              {group.planName}
             </span>
           </span>
         </span>

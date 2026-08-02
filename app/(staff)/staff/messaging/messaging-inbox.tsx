@@ -385,10 +385,6 @@ function ThreadRow({
                   Second adult required
                 </Pill>
               )
-            ) : !isBroadcast ? (
-              <Pill tone="neutral" icon={<ShieldCheck className="h-3 w-3" />}>
-                Adult 1:1
-              </Pill>
             ) : null}
           </div>
         </div>

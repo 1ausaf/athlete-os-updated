@@ -1762,6 +1762,8 @@ export interface TrainingGroup {
   programDueInDays: number;
   programmingCoach: string;
   managementCoach: string;
+  /** Round 6 (M4): the membership plan line under "Team: {name}". */
+  planName: string;
 }
 
 export const trainingGroups: TrainingGroup[] = [
@@ -1784,6 +1786,7 @@ export const trainingGroups: TrainingGroup[] = [
     programDueInDays: 9,
     programmingCoach: "Coach Nadia",
     managementCoach: "Coach Ellis",
+    planName: "Team block — 2×/week",
   },
   {
     id: "grp-track",
@@ -1806,6 +1809,7 @@ export const trainingGroups: TrainingGroup[] = [
     programDueInDays: 2,
     programmingCoach: "Coach Clance",
     managementCoach: "Coach Ellis",
+    planName: "Team — Quest Track Club (quarterly)",
   },
   {
     id: "grp-tigers",
@@ -1826,6 +1830,7 @@ export const trainingGroups: TrainingGroup[] = [
     programDueInDays: 5,
     programmingCoach: "Coach Clance",
     managementCoach: "Coach Nadia",
+    planName: "Team block — off-season",
   },
 ];
 
