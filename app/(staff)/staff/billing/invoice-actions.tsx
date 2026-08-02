@@ -39,6 +39,11 @@ const statusMeta: Record<Invoice["status"], { label: string; tone: PillTone }> =
 export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
   const [rows, setRows] = useState<Invoice[]>(invoices);
   const [creating, setCreating] = useState(false);
+  // B1 — row actions ask for confirmation before the status flips.
+  const [confirming, setConfirming] = useState<{
+    inv: Invoice;
+    action: "paid" | "cancel";
+  } | null>(null);
 
   function setStatus(id: string, status: Invoice["status"]) {
     setRows((prev) =>
@@ -128,7 +133,9 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
                             size="sm"
                             variant="outline"
                             title="Settle manually — cash or e-transfer taken outside Square"
-                            onClick={() => setStatus(inv.id, "paid")}
+                            onClick={() =>
+                              setConfirming({ inv, action: "paid" })
+                            }
                           >
                             <Check className="h-4 w-4" />
                             Mark paid
@@ -138,7 +145,9 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
                             variant="ghost"
                             className="text-muted-foreground hover:text-destructive"
                             title="Cancel this invoice"
-                            onClick={() => setStatus(inv.id, "canceled")}
+                            onClick={() =>
+                              setConfirming({ inv, action: "cancel" })
+                            }
                           >
                             <XCircle className="h-4 w-4" />
                             Cancel
@@ -169,6 +178,49 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
             setCreating(false);
           }}
         />
+      ) : null}
+
+      {/* B1 — confirmation before an invoice is settled or canceled. */}
+      {confirming ? (
+        <BillingDialog
+          title={
+            confirming.action === "paid"
+              ? "Mark invoice as paid"
+              : "Cancel invoice"
+          }
+          subtitle={`${confirming.inv.athleteName} · ${money2(
+            confirming.inv.amountCents,
+          )} · due ${fmtDay(confirming.inv.dueDate)}`}
+          onClose={() => setConfirming(null)}
+        >
+          <p className="text-sm">
+            {confirming.action === "paid"
+              ? "Are you sure you want to mark this invoice as paid?"
+              : "Are you sure you want to cancel this invoice?"}
+          </p>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirming(null)}
+            >
+              Keep
+            </Button>
+            <Button
+              variant={confirming.action === "paid" ? "brand" : "destructive"}
+              size="sm"
+              onClick={() => {
+                setStatus(
+                  confirming.inv.id,
+                  confirming.action === "paid" ? "paid" : "canceled",
+                );
+                setConfirming(null);
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </BillingDialog>
       ) : null}
     </div>
   );

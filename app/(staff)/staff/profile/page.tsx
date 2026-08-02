@@ -26,9 +26,8 @@ export default async function StaffProfilePage() {
         title="Your profile"
         description="Contact details, bio and notifications — what athletes and the rest of the staff see about you."
       />
-      <div className="max-w-2xl">
-        <StaffProfileForm member={member} />
-      </div>
+      {/* F1 — full-width like every other staff page (was max-w-2xl). */}
+      <StaffProfileForm member={member} />
     </div>
   );
 }

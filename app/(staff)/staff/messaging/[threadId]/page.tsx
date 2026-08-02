@@ -15,6 +15,7 @@ import {
   assignedStaffIds,
   assignmentsForAthlete,
   COACH_ROLE_LABEL,
+  staffMembers,
 } from "@/lib/demo/staff";
 
 import { ThreadConversation } from "./thread-conversation";
@@ -49,6 +50,15 @@ export default async function StaffThreadPage({ params }: PageProps) {
       : false;
   const canPost = involved || admin;
 
+  // X5 — the @ picker offers everyone in the thread plus the whole staff
+  // roster (deduped, minus yourself).
+  const mentionNames = Array.from(
+    new Set([
+      ...thread.participants.map((p) => p.name),
+      ...staffMembers.map((s) => s.name),
+    ]),
+  ).filter((n) => n !== user.fullName);
+
   return (
     // C35: the thread fills the screen to the bottom — the message pane
     // stretches, scrolls internally, and the composer pins at the bottom.
@@ -75,9 +85,11 @@ export default async function StaffThreadPage({ params }: PageProps) {
           Broadcast announcement — sent to all members. Replies route privately
           to staff.
         </div>
-      ) : (
+      ) : thread.involvesMinor ? (
+        // X6 — only the minor Rule-of-Two banner remains; the adult
+        // "direct 1:1 permitted" notice is gone.
         <RuleOfTwoBanner participants={thread.participants} />
-      )}
+      ) : null}
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
@@ -106,6 +118,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
           <ThreadConversation
             initialMessages={thread.messages}
             participants={thread.participants}
+            mentionNames={mentionNames}
             me={{
               id: user.id,
               name: user.fullName,

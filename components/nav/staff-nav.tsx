@@ -24,13 +24,14 @@ export function StaffNav({ user }: { user: AppUser }) {
   const programsDue = athletes.filter((a) => a.programDueInDays <= 5).length;
 
   const items: ShellNavItem[] = [
-    { href: "/staff/athletes", label: "Members", icon: Users },
+    // Round 6: due-tracking lives in Members — the badge moved with it.
     {
-      href: "/staff/programming",
-      label: "Programming",
-      icon: ClipboardList,
+      href: "/staff/athletes",
+      label: "Members",
+      icon: Users,
       badge: programsDue || undefined,
     },
+    { href: "/staff/programming", label: "Programming", icon: ClipboardList },
     { href: "/staff/sessions", label: "Sessions", icon: CalendarRange },
     {
       href: "/staff/messaging",

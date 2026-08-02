@@ -1,10 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
+  Mail,
+  MailOpen,
   Megaphone,
+  MoreVertical,
+  Pin,
+  PinOff,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -34,12 +39,17 @@ export interface InboxThread {
 }
 
 type InboxFilter = "involved" | "subscribed" | "everything";
+type SortMode = "activity" | "unread" | "read";
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: "involved", label: "Involved" },
   { key: "subscribed", label: "Subscribed" },
   { key: "everything", label: "All" },
 ];
+
+/** X1 — pinned chats persist per browser; hard cap of 5 like WhatsApp. */
+const PIN_STORAGE_KEY = "lps-staff-messaging-pins";
+const MAX_PINS = 5;
 
 function hueFor(id: string): number {
   let h = 0;
@@ -73,14 +83,83 @@ export function MessagingInbox({
     admin ? "everything" : "involved",
   );
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("activity");
+  // X1 — local read/unread overrides (id → forced state) + pinned ids.
+  const [readOverride, setReadOverride] = useState<
+    Record<string, "read" | "unread">
+  >({});
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [pinsLoaded, setPinsLoaded] = useState(false);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<number>();
 
-  const sorted = useMemo(
-    () =>
-      rows
-        .slice()
-        .sort((a, b) => (b.thread.updatedAt > a.thread.updatedAt ? 1 : -1)),
-    [rows],
+  // Pins load after mount (avoids SSR/localStorage hydration mismatch)…
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PIN_STORAGE_KEY);
+      if (raw) {
+        const ids: unknown = JSON.parse(raw);
+        if (Array.isArray(ids)) {
+          setPinned(
+            ids
+              .filter((x): x is string => typeof x === "string")
+              .slice(0, MAX_PINS),
+          );
+        }
+      }
+    } catch {
+      // Ignore corrupt storage — start unpinned.
+    }
+    setPinsLoaded(true);
+  }, []);
+
+  // …and persist on every change once loaded.
+  useEffect(() => {
+    if (!pinsLoaded) return;
+    try {
+      window.localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinned));
+    } catch {
+      // Storage unavailable (private mode) — pins stay session-only.
+    }
+  }, [pinned, pinsLoaded]);
+
+  useEffect(
+    () => () => window.clearTimeout(flashTimer.current),
+    [],
   );
+
+  function showFlash(message: string) {
+    setFlash(message);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 2200);
+  }
+
+  /** Unread count after any local Mark-as-read / Mark-as-unread override. */
+  function unreadOf(row: InboxThread): number {
+    const o = readOverride[row.thread.id];
+    if (o === "read") return 0;
+    if (o === "unread") return Math.max(1, row.thread.unread);
+    return row.thread.unread;
+  }
+
+  function markRead(id: string, read: boolean) {
+    setReadOverride((prev) => ({ ...prev, [id]: read ? "read" : "unread" }));
+    setMenuFor(null);
+  }
+
+  function togglePin(id: string) {
+    setMenuFor(null);
+    if (pinned.includes(id)) {
+      setPinned(pinned.filter((p) => p !== id));
+      return;
+    }
+    if (pinned.length >= MAX_PINS) {
+      showFlash("Max 5 pinned");
+      return;
+    }
+    setPinned([...pinned, id]);
+  }
 
   const counts = useMemo(
     () => ({
@@ -93,7 +172,7 @@ export function MessagingInbox({
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sorted.filter((r) => {
+    const matches = rows.filter((r) => {
       if (filter === "involved" && !r.involved) return false;
       if (filter === "subscribed" && !r.subscribed) return false;
       if (!q) return true;
@@ -106,11 +185,41 @@ export function MessagingInbox({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [sorted, filter, query]);
+
+    const byActivity = (a: InboxThread, b: InboxThread) =>
+      b.thread.updatedAt > a.thread.updatedAt ? 1 : -1;
+    const unreadCount = (r: InboxThread) => {
+      const o = readOverride[r.thread.id];
+      if (o === "read") return 0;
+      if (o === "unread") return Math.max(1, r.thread.unread);
+      return r.thread.unread;
+    };
+
+    matches.sort((a, b) => {
+      // X1 — pinned chats float to the top, in the order they were pinned.
+      const pa = pinned.indexOf(a.thread.id);
+      const pb = pinned.indexOf(b.thread.id);
+      if (pa !== -1 || pb !== -1) {
+        if (pa === -1) return 1;
+        if (pb === -1) return -1;
+        return pa - pb;
+      }
+      // X4 — read/unread grouping, newest-first within each group.
+      if (sortMode === "unread") {
+        const d = Number(unreadCount(b) > 0) - Number(unreadCount(a) > 0);
+        if (d !== 0) return d;
+      } else if (sortMode === "read") {
+        const d = Number(unreadCount(a) > 0) - Number(unreadCount(b) > 0);
+        if (d !== 0) return d;
+      }
+      return byActivity(a, b);
+    });
+    return matches;
+  }, [rows, filter, query, sortMode, pinned, readOverride]);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter tabs (shared line style, CM2) + person search */}
+      {/* Filter tabs (shared line style, CM2) + chat search + sort (X4) */}
       <TabBar
         tabs={FILTERS.map(({ key, label }) => ({
           value: key,
@@ -120,15 +229,27 @@ export function MessagingInbox({
         active={filter}
         onSelect={setFilter}
       />
-      <div className="relative w-full max-w-xs">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search people…"
-          aria-label="Search threads by person"
-          className="pl-8"
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search chats"
+            aria-label="Search chats"
+            className="pl-8"
+          />
+        </div>
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          aria-label="Sort chats"
+          className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
+        >
+          <option value="activity">Last activity</option>
+          <option value="unread">Unread first</option>
+          <option value="read">Read first</option>
+        </select>
       </div>
 
       {!admin ? (
@@ -142,7 +263,20 @@ export function MessagingInbox({
       {/* Thread list */}
       <div className="flex flex-col gap-3">
         {visible.map((row) => (
-          <ThreadRow key={row.thread.id} row={row} />
+          <ThreadRow
+            key={row.thread.id}
+            row={row}
+            unread={unreadOf(row)}
+            isPinned={pinned.includes(row.thread.id)}
+            menuOpen={menuFor === row.thread.id}
+            onToggleMenu={() =>
+              setMenuFor((cur) =>
+                cur === row.thread.id ? null : row.thread.id,
+              )
+            }
+            onMarkRead={(read) => markRead(row.thread.id, read)}
+            onTogglePin={() => togglePin(row.thread.id)}
+          />
         ))}
         {visible.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -154,11 +288,47 @@ export function MessagingInbox({
           </div>
         ) : null}
       </div>
+
+      {/* Click-away layer for the row menus (sits below the open menu). */}
+      {menuFor ? (
+        <button
+          type="button"
+          aria-label="Close thread menu"
+          className="fixed inset-0 z-20 cursor-default"
+          onClick={() => setMenuFor(null)}
+        />
+      ) : null}
+
+      {/* X1 — tiny flash when the 5-pin cap is hit. */}
+      {flash ? (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold shadow-raised"
+        >
+          {flash}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function ThreadRow({ row }: { row: InboxThread }) {
+function ThreadRow({
+  row,
+  unread,
+  isPinned,
+  menuOpen,
+  onToggleMenu,
+  onMarkRead,
+  onTogglePin,
+}: {
+  row: InboxThread;
+  unread: number;
+  isPinned: boolean;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onMarkRead: (read: boolean) => void;
+  onTogglePin: () => void;
+}) {
   const { thread, reason } = row;
   const compliant = isCompliant(thread);
   const lastMessage = thread.messages[thread.messages.length - 1];
@@ -175,9 +345,15 @@ function ThreadRow({ row }: { row: InboxThread }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate font-semibold">{thread.subject}</span>
-            {thread.unread > 0 ? (
+            {isPinned ? (
+              <Pin
+                className="h-3.5 w-3.5 shrink-0 text-brand-ink"
+                aria-label="Pinned chat"
+              />
+            ) : null}
+            {unread > 0 ? (
               <Pill tone="brand" dot>
-                {thread.unread} new
+                {unread} new
               </Pill>
             ) : null}
           </div>
@@ -216,6 +392,64 @@ function ThreadRow({ row }: { row: InboxThread }) {
             ) : null}
           </div>
         </div>
+
+        {/* X1 — per-thread ⋮ menu (read state + pinning), inside the link
+            so clicks must not navigate. */}
+        <span
+          className="relative self-start sm:self-center"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <button
+            type="button"
+            aria-label={`Thread options for ${thread.subject}`}
+            aria-expanded={menuOpen}
+            onClick={onToggleMenu}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          {menuOpen ? (
+            <span className="absolute right-0 top-full z-30 mt-1 block w-44 rounded-lg border border-border bg-card p-1 shadow-raised">
+              <button
+                type="button"
+                onClick={() => onMarkRead(unread > 0)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+              >
+                {unread > 0 ? (
+                  <>
+                    <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                    Mark as read
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                    Mark as unread
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onTogglePin}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+              >
+                {isPinned ? (
+                  <>
+                    <PinOff className="h-3.5 w-3.5 text-muted-foreground" />
+                    Unpin
+                  </>
+                ) : (
+                  <>
+                    <Pin className="h-3.5 w-3.5 text-muted-foreground" />
+                    Pin chat
+                  </>
+                )}
+              </button>
+            </span>
+          ) : null}
+        </span>
       </div>
     </Link>
   );

@@ -56,6 +56,7 @@ export function ThreadConversation({
   canPost = true,
   canDelete = false,
   canJoin = false,
+  mentionNames,
 }: {
   initialMessages: Message[];
   participants: ThreadParticipant[];
@@ -67,6 +68,8 @@ export function ThreadConversation({
   canDelete?: boolean;
   /** C35: a viewing coach can JOIN the chat + get notified (local state). */
   canJoin?: boolean;
+  /** X5 — names offered by the composer's @ picker. */
+  mentionNames?: string[];
 }) {
   const [messages, setMessages] = useState<ConvoMessage[]>(initialMessages);
   const [joined, setJoined] = useState(false);
@@ -193,6 +196,7 @@ export function ThreadConversation({
           ) : null}
           <ChatComposer
             onSend={send}
+            mentionNames={mentionNames}
             hint={`Messaging ${participants.length} participant${
               participants.length === 1 ? "" : "s"
             } · Ctrl+Enter sends`}

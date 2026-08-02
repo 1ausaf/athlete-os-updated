@@ -24,6 +24,7 @@ import {
   Repeat2,
   Search,
   Trash2,
+  Undo2,
   Video,
   X,
 } from "lucide-react";
@@ -55,8 +56,11 @@ import {
 } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
-import { BuilderCalendar, type BuilderCalendarWeek } from "./builder-calendar";
-import { PrintButton } from "./print-button";
+import {
+  BuilderCalendar,
+  type BuilderCalendarMove,
+  type BuilderCalendarWeek,
+} from "./builder-calendar";
 
 /* ------------------------------------------------------------------ */
 /* Editable state model — units live PER SET, like TrainHeroic         */
@@ -448,7 +452,6 @@ export function ProgramBuilder({
   const [autoPub, setAutoPub] = useState<AutoPublishRule>(program.autoPublish);
   const [autoPubOpen, setAutoPubOpen] = useState(false);
   const [weekMenuOpen, setWeekMenuOpen] = useState(false);
-  const [confirmDeleteWeek, setConfirmDeleteWeek] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [sectionEdit, setSectionEdit] = useState<number | null>(null);
   const [libPick, setLibPick] = useState<"section" | "day" | "program" | null>(null);
@@ -463,6 +466,27 @@ export function ProgramBuilder({
   } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** G6 — pending destructive action; nothing deletes without a confirm. */
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    body: string;
+    onConfirm: () => void;
+  } | null>(null);
+  /** G6 — Save to Library asks save-as-new vs overwrite. */
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  /** G6 — undo history: previous `weeks` states, capped at 25. */
+  const historyRef = useRef<{ stack: EdWeek[][]; lastKey: string | null }>({
+    stack: [],
+    lastKey: null,
+  });
+  const [historyLen, setHistoryLen] = useState(0);
+  /** G6 — subtle "Auto-saved" flash whenever the program changes. */
+  const [autoSaved, setAutoSaved] = useState(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedRef = useRef<{
+    weeks: EdWeek[];
+    autoPub: AutoPublishRule;
+  } | null>(null);
 
   // Clipboards live in localStorage so a day/section copied on Jordan's
   // builder can be pasted on Maya's — read them once the client mounts.
@@ -470,6 +494,19 @@ export function ProgramBuilder({
     setClipboard(readClipboard());
     setSectionClip(readSectionClipboard());
   }, []);
+
+  // G6 — every edit auto-saves (local demo state); say so in the UI.
+  useEffect(() => {
+    const prev = lastSavedRef.current;
+    lastSavedRef.current = { weeks, autoPub };
+    if (!prev || (prev.weeks === weeks && prev.autoPub === autoPub)) return;
+    setAutoSaved(true);
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => setAutoSaved(false), 1800);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [weeks, autoPub]);
 
   const activeWeek =
     weeks.find((w) => w.weekNumber === activeWeekNo) ?? weeks[0];
@@ -482,6 +519,65 @@ export function ProgramBuilder({
     setFlash(msg);
     flashTimer.current = setTimeout(() => setFlash(null), 2600);
   }
+
+  /* ---- undo history (G6) ---- */
+
+  /**
+   * Record the current program state before a change. Deletes, moves,
+   * pastes and renames all snapshot; passing a `mergeKey` collapses a
+   * burst of keystrokes on the same field into ONE undo step.
+   */
+  function snapshot(mergeKey?: string) {
+    const h = historyRef.current;
+    if (mergeKey && h.lastKey === mergeKey) return;
+    h.stack.push(weeks);
+    if (h.stack.length > 25) h.stack.shift();
+    h.lastKey = mergeKey ?? null;
+    setHistoryLen(h.stack.length);
+  }
+
+  function undo() {
+    const h = historyRef.current;
+    const prev = h.stack.pop();
+    if (!prev) return;
+    h.lastKey = null;
+    setHistoryLen(h.stack.length);
+    setWeeks(prev);
+    // Re-anchor the selection — the restored state may not contain it.
+    const wk = prev.find((w) => w.weekNumber === activeWeekNo) ?? prev[0];
+    if (wk) {
+      setActiveWeekNo(wk.weekNumber);
+      const day = wk.days.find((d) => d.id === activeDayId) ?? wk.days[0];
+      setActiveDayId(day?.id ?? "");
+    }
+    say("Undid the last change.");
+  }
+
+  const undoRef = useRef(undo);
+  undoRef.current = undo;
+
+  // Ctrl+Z / Cmd+Z while the builder is mounted (text fields keep their
+  // native undo — the shortcut only fires outside inputs).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      if (e.key.toLowerCase() !== "z") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      undoRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function patchDay(dayId: string, fn: (d: EdDay) => EdDay) {
     setWeeks((prev) =>
@@ -533,7 +629,6 @@ export function ProgramBuilder({
   function selectWeek(week: EdWeek) {
     setActiveWeekNo(week.weekNumber);
     setWeekMenuOpen(false);
-    setConfirmDeleteWeek(false);
     setSectionEdit(null);
     const match =
       week.days.find((d) => d.dayNumber === active?.dayNumber) ?? week.days[0];
@@ -567,6 +662,7 @@ export function ProgramBuilder({
       })),
     );
     const week: EdWeek = { weekNumber: weeks.length + 1, days };
+    snapshot();
     setWeeks((prev) => renumberWeeks([...prev, week]));
     setActiveWeekNo(weeks.length + 1);
     setActiveDayId(days[0]?.id ?? "");
@@ -587,6 +683,7 @@ export function ProgramBuilder({
         sections: cloneSections(d.sections),
       })),
     };
+    snapshot();
     setWeeks((prev) => {
       const idx = prev.findIndex((w) => w.weekNumber === src.weekNumber);
       return renumberWeeks([
@@ -607,18 +704,36 @@ export function ProgramBuilder({
       return;
     }
     const no = activeWeek!.weekNumber;
+    snapshot();
     const remaining = renumberWeeks(weeks.filter((w) => w.weekNumber !== no));
     setWeeks(remaining);
     const next = remaining[Math.min(no - 1, remaining.length - 1)];
     setActiveWeekNo(next.weekNumber);
     setActiveDayId(next.days[0]?.id ?? "");
     setWeekMenuOpen(false);
-    setConfirmDeleteWeek(false);
     say(`Week ${no} deleted — later weeks renumbered.`);
+  }
+
+  /** G6 — deleting a week asks first, like every destructive action. */
+  function requestDeleteWeek() {
+    if (weeks.length <= 1) {
+      say("A program needs at least one week.");
+      return;
+    }
+    const wk = activeWeek!;
+    setWeekMenuOpen(false);
+    setConfirmAction({
+      title: `Delete ${wk.label ?? `Week ${wk.weekNumber}`}?`,
+      body: `Every day and movement in ${
+        wk.label ?? `Week ${wk.weekNumber}`
+      } is removed and later weeks renumber. Undo (Ctrl+Z) can bring it back.`,
+      onConfirm: deleteWeek,
+    });
   }
 
   function renameWeek(label: string) {
     const no = activeWeek!.weekNumber;
+    snapshot(`rename-week-${no}`);
     setWeeks((prev) =>
       prev.map((w) =>
         w.weekNumber === no ? { ...w, label: label || undefined } : w,
@@ -643,6 +758,7 @@ export function ProgramBuilder({
       sections: blankSections(),
     };
     const weekNo = activeWeek!.weekNumber;
+    snapshot();
     setWeeks((prev) =>
       prev.map((w) =>
         w.weekNumber === weekNo
@@ -670,6 +786,7 @@ export function ProgramBuilder({
       sections: blankSections(),
     };
     const weekNo = activeWeek!.weekNumber;
+    snapshot();
     setWeeks((prev) =>
       prev.map((w) =>
         w.weekNumber === weekNo
@@ -690,6 +807,7 @@ export function ProgramBuilder({
     }
     const removed = active!;
     const weekNo = activeWeek!.weekNumber;
+    snapshot();
     const remaining = relabelDays(
       activeWeek!.days.filter((d) => d.id !== removed.id),
     );
@@ -698,6 +816,22 @@ export function ProgramBuilder({
     );
     setActiveDayId(remaining[0]?.id ?? "");
     say(`Day ${removed.dayLabel ?? removed.dayNumber} removed from Week ${weekNo}.`);
+  }
+
+  /** G6 — deleting a day asks first. */
+  function requestRemoveActiveDay() {
+    if (activeWeek!.days.length <= 1) {
+      say("A week needs at least one day.");
+      return;
+    }
+    const d = active!;
+    setConfirmAction({
+      title: `Delete Day ${d.dayLabel ?? d.dayNumber} — ${d.title}?`,
+      body: `Every section and movement in this day is removed from Week ${
+        activeWeek!.weekNumber
+      }. Undo (Ctrl+Z) can bring it back.`,
+      onConfirm: removeActiveDay,
+    });
   }
 
   /** C18 — a calendar chip was dropped on another cell. */
@@ -711,6 +845,7 @@ export function ProgramBuilder({
     const moved = srcWeek?.days.find((d) => d.id === dayId);
     if (!moved) return;
     if (fromWeekNo === toWeekNo && moved.dayNumber === toDayNumber) return;
+    snapshot();
     setWeeks((prev) =>
       prev.map((w) => {
         if (w.weekNumber !== fromWeekNo && w.weekNumber !== toWeekNo) return w;
@@ -725,6 +860,32 @@ export function ProgramBuilder({
       `${moved.title} moved to ${CAL_WEEKDAY[toDayNumber - 1]}${
         toWeekNo !== fromWeekNo ? `, Week ${toWeekNo}` : ""
       }.`,
+    );
+  }
+
+  /** G5 — reorder sessions WITHIN the same day (1A/1B/1C swap places). */
+  function reorderSession(weekNo: number, dayId: string, dir: -1 | 1) {
+    const week = weeks.find((w) => w.weekNumber === weekNo);
+    const day = week?.days.find((d) => d.id === dayId);
+    if (!week || !day) return;
+    const siblings = week.days
+      .map((d, i) => ({ d, i }))
+      .filter((x) => x.d.dayNumber === day.dayNumber);
+    const pos = siblings.findIndex((x) => x.d.id === dayId);
+    const target = pos + dir;
+    if (pos < 0 || target < 0 || target >= siblings.length) return;
+    snapshot();
+    const days = [...week.days];
+    const from = siblings[pos].i;
+    const to = siblings[target].i;
+    [days[from], days[to]] = [days[to], days[from]];
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === weekNo ? { ...w, days: relabelDays(days) } : w,
+      ),
+    );
+    say(
+      `Day ${day.dayNumber} sessions reordered — labels re-lettered ${day.dayNumber}A/${day.dayNumber}B.`,
     );
   }
 
@@ -750,6 +911,7 @@ export function ProgramBuilder({
   function pasteDay() {
     const clip = readClipboard() ?? clipboard;
     if (!clip) return;
+    snapshot();
     patchDay(active!.id, (d) => ({ ...d, sections: cloneSections(clip.sections) }));
     say(
       clip.sourceAthleteName === athleteName
@@ -760,6 +922,7 @@ export function ProgramBuilder({
 
   function repeatWeek() {
     const source = activeWeek!;
+    snapshot();
     setWeeks((prev) =>
       prev.map((w) => {
         if (w.weekNumber <= source.weekNumber) return w;
@@ -784,8 +947,14 @@ export function ProgramBuilder({
     );
   }
 
-  function saveToLibrary() {
-    say(`Saved "${athleteName} — current block" to the program library.`);
+  /** G6 — Save to Library asks: new program or overwrite this one. */
+  function saveToLibrary(saveMode: "new" | "overwrite") {
+    setSaveDialogOpen(false);
+    say(
+      saveMode === "new"
+        ? `Saved "${program.name} (copy)" to the Program Library as a new program.`
+        : `"${program.name}" overwritten in the Program Library.`,
+    );
   }
 
   function togglePublish() {
@@ -800,6 +969,7 @@ export function ProgramBuilder({
   /* ---- section management (C21) ---- */
 
   function duplicateSection(sectionIdx: number) {
+    snapshot();
     patchDay(active!.id, (d) => {
       const src = d.sections[sectionIdx];
       const copy = { ...cloneSections([src])[0], title: `${src.title} (copy)` };
@@ -813,11 +983,25 @@ export function ProgramBuilder({
   function deleteSection(sectionIdx: number) {
     const title = active!.sections[sectionIdx]?.title ?? "Section";
     setSectionEdit(null);
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       sections: d.sections.filter((_, si) => si !== sectionIdx),
     }));
     say(`"${title}" deleted.`);
+  }
+
+  /** G6 — deleting a section asks first. */
+  function requestDeleteSection(sectionIdx: number) {
+    const s = active!.sections[sectionIdx];
+    if (!s) return;
+    setConfirmAction({
+      title: `Delete section "${s.title}"?`,
+      body: `Its ${s.exercises.length} ${
+        s.exercises.length === 1 ? "exercise is" : "exercises are"
+      } removed from this day. Undo (Ctrl+Z) can bring it back.`,
+      onConfirm: () => deleteSection(sectionIdx),
+    });
   }
 
   function copySection(sectionIdx: number) {
@@ -847,6 +1031,7 @@ export function ProgramBuilder({
       color: clip.color,
       exercises: cloneExercises(clip.exercises),
     };
+    snapshot();
     patchDay(active!.id, (d) => ({ ...d, sections: [...d.sections, section] }));
     setAddMenuOpen(false);
     say(
@@ -859,6 +1044,7 @@ export function ProgramBuilder({
   function moveSection(sectionIdx: number, dir: -1 | 1) {
     const to = sectionIdx + dir;
     if (to < 0 || to >= active!.sections.length) return;
+    snapshot();
     patchDay(active!.id, (d) => {
       const sections = [...d.sections];
       const [s] = sections.splice(sectionIdx, 1);
@@ -870,6 +1056,7 @@ export function ProgramBuilder({
 
   function addBlankSection() {
     const idx = active!.sections.length;
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       sections: [...d.sections, { uid: uid(), title: "New section", exercises: [] }],
@@ -896,12 +1083,14 @@ export function ProgramBuilder({
 
   function importSection(tpl: ProgramTemplate, section: ProgramSection) {
     const ed = sectionsToEd([section])[0];
+    snapshot();
     patchDay(active!.id, (d) => ({ ...d, sections: [...d.sections, ed] }));
     setLibPick(null);
     say(`"${section.title}" added from ${tpl.name}.`);
   }
 
   function importDay(tpl: ProgramTemplate, day: ProgramDay) {
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       title: day.title,
@@ -923,6 +1112,7 @@ export function ProgramBuilder({
       seedDays: jordanProgramDays,
     });
     const newWeeks = toEditable(scaffold);
+    snapshot();
     if (applyMode === "fresh") {
       setWeeks(newWeeks);
       setActiveWeekNo(1);
@@ -942,6 +1132,7 @@ export function ProgramBuilder({
   /* ---- exercise/set actions ---- */
 
   function addSet(sectionIdx: number, exUid: string) {
+    snapshot(`sets-${exUid}`);
     patchExercise(sectionIdx, exUid, (e) => ({
       ...e,
       sets: [
@@ -952,12 +1143,14 @@ export function ProgramBuilder({
   }
 
   function removeSet(sectionIdx: number, exUid: string) {
+    snapshot(`sets-${exUid}`);
     patchExercise(sectionIdx, exUid, (e) =>
       e.sets.length <= 1 ? e : { ...e, sets: e.sets.slice(0, -1) },
     );
   }
 
   function removeExercise(sectionIdx: number, exUid: string) {
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       sections: d.sections.map((s, si) =>
@@ -968,13 +1161,28 @@ export function ProgramBuilder({
     }));
   }
 
+  /** G6 — deleting an exercise asks first. */
+  function requestRemoveExercise(
+    sectionIdx: number,
+    exUid: string,
+    name: string,
+  ) {
+    setConfirmAction({
+      title: `Remove ${name}?`,
+      body: "Its sets and notes come off this day. Undo (Ctrl+Z) can bring it back.",
+      onConfirm: () => removeExercise(sectionIdx, exUid),
+    });
+  }
+
   function toggleLink(sectionIdx: number, exUid: string) {
+    snapshot();
     patchExercise(sectionIdx, exUid, (e) => ({ ...e, linkNext: !e.linkNext }));
   }
 
   /** Drag-handle reorder (C14) — move within the same section. */
   function moveExercise(sectionIdx: number, from: number, to: number) {
     if (from === to) return;
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       sections: d.sections.map((s, si) => {
@@ -996,6 +1204,7 @@ export function ProgramBuilder({
   }
 
   function addExercise(sectionIdx: number, lib: LibraryExercise) {
+    snapshot();
     patchDay(active!.id, (d) => ({
       ...d,
       sections: d.sections.map((s, si) =>
@@ -1033,6 +1242,24 @@ export function ProgramBuilder({
     autoPub,
   );
 
+  /** G5 — compact "A Hip Snatch 3×6" lines for a calendar cell. */
+  function dayMoves(d: EdDay): BuilderCalendarMove[] {
+    const moves: BuilderCalendarMove[] = [];
+    let letterOffset = 0;
+    for (const s of d.sections) {
+      const { slots, groups } = computeSlots(s.exercises, letterOffset);
+      letterOffset += groups;
+      s.exercises.forEach((ex, i) => {
+        moves.push({
+          slot: slots[i] ?? "?",
+          name: libById.get(ex.exerciseId)?.name ?? ex.exerciseId,
+          sets: `${ex.sets.length}×${ex.sets[0]?.target ?? "—"}`,
+        });
+      });
+    }
+    return moves;
+  }
+
   const calendarWeeks: BuilderCalendarWeek[] = weeks.map((w) => ({
     weekNumber: w.weekNumber,
     label: w.label,
@@ -1042,7 +1269,7 @@ export function ProgramBuilder({
       label: d.dayLabel ?? String(d.dayNumber),
       title: d.title,
       location: d.location,
-      movements: d.sections.reduce((n, s) => n + s.exercises.length, 0),
+      moves: dayMoves(d),
       state:
         mode === "template"
           ? ("draft" as const)
@@ -1090,10 +1317,7 @@ export function ProgramBuilder({
                   type="button"
                   aria-label={`Week ${w.weekNumber} options`}
                   aria-expanded={weekMenuOpen}
-                  onClick={() => {
-                    setWeekMenuOpen((o) => !o);
-                    setConfirmDeleteWeek(false);
-                  }}
+                  onClick={() => setWeekMenuOpen((o) => !o)}
                   className="flex items-center rounded-r-lg border border-l-0 border-brand/40 bg-brand/10 px-1.5 text-foreground transition-colors hover:bg-brand/20 no-print"
                 >
                   <ChevronDown
@@ -1138,20 +1362,10 @@ export function ProgramBuilder({
                     />
                     <AddMenuItem
                       icon={Trash2}
-                      label={
-                        confirmDeleteWeek
-                          ? "Confirm — delete this week"
-                          : "Delete week…"
-                      }
-                      hint={
-                        confirmDeleteWeek
-                          ? "Click again to permanently remove it"
-                          : undefined
-                      }
+                      label="Delete week…"
+                      hint="Asks to confirm before anything is removed"
                       danger
-                      onClick={() =>
-                        confirmDeleteWeek ? deleteWeek() : setConfirmDeleteWeek(true)
-                      }
+                      onClick={requestDeleteWeek}
                     />
                   </div>
                 </div>
@@ -1214,6 +1428,7 @@ export function ProgramBuilder({
               setView("builder");
             }}
             onMoveDay={moveCalendarDay}
+            onReorderSession={reorderSession}
           />
           {mode === "athlete" ? (
             <p className="text-xs text-muted-foreground">
@@ -1315,9 +1530,24 @@ export function ProgramBuilder({
                 <Repeat2 className="h-4 w-4" />
                 Repeat week forward
               </Button>
-              <Button variant="outline" size="sm" onClick={saveToLibrary}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSaveDialogOpen(true)}
+              >
                 <Library className="h-4 w-4" />
-                Save to library
+                Save to Library
+              </Button>
+              {/* G6 — undo the last delete/move/rename (Ctrl+Z works too) */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={undo}
+                disabled={historyLen === 0}
+                title="Undo the last change (Ctrl+Z)"
+              >
+                <Undo2 className="h-4 w-4" />
+                Undo
               </Button>
               {mode === "athlete" ? (
                 <Button
@@ -1335,7 +1565,19 @@ export function ProgramBuilder({
                 </Button>
               ) : null}
               <span className="ml-auto flex flex-wrap items-center gap-2">
-                <PrintButton />
+                {/* G6 — the auto-save question, answered in-UI */}
+                <span
+                  aria-live="polite"
+                  className={cn(
+                    "flex items-center gap-1 text-[0.65rem] font-medium transition-opacity",
+                    autoSaved
+                      ? "text-success opacity-100"
+                      : "text-muted-foreground/70 opacity-70",
+                  )}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  {autoSaved ? "Auto-saved" : "Edits auto-save"}
+                </span>
                 {mode === "athlete" ? (
                   <>
                     <Button
@@ -1457,9 +1699,10 @@ export function ProgramBuilder({
               </span>
               <input
                 value={active.title}
-                onChange={(ev) =>
-                  patchDay(active.id, (d) => ({ ...d, title: ev.target.value }))
-                }
+                onChange={(ev) => {
+                  snapshot(`rename-day-${active.id}`);
+                  patchDay(active.id, (d) => ({ ...d, title: ev.target.value }));
+                }}
                 aria-label="Rename this day"
                 title="Click to rename this day"
                 className="min-w-32 flex-1 rounded-md border border-transparent bg-transparent px-1 font-display text-xl font-bold transition-colors hover:border-border focus-visible:border-border focus-visible:outline-none"
@@ -1563,10 +1806,10 @@ export function ProgramBuilder({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                title="Remove this day"
+                title="Remove this day — asks to confirm"
                 aria-label="Remove this day"
                 disabled={activeWeek.days.length <= 1}
-                onClick={removeActiveDay}
+                onClick={requestRemoveActiveDay}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -1631,12 +1874,13 @@ export function ProgramBuilder({
                         <div className="flex flex-wrap items-center gap-2.5">
                           <Input
                             value={section.title}
-                            onChange={(ev) =>
+                            onChange={(ev) => {
+                              snapshot(`rename-section-${section.uid}`);
                               patchSection(sectionIdx, (s) => ({
                                 ...s,
                                 title: ev.target.value,
-                              }))
-                            }
+                              }));
+                            }}
                             aria-label="Section name"
                             className="h-8 w-48 text-sm"
                           />
@@ -1647,12 +1891,13 @@ export function ProgramBuilder({
                                 type="button"
                                 aria-label={`Section color ${c}`}
                                 title={c}
-                                onClick={() =>
+                                onClick={() => {
+                                  snapshot(`color-${section.uid}`);
                                   patchSection(sectionIdx, (s) => ({
                                     ...s,
                                     color: c,
-                                  }))
-                                }
+                                  }));
+                                }}
                                 className={cn(
                                   "h-5 w-5 rounded-full transition-transform hover:scale-110",
                                   section.color === c
@@ -1717,7 +1962,8 @@ export function ProgramBuilder({
                             variant="outline"
                             size="sm"
                             className="h-7 px-2 text-destructive hover:text-destructive"
-                            onClick={() => deleteSection(sectionIdx)}
+                            title="Delete this section — asks to confirm"
+                            onClick={() => requestDeleteSection(sectionIdx)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             Delete
@@ -1872,8 +2118,14 @@ export function ProgramBuilder({
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                    title="Remove exercise"
-                                    onClick={() => removeExercise(sectionIdx, ex.uid)}
+                                    title="Remove exercise — asks to confirm"
+                                    onClick={() =>
+                                      requestRemoveExercise(
+                                        sectionIdx,
+                                        ex.uid,
+                                        def?.name ?? ex.exerciseId,
+                                      )
+                                    }
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -2089,6 +2341,187 @@ export function ProgramBuilder({
 
       {/* Inline exercise demo (C14) — no more new-tab hand-off */}
       {video ? <VideoModal lib={video} onClose={() => setVideo(null)} /> : null}
+
+      {/* G6 — every destructive action confirms first */}
+      {confirmAction ? (
+        <ConfirmDialog
+          title={confirmAction.title}
+          body={confirmAction.body}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => {
+            const action = confirmAction;
+            setConfirmAction(null);
+            action.onConfirm();
+          }}
+        />
+      ) : null}
+
+      {/* G6 — Save to Library: new program vs overwrite */}
+      {saveDialogOpen ? (
+        <SaveToLibraryDialog
+          programName={program.name}
+          onCancel={() => setSaveDialogOpen(false)}
+          onConfirm={saveToLibrary}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Confirm dialog (G6) — one consistent gate for every delete          */
+/* ------------------------------------------------------------------ */
+
+function ConfirmDialog({
+  title,
+  body,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  body: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+      role="alertdialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <button
+        type="button"
+        aria-label="Cancel"
+        onClick={onCancel}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <Card className="relative z-10 w-full max-w-sm">
+        <CardContent className="flex flex-col gap-3 p-5">
+          <h3 className="text-lg">{title}</h3>
+          <p className="text-sm text-muted-foreground">{body}</p>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button variant="ghost" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={onConfirm}>
+              Delete
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Save-to-Library dialog (G6) — save as new vs overwrite              */
+/* ------------------------------------------------------------------ */
+
+function SaveToLibraryDialog({
+  programName,
+  onCancel,
+  onConfirm,
+}: {
+  programName: string;
+  onCancel: () => void;
+  onConfirm: (mode: "new" | "overwrite") => void;
+}) {
+  const [mode, setMode] = useState<"new" | "overwrite">("new");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Save to Library"
+    >
+      <button
+        type="button"
+        aria-label="Cancel"
+        onClick={onCancel}
+        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+      />
+      <Card className="relative z-10 w-full max-w-sm">
+        <CardContent className="flex flex-col gap-4 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="eyebrow">Program Library</span>
+              <h3 className="text-lg">Save to Library</h3>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onCancel} aria-label="Close">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                {
+                  value: "new",
+                  title: "Save as a new program",
+                  hint: `Adds "${programName} (copy)" to the Program Library — the original stays untouched.`,
+                },
+                {
+                  value: "overwrite",
+                  title: `Overwrite "${programName}"`,
+                  hint: "Replaces the library master with this version. Copies already on clients keep their own loads.",
+                },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors",
+                  mode === opt.value
+                    ? "border-brand/40 bg-brand/10"
+                    : "border-border bg-surface/50 hover:bg-accent",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="save-mode"
+                  value={opt.value}
+                  checked={mode === opt.value}
+                  onChange={() => setMode(opt.value)}
+                  className="mt-0.5 accent-[hsl(var(--brand))]"
+                />
+                <span>
+                  <span className="block text-sm font-semibold">{opt.title}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {opt.hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button variant="ghost" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button variant="brand" size="sm" onClick={() => onConfirm(mode)}>
+              {mode === "new" ? "Save as new" : "Overwrite"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

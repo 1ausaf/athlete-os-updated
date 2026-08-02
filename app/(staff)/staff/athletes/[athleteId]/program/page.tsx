@@ -51,8 +51,26 @@ export default async function ProgramBuilderPage({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* G4 — every breadcrumb ancestor is a real link */}
+      <nav
+        aria-label="Breadcrumb"
+        className="eyebrow flex flex-wrap items-center gap-1.5"
+      >
+        <Link
+          href={"/staff/athletes" as Route}
+          className="transition-colors hover:text-foreground"
+        >
+          Members
+        </Link>
+        <span aria-hidden>/</span>
+        <Link href={profileHref} className="transition-colors hover:text-foreground">
+          {athlete.name}
+        </Link>
+        <span aria-hidden>/</span>
+        <span className="text-foreground">Program</span>
+      </nav>
+
       <PageHeader
-        eyebrow="Staff Workspace · Programming"
         title={
           <span className="flex items-center gap-3">
             <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="lg" />

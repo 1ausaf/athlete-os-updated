@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Settings2, Tag, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Settings2, Tag, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
  * C25 — program category labels on the template header: current labels as
  * removable chips, add from the shared label list or free text, and a
  * "Manage labels" popover for central label management (kids, foundation,
- * executive, per-sport…). Demo state is local.
+ * executive, per-sport…). Round 6 (G6): labels are renameable inline and
+ * deleting asks to confirm first. Demo state is local.
  */
 export function TemplateLabels({ initial }: { initial: string[] }) {
   const [labels, setLabels] = useState<string[]>(initial);
@@ -23,6 +24,10 @@ export function TemplateLabels({ initial }: { initial: string[] }) {
   );
   const [panel, setPanel] = useState<"add" | "manage" | null>(null);
   const [custom, setCustom] = useState("");
+  const [editing, setEditing] = useState<{ from: string; value: string } | null>(
+    null,
+  );
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const addable = useMemo(
     () => available.filter((l) => !labels.includes(l)),
@@ -44,6 +49,22 @@ export function TemplateLabels({ initial }: { initial: string[] }) {
   function deleteEverywhere(label: string) {
     setAvailable((prev) => prev.filter((l) => l !== label));
     setLabels((prev) => prev.filter((l) => l !== label));
+    setConfirmDelete(null);
+  }
+
+  /** G6 — rename updates the central list AND every template using it. */
+  function renameEverywhere(from: string, to: string) {
+    const clean = to.trim();
+    setEditing(null);
+    if (!clean || clean === from) return;
+    setAvailable((prev) =>
+      Array.from(new Set(prev.map((l) => (l === from ? clean : l)))).sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    );
+    setLabels((prev) =>
+      Array.from(new Set(prev.map((l) => (l === from ? clean : l)))),
+    );
   }
 
   return (
@@ -149,7 +170,7 @@ export function TemplateLabels({ initial }: { initial: string[] }) {
       {panel === "manage" ? (
         <div className="absolute left-0 top-full z-40 mt-2 w-64 rounded-xl border border-border bg-card p-2 shadow-raised">
           <p className="px-1.5 pb-1.5 pt-1 text-xs font-semibold text-muted-foreground">
-            All labels — deleting removes a label everywhere.
+            All labels — rename updates every template; delete asks first.
           </p>
           <div className="flex max-h-56 flex-col overflow-y-auto scrollbar-slim">
             {available.map((label) => (
@@ -157,20 +178,89 @@ export function TemplateLabels({ initial }: { initial: string[] }) {
                 key={label}
                 className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-accent"
               >
-                <span
-                  className={cn(labels.includes(label) && "font-semibold")}
-                >
-                  {label}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Delete label ${label}`}
-                  title={`Delete ${label} everywhere`}
-                  onClick={() => deleteEverywhere(label)}
-                  className="text-muted-foreground transition-colors hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {editing?.from === label ? (
+                  <>
+                    <Input
+                      autoFocus
+                      value={editing.value}
+                      onChange={(e) =>
+                        setEditing({ from: label, value: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          renameEverywhere(label, editing.value);
+                        }
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      aria-label={`Rename label ${label}`}
+                      className="h-7 flex-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Save new name for ${label}`}
+                      onClick={() => renameEverywhere(label, editing.value)}
+                      className="text-success transition-colors hover:opacity-80"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Cancel rename"
+                      onClick={() => setEditing(null)}
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate",
+                        labels.includes(label) && "font-semibold",
+                      )}
+                    >
+                      {label}
+                    </span>
+                    {confirmDelete === label ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteEverywhere(label)}
+                        className="shrink-0 rounded-md bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground transition-opacity hover:opacity-90"
+                      >
+                        Confirm delete
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          aria-label={`Rename label ${label}`}
+                          title={`Rename ${label} everywhere`}
+                          onClick={() => {
+                            setEditing({ from: label, value: label });
+                            setConfirmDelete(null);
+                          }}
+                          className="text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete label ${label}`}
+                          title={`Delete ${label} everywhere — asks to confirm`}
+                          onClick={() => {
+                            setConfirmDelete(label);
+                            setEditing(null);
+                          }}
+                          className="text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
               </span>
             ))}
             {available.length === 0 ? (

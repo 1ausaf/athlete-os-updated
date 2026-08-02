@@ -204,6 +204,9 @@ export interface TrainingSession {
   startsAt: string;
   endsAt: string;
   coach: string;
+  /** Round 6 (S4): every coach working the session — rows show the avatars.
+   *  `coach` stays the lead. */
+  coaches?: string[];
   location: string;
   capacity: number;
   roster: RosterEntry[];
@@ -1016,6 +1019,7 @@ export const sessions: TrainingSession[] = [
     startsAt: at(0, 16),
     endsAt: at(0, 17, 30),
     coach: "Coach Ellis",
+    coaches: ["Coach Ellis", "Coach Mason"],
     location: "Floor A · Racks 1–4",
     capacity: 6,
     roster: [
@@ -1085,6 +1089,49 @@ export const sessions: TrainingSession[] = [
     roster: [{ athleteId: "ath-jordan", state: "confirmed" }],
     waitlist: [],
   },
+  // Round 6 (S3): further-out sessions so Today / Weekly / Monthly visibly
+  // filter differently.
+  {
+    id: "sess-6",
+    title: "Semi-Private — Power",
+    type: "Semi-Private",
+    startsAt: at(5, 16),
+    endsAt: at(5, 17, 30),
+    coach: "Coach Ellis",
+    coaches: ["Coach Ellis", "Coach Nadia"],
+    location: "Floor A · Racks 1–4",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-jordan", state: "confirmed" },
+      { athleteId: "ath-ty", state: "confirmed" },
+    ],
+    waitlist: [],
+  },
+  {
+    id: "sess-7",
+    title: "Team Block — Tigers HPP",
+    type: "Team",
+    startsAt: at(9, 17),
+    endsAt: at(9, 18, 30),
+    coach: "Coach Clance",
+    coaches: ["Coach Clance", "Coach Nadia", "Coach Mason"],
+    location: "Turf + Floor B",
+    capacity: 14,
+    roster: [{ athleteId: "ath-ty", state: "confirmed" }],
+    waitlist: [],
+  },
+  {
+    id: "sess-8",
+    title: "Weightlifting Team",
+    type: "Weightlifting Team",
+    startsAt: at(14, 18),
+    endsAt: at(14, 20),
+    coach: "Coach Clance",
+    location: "Platforms 1–6",
+    capacity: 8,
+    roster: [{ athleteId: "ath-ren", state: "confirmed" }],
+    waitlist: [],
+  },
 ];
 
 /** The next upcoming session (used by the coach huddle brief). */
@@ -1096,6 +1143,25 @@ export const nextSession = sessions[0];
  * "pending" here reads as a no-show.
  */
 export const pastSessions: TrainingSession[] = [
+  {
+    // Round 6 (S3): this morning's session — the Past tab's default "Today"
+    // window has something to show.
+    id: "past-0",
+    title: "Early Strength",
+    type: "Semi-Private",
+    startsAt: at(0, 7),
+    endsAt: at(0, 8, 30),
+    coach: "Coach Ellis",
+    coaches: ["Coach Ellis", "Coach Mason"],
+    location: "Floor A · Racks 1–4",
+    capacity: 6,
+    roster: [
+      { athleteId: "ath-ren", state: "completed" },
+      { athleteId: "ath-jordan", state: "completed" },
+      { athleteId: "ath-leo", state: "pending" },
+    ],
+    waitlist: [],
+  },
   {
     id: "past-1",
     title: "Semi-Private — Power",

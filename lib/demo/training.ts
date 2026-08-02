@@ -113,7 +113,12 @@ export interface LibraryExercise {
 }
 
 /** Display totals matching the client's real library scale. */
-export const LIBRARY_TOTALS = { exercises: 658, programs: 265, teams: 285 };
+export const LIBRARY_TOTALS = {
+  exercises: 658,
+  programs: 265,
+  circuits: 24,
+  teams: 285,
+};
 
 export const exerciseLibrary: LibraryExercise[] = [
   {

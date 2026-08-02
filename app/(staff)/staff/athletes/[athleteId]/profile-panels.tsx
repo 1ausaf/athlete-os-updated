@@ -1,14 +1,20 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useRef, useState } from "react";
 import {
   CalendarClock,
   Camera,
   Check,
-  CheckSquare,
+  ChevronDown,
+  CreditCard,
   IdCard,
   LinkIcon,
+  Pencil,
   Plus,
+  Salad,
+  Settings2,
   Target,
   Trash2,
   UserCog,
@@ -16,7 +22,6 @@ import {
 } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
-import { Progress } from "@/components/app/progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,18 +31,13 @@ import {
   athletes,
   bucketLabel,
   fmtDay,
-  programDueDate,
+  money2,
   statusLabel,
   type Athlete,
+  type AthleteProfile,
   type AthleteStatus,
-  type MemberBucket,
 } from "@/lib/demo/data";
-import {
-  athleteChecklists,
-  checklistTemplateById,
-  checklistTemplates,
-  type AthleteChecklist,
-} from "@/lib/demo/checklists";
+import { billingMeta } from "@/lib/demo/status";
 import {
   assignmentsForAthlete,
   staffMembers,
@@ -45,9 +45,12 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Round 4: the card modal is gone — its working parts live on the full
- * profile now. These are the interactive ones (status lifecycle, coach
- * assignments, checklists); the static sections stay server-rendered.
+ * Round 6 profile panels. The status card became "Details" (P9) with
+ * manageable Type/Focus dropdowns and the double-confirm Delete Member;
+ * Contact & Links carries the external stack as full-width editable rows
+ * (P11); Coaches became Team Management (P12); Financial gained the
+ * owner-gated Manage button (P13); the Goal card became Goals & Medical
+ * History (P17) and Nutrition moved into a top-bar dropdown (P4/P9).
  */
 
 const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutral"> = {
@@ -63,89 +66,795 @@ const STATUS_HELP: Record<AthleteStatus, string> = {
   inactive: "Account disabled — no login. The record stays unless deleted.",
 };
 
-export function StatusCard({ athlete }: { athlete: Athlete }) {
+const FIELD_LABEL =
+  "text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground";
+
+/* ------------------------------------------------------------------ */
+/* P9 — ManagedSelect: a dropdown whose OPTIONS are manageable         */
+/* (add / rename / delete) from a small gear popover; the option list  */
+/* persists in localStorage.                                           */
+/* ------------------------------------------------------------------ */
+
+function ManagedSelect({
+  label,
+  storageKey,
+  defaults,
+  value,
+  onChange,
+}: {
+  label: string;
+  storageKey: string;
+  defaults: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [options, setOptions] = useState<string[]>(defaults);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [addDraft, setAddDraft] = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed) && parsed.length > 0) setOptions(parsed);
+      }
+    } catch {
+      /* corrupted storage — keep defaults */
+    }
+    setLoaded(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(options));
+    } catch {
+      /* storage full/blocked — options still work in-memory */
+    }
+  }, [options, loaded, storageKey]);
+
+  // The current value always renders, even if its option was deleted.
+  const shown = options.includes(value) ? options : [value, ...options];
+
+  function addOption() {
+    const v = addDraft.trim();
+    setAddDraft("");
+    if (!v || options.includes(v)) return;
+    setOptions((prev) => [...prev, v]);
+  }
+
+  function commitRename(i: number) {
+    const next = editDraft.trim();
+    setEditIdx(null);
+    if (!next || next === options[i] || options.includes(next)) return;
+    const prevName = options[i];
+    setOptions((prev) => prev.map((o, j) => (j === i ? next : o)));
+    if (value === prevName) onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={cn(FIELD_LABEL, "flex items-center justify-between")}>
+        {label}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`Manage ${label} options`}
+          title={`Manage ${label} options — add, rename or delete`}
+          className="rounded p-0.5 transition-colors hover:text-foreground"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </span>
+      <div className="relative">
+        <select
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+        >
+          {shown.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        {open ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              aria-hidden
+              onClick={() => setOpen(false)}
+            />
+            <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-2 shadow-raised">
+              <p className="eyebrow px-1.5 pb-1.5">{label} options</p>
+              <ul className="flex flex-col gap-0.5">
+                {options.map((o, i) => (
+                  <li
+                    key={`${o}-${i}`}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/40"
+                  >
+                    {editIdx === i ? (
+                      <input
+                        autoFocus
+                        value={editDraft}
+                        aria-label={`Rename ${o}`}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onBlur={() => commitRename(i)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter")
+                            (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditIdx(null);
+                        }}
+                        className="h-7 min-w-0 flex-1 rounded border border-input bg-surface px-1.5 text-sm focus:outline-none"
+                      />
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{o}</span>
+                        <button
+                          type="button"
+                          aria-label={`Rename ${o}`}
+                          title="Rename"
+                          onClick={() => {
+                            setEditIdx(i);
+                            setEditDraft(o);
+                          }}
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${o}`}
+                          title="Delete"
+                          onClick={() =>
+                            setOptions((prev) => prev.filter((_, j) => j !== i))
+                          }
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/60 pt-1.5">
+                <Input
+                  value={addDraft}
+                  placeholder="Add option…"
+                  className="h-7 flex-1 text-xs"
+                  onChange={(e) => setAddDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addOption();
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2"
+                  disabled={!addDraft.trim()}
+                  aria-label={`Add ${label} option`}
+                  onClick={addOption}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* P9 — Details: status lifecycle, manageable Type/Focus, Sex,         */
+/* Birthday "mmm-dd-yyyy (age)" and the double-confirm Delete Member.  */
+/* ------------------------------------------------------------------ */
+
+function birthdayLabel(dob: string | undefined, yearOfBirth: number): string {
+  if (!dob) {
+    return `${yearOfBirth} (${new Date().getFullYear() - yearOfBirth})`;
+  }
+  const d = new Date(`${dob.slice(0, 10)}T00:00:00`);
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < d.getMonth() ||
+    (now.getMonth() === d.getMonth() && now.getDate() < d.getDate());
+  if (beforeBirthday) age -= 1;
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${month}-${day}-${d.getFullYear()} (${age})`;
+}
+
+export function DetailsCard({
+  athlete,
+  dob,
+}: {
+  athlete: Athlete;
+  dob?: string;
+}) {
   const [status, setStatus] = useState<AthleteStatus>(athlete.status);
   const [followUp, setFollowUp] = useState<string>(
     athlete.followUpDate ? athlete.followUpDate.slice(0, 10) : "",
   );
+  const [bucket, setBucket] = useState(bucketLabel[athlete.bucket]);
+  const [focus, setFocus] = useState(athlete.sport);
   const [deleted, setDeleted] = useState(false);
+  // Delete Member is a two-step confirm: the first click ARMS the button for
+  // ~4s ("Really delete?…"), the second click within that window deletes.
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (armTimer.current) window.clearTimeout(armTimer.current);
+    },
+    [],
+  );
+
+  const focusDefaults = Array.from(
+    new Set([...athletes.map((a) => a.sport), athlete.sport]),
+  ).sort();
 
   if (deleted) {
     return (
       <Card className="border-destructive/40">
         <CardContent className="p-5 text-sm text-muted-foreground">
-          Record deleted (demo — refresh restores it).
+          Member deleted (demo — refresh restores the record).
         </CardContent>
       </Card>
     );
   }
 
-  const needsFollowUp = status === "paused";
+  function handleDeleteClick() {
+    if (!armed) {
+      setArmed(true);
+      armTimer.current = window.setTimeout(() => setArmed(false), 4000);
+      return;
+    }
+    if (armTimer.current) window.clearTimeout(armTimer.current);
+    setDeleted(true);
+  }
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 p-5">
+      <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
-          <UserCog className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h3 className="text-base">Status</h3>
+          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Details</h3>
           <Pill tone={STATUS_TONE[status]} dot className="ml-auto">
             {statusLabel[status]}
           </Pill>
         </div>
-        <select
-          value={status}
-          aria-label="Member status"
-          onChange={(e) => setStatus(e.target.value as AthleteStatus)}
-          className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
-        >
-          {(Object.keys(statusLabel) as AthleteStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {statusLabel[s]}
-            </option>
-          ))}
-        </select>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="col-span-2 flex flex-col gap-0.5">
+            <span className={FIELD_LABEL}>Status</span>
+            <select
+              value={status}
+              aria-label="Member status"
+              onChange={(e) => setStatus(e.target.value as AthleteStatus)}
+              className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+            >
+              {(Object.keys(statusLabel) as AthleteStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {status === "paused" ? (
+            <label className="col-span-2 flex items-center gap-2 rounded-lg border border-border bg-surface/50 p-2.5">
+              <CalendarClock
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="text-xs font-medium text-muted-foreground">
+                Follow up
+              </span>
+              <input
+                type="date"
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                aria-label="Follow-up date"
+                className="tnum ml-auto rounded-md border border-input bg-card px-2 py-1 text-xs font-semibold"
+              />
+            </label>
+          ) : null}
+
+          <ManagedSelect
+            label="Type"
+            storageKey="aos-member-type-options"
+            defaults={Object.values(bucketLabel)}
+            value={bucket}
+            onChange={setBucket}
+          />
+          <ManagedSelect
+            label="Focus"
+            storageKey="aos-member-focus-options"
+            defaults={focusDefaults}
+            value={focus}
+            onChange={setFocus}
+          />
+
+          <div className="flex flex-col gap-0.5">
+            <span className={FIELD_LABEL}>Sex</span>
+            <div className="flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
+              {athlete.gender}
+            </div>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className={FIELD_LABEL}>Birthday</span>
+            <div className="tnum flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
+              {birthdayLabel(dob, athlete.yearOfBirth)}
+            </div>
+          </div>
+        </div>
+
         <p className="text-xs text-muted-foreground text-pretty">
           {STATUS_HELP[status]}
         </p>
-        {needsFollowUp ? (
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-surface/50 p-2.5">
-            <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="text-xs font-medium text-muted-foreground">
-              Follow up
-            </span>
-            <input
-              type="date"
-              value={followUp}
-              onChange={(e) => setFollowUp(e.target.value)}
-              aria-label="Follow-up date"
-              className="tnum ml-auto rounded-md border border-input bg-card px-2 py-1 text-xs font-semibold"
-            />
-          </label>
-        ) : null}
-        {status === "inactive" ? (
+
+        <div className="flex items-end justify-between gap-3 border-t border-border/60 pt-3">
+          <span className="text-[0.7rem] text-muted-foreground">
+            Saves locally in this demo.
+          </span>
           <button
             type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Delete ${athlete.name}'s record entirely? This can't be undone.`,
-                )
-              ) {
-                setDeleted(true);
-              }
-            }}
-            className="flex items-center justify-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/[0.06] px-3 py-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10"
+            onClick={handleDeleteClick}
+            className={cn(
+              "text-right text-xs transition-colors",
+              armed
+                ? "font-semibold text-destructive"
+                : "text-muted-foreground/70 hover:text-destructive",
+            )}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete record entirely
+            {armed ? (
+              <>Really delete? This can&apos;t be undone — click again to confirm</>
+            ) : (
+              "Delete Member"
+            )}
           </button>
-        ) : null}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-export function CoachesCard({ athlete }: { athlete: Athlete }) {
+/* ------------------------------------------------------------------ */
+/* P4 — Nutrition dropdown in the top action row. "none" leads with    */
+/* Enable nutrition (Standard/Pro); otherwise switch tier or disable.  */
+/* ------------------------------------------------------------------ */
+
+const NUTRITION_LABEL: Record<Athlete["nutrition"], string> = {
+  none: "None",
+  standard: "Standard",
+  pro: "Pro",
+};
+
+export function NutritionButton({ initial }: { initial: Athlete["nutrition"] }) {
+  const [tier, setTier] = useState<Athlete["nutrition"]>(initial);
+  const [open, setOpen] = useState(false);
+
+  function pick(next: Athlete["nutrition"]) {
+    setTier(next);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <Salad className="h-4 w-4" />
+        Nutrition{tier !== "none" ? ` · ${NUTRITION_LABEL[tier]}` : ""}
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </Button>
+      {open ? (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            aria-hidden
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-border bg-popover p-2 shadow-raised">
+            {tier === "none" ? (
+              <>
+                <p className="eyebrow px-2 pb-1.5">Enable nutrition</p>
+                <MenuButton onClick={() => pick("standard")}>
+                  Standard
+                </MenuButton>
+                <MenuButton onClick={() => pick("pro")}>Pro</MenuButton>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow px-2 pb-1.5">
+                  Current tier · {NUTRITION_LABEL[tier]}
+                </p>
+                <MenuButton
+                  onClick={() => pick(tier === "pro" ? "standard" : "pro")}
+                >
+                  Switch to {tier === "pro" ? "Standard" : "Pro"}
+                </MenuButton>
+                <MenuButton danger onClick={() => pick("none")}>
+                  Disable nutrition
+                </MenuButton>
+              </>
+            )}
+            <p className="px-2 pt-1.5 text-[0.7rem] text-muted-foreground">
+              Saves locally in this demo.
+            </p>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MenuButton({
+  danger = false,
+  onClick,
+  children,
+}: {
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent/50",
+        danger && "text-destructive",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* P11 — Contact & Links: the external stack as full-width button rows */
+/* with pencil edit, plus member and parent/emergency contact columns. */
+/* ------------------------------------------------------------------ */
+
+interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+const DEFAULT_LINKS: ProfileLink[] = [
+  { label: "Drive", url: "https://drive.google.com" },
+  { label: "Quo", url: "https://quo.com" },
+  { label: "Google Contact", url: "https://contacts.google.com" },
+  { label: "Brevo", url: "https://brevo.com" },
+  { label: "Square", url: "https://squareup.com" },
+];
+
+function normalizeUrl(u: string): string {
+  const v = u.trim();
+  return v && !/^https?:\/\//.test(v) ? `https://${v}` : v;
+}
+
+export function ContactLinksCard({
+  athlete,
+  profile,
+}: {
+  athlete: Athlete;
+  profile?: AthleteProfile;
+}) {
+  const storageKey = `aos-links-${athlete.id}`;
+  const [links, setLinks] = useState<ProfileLink[]>(DEFAULT_LINKS);
+  const [loaded, setLoaded] = useState(false);
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addLabel, setAddLabel] = useState("");
+  const [addUrl, setAddUrl] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) setLinks(JSON.parse(raw) as ProfileLink[]);
+    } catch {
+      /* corrupted storage — keep defaults */
+    }
+    setLoaded(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(links));
+    } catch {
+      /* storage full/blocked — links still work in-memory */
+    }
+  }, [links, loaded, storageKey]);
+
+  function saveEdit(i: number) {
+    const l = editLabel.trim();
+    if (!l) return;
+    const u = normalizeUrl(editUrl);
+    setLinks((prev) =>
+      prev.map((link, j) => (j === i ? { label: l, url: u } : link)),
+    );
+    setEditIdx(null);
+  }
+
+  function addLink() {
+    const l = addLabel.trim();
+    if (!l) return;
+    setLinks((prev) => [...prev, { label: l, url: normalizeUrl(addUrl) }]);
+    setAddLabel("");
+    setAddUrl("");
+    setAdding(false);
+  }
+
+  const guardian = profile?.guardian;
+  const emergency = profile?.emergencyContact;
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex items-center gap-2">
+          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Contact &amp; Links</h3>
+        </div>
+
+        {/* Links — full-width rows; Program/Assessment/Chat live in the top
+            buttons now, so only the external stack remains here. */}
+        <div>
+          <span className="eyebrow">Links</span>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {links.map((link, i) =>
+              editIdx === i ? (
+                <div
+                  key={`edit-${link.label}-${i}`}
+                  className="flex flex-wrap items-end gap-2 rounded-lg border border-brand/30 bg-brand/[0.03] p-2.5"
+                >
+                  <div className="grid gap-1">
+                    <span className={FIELD_LABEL}>Label</span>
+                    <Input
+                      autoFocus
+                      value={editLabel}
+                      className="h-8 w-36 text-xs"
+                      onChange={(e) => setEditLabel(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className={FIELD_LABEL}>URL</span>
+                    <Input
+                      value={editUrl}
+                      placeholder="https://…"
+                      className="h-8 w-48 text-xs"
+                      onChange={(e) => setEditUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveEdit(i);
+                      }}
+                    />
+                  </div>
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    disabled={!editLabel.trim()}
+                    onClick={() => saveEdit(i)}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditIdx(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${link.label} link`}
+                    title="Remove link"
+                    onClick={() => {
+                      setLinks((prev) => prev.filter((_, j) => j !== i));
+                      setEditIdx(null);
+                    }}
+                    className="ml-auto rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  key={`${link.label}-${i}`}
+                  className="flex h-9 w-full items-stretch overflow-hidden rounded-md border border-input bg-surface text-sm font-medium"
+                >
+                  {link.url ? (
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex min-w-0 flex-1 items-center gap-2 px-3 transition-colors hover:bg-accent/50"
+                    >
+                      <LinkIcon
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span className="truncate">{link.label}</span>
+                    </a>
+                  ) : (
+                    <span className="flex min-w-0 flex-1 items-center gap-2 px-3">
+                      <LinkIcon
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span className="truncate">{link.label}</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Edit ${link.label} link`}
+                    title="Edit label + URL"
+                    onClick={() => {
+                      setEditIdx(i);
+                      setEditLabel(link.label);
+                      setEditUrl(link.url);
+                      setAdding(false);
+                    }}
+                    className="flex items-center border-l border-border/60 px-2.5 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ),
+            )}
+
+            {adding ? (
+              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-brand/30 bg-brand/[0.03] p-2.5">
+                <div className="grid gap-1">
+                  <span className={FIELD_LABEL}>Label</span>
+                  <Input
+                    autoFocus
+                    value={addLabel}
+                    placeholder="e.g. TrueCoach"
+                    className="h-8 w-36 text-xs"
+                    onChange={(e) => setAddLabel(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <span className={FIELD_LABEL}>URL</span>
+                  <Input
+                    value={addUrl}
+                    placeholder="https://…"
+                    className="h-8 w-48 text-xs"
+                    onChange={(e) => setAddUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addLink();
+                    }}
+                  />
+                </div>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  disabled={!addLabel.trim()}
+                  onClick={addLink}
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAdding(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(true);
+                  setEditIdx(null);
+                }}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add link
+              </button>
+            )}
+          </div>
+          <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
+            The external stack changes — edit or add links any time. Saves
+            locally in this demo.
+          </p>
+        </div>
+
+        {/* Contact — member on the left, parent/emergency on the right */}
+        <div>
+          <span className="eyebrow">Contact</span>
+          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1 text-sm">
+              <p className={FIELD_LABEL}>Member</p>
+              <p className="font-medium">{athlete.name}</p>
+              {profile ? (
+                <>
+                  <p>{profile.phone}</p>
+                  <p className="break-words">{profile.email}</p>
+                  <p className="text-pretty">
+                    {profile.address.street}, {profile.address.city}{" "}
+                    {profile.address.region} {profile.address.postal}
+                  </p>
+                  {profile.instagram ? (
+                    <a
+                      href={`https://instagram.com/${profile.instagram.replace(/^@/, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      Instagram · {profile.instagram}
+                    </a>
+                  ) : null}
+                  {profile.hudl ? (
+                    <a
+                      href={normalizeUrl(profile.hudl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      HUDL profile
+                    </a>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-muted-foreground">No profile on file yet.</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <p className={FIELD_LABEL}>Parent / Emergency contact</p>
+              {guardian ? (
+                <>
+                  <p className="font-medium">{guardian.name}</p>
+                  <p className="text-muted-foreground">{guardian.relation}</p>
+                  <p>{guardian.phone}</p>
+                  <p className="break-words">{guardian.email}</p>
+                </>
+              ) : emergency ? (
+                <>
+                  <p className="font-medium">{emergency.name}</p>
+                  <p className="text-muted-foreground">{emergency.relation}</p>
+                  <p>{emergency.phone}</p>
+                </>
+              ) : (
+                <p className="text-muted-foreground">None on file.</p>
+              )}
+            </div>
+          </div>
+          <p className="mt-2 text-[0.7rem] text-muted-foreground">
+            Synced from the member&apos;s profile — they keep it current.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* P12 — Team Management: Program | Manage side by side (labels above, */
+/* full-width selects), Assistants full-width beneath.                 */
+/* ------------------------------------------------------------------ */
+
+export function TeamManagementCard({ athlete }: { athlete: Athlete }) {
   const base = assignmentsForAthlete(athlete.id);
   const [programming, setProgramming] = useState(
     base.find((a) => a.role === "programming")?.staffId ?? "",
@@ -164,30 +873,26 @@ export function CoachesCard({ athlete }: { athlete: Athlete }) {
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 p-5">
+      <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
           <UserCog className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h3 className="text-base">Coaches</h3>
+          <h3 className="text-base">Team Management</h3>
         </div>
-        <div className="flex flex-col gap-1.5">
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(
             [
-              { label: "Programming", value: programming, set: setProgramming },
-              { label: "Management", value: management, set: setManagement },
+              { label: "Program", value: programming, set: setProgramming },
+              { label: "Manage", value: management, set: setManagement },
             ] as const
           ).map(({ label, value, set }) => (
-            <div
-              key={label}
-              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-2"
-            >
-              <span className="text-xs font-medium text-muted-foreground">
-                {label}
-              </span>
+            <label key={label} className="flex flex-col gap-1">
+              <span className={FIELD_LABEL}>{label}</span>
               <select
                 value={value}
                 aria-label={`${label} coach`}
                 onChange={(e) => set(e.target.value)}
-                className="h-8 rounded-md border border-input bg-surface px-2 text-sm"
+                className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
               >
                 <option value="">—</option>
                 {staffMembers.map((s) => (
@@ -196,63 +901,60 @@ export function CoachesCard({ athlete }: { athlete: Athlete }) {
                   </option>
                 ))}
               </select>
-            </div>
+            </label>
           ))}
-
-          {/* Assistant coaches — a list, not a single slot (C9) */}
-          <div className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-start gap-2">
-            <span className="pt-1.5 text-xs font-medium text-muted-foreground">
-              Assistants
-            </span>
-            <div className="flex flex-col gap-1.5">
-              {assistants.map((id) => {
-                const s = staffMembers.find((m) => m.id === id);
-                if (!s) return null;
-                return (
-                  <span
-                    key={id}
-                    className="flex items-center gap-2 rounded-md border border-border bg-surface/60 px-2 py-1 text-sm"
-                  >
-                    <AthleteAvatar
-                      initials={s.initials}
-                      hue={s.hue}
-                      size="sm"
-                      className="h-6 w-6 text-[0.55rem]"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${s.name} as assistant`}
-                      onClick={() =>
-                        setAssistants((prev) => prev.filter((a) => a !== id))
-                      }
-                      className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </span>
-                );
-              })}
-              <select
-                value=""
-                aria-label="Add assistant coach"
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setAssistants((prev) => [...prev, e.target.value]);
-                  }
-                }}
-                className="h-8 rounded-md border border-dashed border-input bg-surface px-2 text-xs text-muted-foreground"
-              >
-                <option value="">+ Add assistant…</option>
-                {availableAssistants.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
         </div>
+
+        {/* Assistants — a full-width list, not a single slot */}
+        <div className="flex flex-col gap-1.5">
+          <span className={FIELD_LABEL}>Assistants</span>
+          {assistants.map((id) => {
+            const s = staffMembers.find((m) => m.id === id);
+            if (!s) return null;
+            return (
+              <span
+                key={id}
+                className="flex items-center gap-2 rounded-md border border-border bg-surface/60 px-2.5 py-1.5 text-sm"
+              >
+                <AthleteAvatar
+                  initials={s.initials}
+                  hue={s.hue}
+                  size="sm"
+                  className="h-6 w-6 text-[0.55rem]"
+                />
+                <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${s.name} as assistant`}
+                  onClick={() =>
+                    setAssistants((prev) => prev.filter((a) => a !== id))
+                  }
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            );
+          })}
+          <select
+            value=""
+            aria-label="Add assistant coach"
+            onChange={(e) => {
+              if (e.target.value) {
+                setAssistants((prev) => [...prev, e.target.value]);
+              }
+            }}
+            className="h-9 w-full rounded-md border border-dashed border-input bg-surface px-2.5 text-sm text-muted-foreground"
+          >
+            <option value="">+ Add assistant…</option>
+            {availableAssistants.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <p className="text-[0.7rem] text-muted-foreground">
           Assignments drive who&apos;s in this member&apos;s chat thread and
           whose queue they appear in. Saves locally in this demo.
@@ -262,546 +964,180 @@ export function CoachesCard({ athlete }: { athlete: Athlete }) {
   );
 }
 
-export function ChecklistsCard({ athlete }: { athlete: Athlete }) {
-  const [checklists, setChecklists] = useState<AthleteChecklist[]>(
-    athleteChecklists[athlete.id] ?? [],
+/* ------------------------------------------------------------------ */
+/* P13 — Financial: owner/admin get a working Manage button; coaches   */
+/* get a "No Access Granted" flash.                                    */
+/* ------------------------------------------------------------------ */
+
+export function FinancialCard({
+  athlete,
+  admin,
+}: {
+  athlete: Athlete;
+  admin: boolean;
+}) {
+  const billing = billingMeta[athlete.billing.state];
+  const [denied, setDenied] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
   );
 
-  function toggleItem(ci: number, ii: number) {
-    setChecklists((prev) =>
-      prev.map((c, i) =>
-        i === ci
-          ? { ...c, checked: c.checked.map((v, j) => (j === ii ? !v : v)) }
-          : c,
-      ),
-    );
-  }
-
-  function addChecklist(templateId: string) {
-    const tpl = checklistTemplateById(templateId);
-    if (!tpl) return;
-    setChecklists((prev) => [
-      ...prev,
-      { templateId, checked: tpl.items.map(() => false) },
-    ]);
+  function handleDenied() {
+    setDenied(true);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setDenied(false), 2600);
   }
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
-          <CheckSquare className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h3 className="text-base">Checklists</h3>
-          <select
-            value=""
-            aria-label="Add checklist"
-            onChange={(e) => {
-              if (e.target.value) addChecklist(e.target.value);
-            }}
-            className="ml-auto h-8 rounded-md border border-input bg-surface px-2 text-xs"
-          >
-            <option value="">+ Add checklist…</option>
-            {checklistTemplates
-              .filter((t) => !checklists.some((c) => c.templateId === t.id))
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        {checklists.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
-            No checklist running — add Onboarding, Returning or Exit.
-          </p>
-        ) : (
-          checklists.map((c, ci) => {
-            const tpl = checklistTemplateById(c.templateId);
-            if (!tpl) return null;
-            const done = c.checked.filter(Boolean).length;
-            const pct = Math.round((done / tpl.items.length) * 100);
-            return (
-              <details
-                key={c.templateId}
-                className="group rounded-lg border border-border bg-surface/40"
-                open={pct < 100}
-              >
-                <summary className="flex cursor-pointer list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden">
-                  <CheckSquare className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">{tpl.name}</span>
-                  <span className="tnum ml-auto text-xs text-muted-foreground">
-                    {done}/{tpl.items.length} · {pct}%
-                  </span>
-                </summary>
-                <div className="px-3 pb-1">
-                  <Progress value={pct} tone={pct === 100 ? "success" : "brand"} />
-                </div>
-                <ul className="flex flex-col gap-0.5 p-3 pt-2">
-                  {tpl.items.map((item, ii) => (
-                    <li key={ii}>
-                      <label className="flex cursor-pointer items-start gap-2 rounded-md p-1 transition-colors hover:bg-accent/40">
-                        <input
-                          type="checkbox"
-                          checked={c.checked[ii] ?? false}
-                          onChange={() => toggleItem(ci, ii)}
-                          className="mt-0.5 h-3.5 w-3.5 accent-[hsl(var(--brand))]"
-                        />
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 text-xs leading-snug",
-                            c.checked[ii] && "text-muted-foreground line-through",
-                          )}
-                        >
-                          <span className="mr-1 font-mono text-[0.6rem] font-bold text-muted-foreground">
-                            [{item.owner}]
-                          </span>
-                          {item.label}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            );
-          })
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Trello-style editable details — carried over from the retired card modal
- * ("whatever is in those cards, we should put them into here somehow").
- * Click a field and change it; saves locally in the demo.
- */
-export function DetailsCard({ athlete }: { athlete: Athlete }) {
-  const [a, setA] = useState({
-    bucket: athlete.bucket,
-    sport: athlete.sport,
-    yob: athlete.yearOfBirth,
-    gender: athlete.gender,
-    dueDate: programDueDate(athlete).slice(0, 10),
-    nutrition: athlete.nutrition,
-  });
-
-  const patch = <K extends keyof typeof a>(key: K, value: (typeof a)[K]) =>
-    setA((prev) => ({ ...prev, [key]: value }));
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-5">
-        <div className="flex items-center gap-2">
-          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h3 className="text-base">Details</h3>
-          <span className="ml-auto text-[0.7rem] text-muted-foreground">
-            Click a field to change it
+          <CreditCard className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Financial</h3>
+          <span className="ml-auto flex items-center gap-2">
+            {denied ? (
+              <Pill tone="danger" dot>
+                No Access Granted
+              </Pill>
+            ) : null}
+            {admin ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={"/staff/billing" as Route}>Manage</Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleDenied}>
+                Manage
+              </Button>
+            )}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <FieldSelect
-            label="Membership"
-            value={a.bucket}
-            options={(Object.keys(bucketLabel) as MemberBucket[]).map((b) => ({
-              value: b,
-              label: bucketLabel[b],
-            }))}
-            onChange={(v) => patch("bucket", v as MemberBucket)}
-          />
-          <FocusField value={a.sport} onChange={(v) => patch("sport", v)} />
-          <FieldInput
-            label="YOB"
-            value={String(a.yob)}
-            numeric
-            onCommit={(v) => {
-              const n = Number(v);
-              if (Number.isFinite(n) && n > 1900) patch("yob", n);
-            }}
-          />
-          <FieldSelect
-            label="Sex"
-            value={a.gender}
-            options={[
-              { value: "M", label: "M" },
-              { value: "F", label: "F" },
-            ]}
-            onChange={(v) => patch("gender", v as "M" | "F")}
-          />
-          {/* C7: a real DATE picker — the days-remaining chip stays derived */}
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-              Program due
+
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-3">
+            <span className="font-medium">{athlete.planName}</span>
+            <Pill tone={billing.tone} dot>
+              {billing.label}
+            </Pill>
+          </div>
+          <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+            <span>Next invoice</span>
+            <span className="tnum font-semibold text-foreground">
+              {fmtDay(athlete.billing.nextInvoice)}
             </span>
-            <input
-              type="date"
-              value={a.dueDate}
-              onChange={(e) => patch("dueDate", e.target.value)}
-              className="tnum h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input focus:border-input focus:outline-none"
-            />
-          </label>
-          <FieldSelect
-            label="Nutrition"
-            value={a.nutrition}
-            options={[
-              { value: "none", label: "None" },
-              { value: "standard", label: "Standard" },
-              { value: "pro", label: "Pro" },
-            ]}
-            onChange={(v) => patch("nutrition", v as Athlete["nutrition"])}
-          />
+          </div>
+          {athlete.billing.amountDueCents > 0 ? (
+            <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+              <span>Outstanding</span>
+              <span className="tnum font-semibold text-destructive">
+                {money2(athlete.billing.amountDueCents)}
+              </span>
+            </div>
+          ) : null}
+          <p className="px-1 text-[0.7rem] text-muted-foreground">
+            {admin
+              ? "Manage opens Billing — mark paid / cancel live there; Square handles cards."
+              : "Billing actions are owner/admin only."}
+          </p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-const ADD_NEW_FOCUS = "__add-new__";
+/* ------------------------------------------------------------------ */
+/* P17 — Goals & Medical History: GOALS, PAST INJURIES and CURRENT     */
+/* INJURIES / LIMITATIONS (the last one feeds the session Huddle       */
+/* Brief).                                                             */
+/* ------------------------------------------------------------------ */
 
-/**
- * C5: Focus is a dropdown of EXISTING values (alphabetical) + "Add new…" —
- * no free-text typos fragmenting the filter list.
- */
-function FocusField({
-  value,
-  onChange,
+export function GoalsMedicalCard({
+  initialGoals,
+  initialPastInjuries,
+  initialLimitations,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  initialGoals: string;
+  initialPastInjuries: string;
+  initialLimitations: string;
 }) {
-  const [addingNew, setAddingNew] = useState(false);
-  const [draft, setDraft] = useState("");
-  const options = Array.from(
-    new Set([...athletes.map((x) => x.sport), value]),
-  ).sort();
-
-  function commitNew() {
-    const v = draft.trim();
-    if (v) onChange(v);
-    setAddingNew(false);
-    setDraft("");
-  }
-
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-        Focus
-      </span>
-      {addingNew ? (
-        <input
-          autoFocus
-          value={draft}
-          placeholder="New focus…"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitNew}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            if (e.key === "Escape") {
-              setDraft("");
-              setAddingNew(false);
-            }
-          }}
-          className="h-8 rounded-md border border-input bg-surface/60 px-1.5 text-xs font-semibold focus:outline-none"
-        />
-      ) : (
-        <select
-          value={value}
-          onChange={(e) => {
-            if (e.target.value === ADD_NEW_FOCUS) {
-              setAddingNew(true);
-            } else {
-              onChange(e.target.value);
-            }
-          }}
-          className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input"
-        >
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-          <option value={ADD_NEW_FOCUS}>+ Add new…</option>
-        </select>
-      )}
-    </label>
-  );
-}
-
-/** Click-to-edit goals — also carried over from the card modal. */
-export function GoalsCard({ initialGoal }: { initialGoal: string }) {
-  const [goal, setGoal] = useState(initialGoal);
-  const [editing, setEditing] = useState(false);
+  const [goals, setGoals] = useState(initialGoals);
+  const [past, setPast] = useState(initialPastInjuries);
+  const [limitations, setLimitations] = useState(initialLimitations);
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-2 p-5">
+      <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center gap-2">
           <Target className="h-5 w-5 text-brand-ink" aria-hidden />
-          <h3 className="text-base">Goal</h3>
+          <h3 className="text-base">Goals &amp; Medical History</h3>
         </div>
-        {editing ? (
-          <Textarea
-            autoFocus
-            rows={2}
-            value={goal}
-            className="text-sm"
-            onChange={(e) => setGoal(e.target.value)}
-            onBlur={() => setEditing(false)}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            title="Click to edit"
-            className="-m-1 rounded-md p-1 text-left text-sm leading-relaxed text-foreground/90 transition-colors hover:bg-accent/50"
-          >
-            {goal || "Click to add a goal…"}
-          </button>
-        )}
+
+        <MedicalField
+          label="GOALS"
+          rows={3}
+          value={goals}
+          placeholder="What this member is training toward…"
+          onChange={setGoals}
+        />
+        <MedicalField
+          label="PAST INJURIES"
+          rows={2}
+          value={past}
+          placeholder="Injury history worth knowing…"
+          onChange={setPast}
+        />
+        <MedicalField
+          label="CURRENT INJURIES / LIMITATIONS"
+          rows={3}
+          value={limitations}
+          placeholder="Anything limiting training right now…"
+          caption="Shows on the session Huddle Brief"
+          onChange={setLimitations}
+        />
+
+        <p className="text-[0.7rem] text-muted-foreground">
+          Saves locally in this demo.
+        </p>
       </CardContent>
     </Card>
   );
 }
 
-function FieldSelect({
+function MedicalField({
   label,
+  rows,
   value,
-  options,
+  placeholder,
+  caption,
   onChange,
 }: {
   label: string;
+  rows: number;
   value: string;
-  options: { value: string; label: string }[];
+  placeholder: string;
+  caption?: string;
   onChange: (v: string) => void;
 }) {
   return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+    <label className="flex flex-col gap-1">
+      <span className="text-[0.68rem] font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <select
+      <Textarea
+        rows={rows}
         value={value}
+        placeholder={placeholder}
+        className="text-sm leading-relaxed"
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function FieldInput({
-  label,
-  value,
-  numeric = false,
-  onCommit,
-}: {
-  label: string;
-  value: string;
-  numeric?: boolean;
-  onCommit: (v: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <input
-        value={draft}
-        inputMode={numeric ? "numeric" : undefined}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => onCommit(draft.trim())}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        className="h-8 rounded-md border border-transparent bg-surface/60 px-1.5 text-xs font-semibold transition-colors hover:border-input focus:border-input focus:outline-none"
       />
+      {caption ? (
+        <span className="text-[0.7rem] text-muted-foreground">{caption}</span>
+      ) : null}
     </label>
-  );
-}
-
-/** Compact "Current program" side card ("this can be smaller on the side"). */
-export function CompactProgramCard({ athlete }: { athlete: Athlete }) {
-  const pct =
-    athlete.program.totalDays > 0
-      ? Math.round((athlete.program.day / athlete.program.totalDays) * 100)
-      : 0;
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-2.5 p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="eyebrow">Current program</span>
-          <span className="tnum text-xs text-muted-foreground">
-            Day {athlete.program.day}/{athlete.program.totalDays}
-          </span>
-        </div>
-        <p className="text-sm font-semibold leading-snug">
-          {athlete.program.name}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {athlete.program.phase} phase · {athlete.frequency}
-        </p>
-        <Progress value={pct} />
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* C3 — dynamic link chips ("we never know what software we're gonna   */
-/* change to"): default stack, add custom label+URL, remove any.       */
-/* ------------------------------------------------------------------ */
-
-interface ProfileLink {
-  label: string;
-  url: string;
-}
-
-const DEFAULT_LINKS: ProfileLink[] = [
-  { label: "Drive", url: "https://drive.google.com" },
-  { label: "Quo", url: "https://quo.com" },
-  { label: "Google Contact", url: "https://contacts.google.com" },
-  { label: "Brevo", url: "https://brevo.com" },
-  { label: "Square", url: "https://squareup.com" },
-];
-
-export function LinkChips({ athleteId }: { athleteId: string }) {
-  const storageKey = `aos-links-${athleteId}`;
-  const [links, setLinks] = useState<ProfileLink[]>(DEFAULT_LINKS);
-  const [loaded, setLoaded] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [label, setLabel] = useState("");
-  const [url, setUrl] = useState("");
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw) setLinks(JSON.parse(raw) as ProfileLink[]);
-    } catch {
-      /* corrupted storage — keep defaults */
-    }
-    setLoaded(true);
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (!loaded) return;
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(links));
-    } catch {
-      /* storage full/blocked — chips still work in-memory */
-    }
-  }, [links, loaded, storageKey]);
-
-  function addLink() {
-    const l = label.trim();
-    if (!l) return;
-    const u = url.trim();
-    setLinks((prev) => [
-      ...prev,
-      { label: l, url: u && !/^https?:\/\//.test(u) ? `https://${u}` : u },
-    ]);
-    setLabel("");
-    setUrl("");
-    setAdding(false);
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-1.5">
-        {links.map((link, i) => (
-          <span
-            key={`${link.label}-${i}`}
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
-          >
-            <LinkIcon className="h-3 w-3" aria-hidden />
-            {link.url ? (
-              <a
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </a>
-            ) : (
-              link.label
-            )}
-            <button
-              type="button"
-              aria-label={`Remove ${link.label} link`}
-              onClick={() =>
-                setLinks((prev) => prev.filter((_, j) => j !== i))
-              }
-              className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-destructive"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        {!adding ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-          >
-            <Plus className="h-3 w-3" />
-            Add link
-          </button>
-        ) : null}
-      </div>
-      {adding ? (
-        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-brand/30 bg-brand/[0.03] p-2.5">
-          <div className="grid gap-1">
-            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-              Label
-            </span>
-            <Input
-              autoFocus
-              value={label}
-              placeholder="e.g. TrueCoach"
-              className="h-8 w-36 text-xs"
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1">
-            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-              URL
-            </span>
-            <Input
-              value={url}
-              placeholder="https://…"
-              className="h-8 w-48 text-xs"
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addLink();
-              }}
-            />
-          </div>
-          <Button
-            variant="brand"
-            size="sm"
-            disabled={!label.trim()}
-            onClick={addLink}
-          >
-            Add
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <p className="text-[0.7rem] text-muted-foreground">
-          The external stack changes — add or remove links any time. Saves
-          locally in this demo.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -857,7 +1193,7 @@ export function AvatarUpload({
   );
 }
 
-/** Follow-up strip shown at the top for away/paused members. */
+/** Follow-up strip shown at the top for paused members. */
 export function FollowUpBanner({ athlete }: { athlete: Athlete }) {
   if (athlete.status === "active" || !athlete.followUpDate) return null;
   return (

@@ -29,7 +29,7 @@ export default async function StaffAthletesPage() {
       <PageHeader
         eyebrow="Staff Workspace · Members"
         title="Members"
-        description="Every client by status — click a member to open their full profile: notes, checklists, program, billing, the lot."
+        description="Every client by status — click a member to open their full profile: notes, program, billing, the lot."
         actions={
           <div className="flex flex-wrap items-center gap-1.5">
             <Pill tone="neutral" dot>

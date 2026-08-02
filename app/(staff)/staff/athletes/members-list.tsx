@@ -10,7 +10,6 @@ import {
   Plus,
   Search,
   Trash2,
-  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -30,7 +29,6 @@ import {
 } from "@/lib/demo/data";
 import {
   assignmentsForAthlete,
-  athleteIdsForStaff,
   staffMembers,
 } from "@/lib/demo/staff";
 import {
@@ -42,10 +40,12 @@ import { cn } from "@/lib/utils";
 import { programDueMeta } from "./program-due";
 
 /**
- * Round-5 members list: one table for EVERY client — athletes AND teams
- * (C13: "teams are clients too"). Status tabs use the shared line style with
- * bracketed counts that react to the filters (CM9), every column sorts (CM3)
- * and the "Last commented" column replaces the inactivity digest (CM4).
+ * Round-6 members list: one table for EVERY client — athletes AND teams in
+ * the SAME row shape (M1: "Team: {name}" rows carry Type, Program/Manage
+ * coaches, Due and Focus like anyone). Two coach dropdowns filter by role
+ * (M2), and the "Last Comment" column colors stale rows amber then red (M3).
+ * Column order (M6): Client, Focus, Age, Sex, Type, Program, Due, Manage,
+ * Last Comment.
  */
 
 const STATUS_TABS: AthleteStatus[] = ["active", "paused", "inactive"];
@@ -68,17 +68,37 @@ type SortKey =
   | "lastNote";
 type SortDir = "asc" | "desc";
 type TypeFilter = "all" | "athletes" | "teams";
+/** M2 — "All Coaches" | "My Clients" | a specific staff id, per coach role. */
+type CoachFilter = "all" | "mine" | (string & {});
 
-const STALE_DAYS = 14;
+/** M3 — Last Comment aging: >7 days amber, >14 days red. */
+const NOTE_WARN_DAYS = 7;
+const NOTE_DANGER_DAYS = 14;
 
 /** A list row is either an athlete or a training team (C13/C15). */
 type Row =
   | { kind: "athlete"; a: Athlete }
   | { kind: "team"; g: TrainingGroup };
 
+function roleStaffId(
+  athleteId: string,
+  role: "programming" | "management",
+): string | undefined {
+  return assignmentsForAthlete(athleteId).find((a) => a.role === role)?.staffId;
+}
+
 function coachOf(athleteId: string, role: "programming" | "management"): string {
-  const id = assignmentsForAthlete(athleteId).find((a) => a.role === role)?.staffId;
+  const id = roleStaffId(athleteId, role);
   return staffMembers.find((s) => s.id === id)?.name ?? "—";
+}
+
+/** Resolve a coach-filter value to the staff member's display name (M2). */
+function filterStaffName(
+  v: CoachFilter,
+  viewerStaffId: string,
+): string | undefined {
+  return staffMembers.find((s) => s.id === (v === "mine" ? viewerStaffId : v))
+    ?.name;
 }
 
 /** Sort value for the Due column: program runway or the follow-up date. */
@@ -92,20 +112,22 @@ function dueValue(a: Athlete): number {
   return 9999;
 }
 
-/* --- sort accessors across the mixed athlete/team rows --- */
-const rowName = (r: Row) => (r.kind === "athlete" ? r.a.name : r.g.name);
+/* --- sort accessors across the mixed athlete/team rows (M1: one shape) --- */
+const rowName = (r: Row) =>
+  r.kind === "athlete" ? r.a.name : `Team: ${r.g.name}`;
 const rowFocus = (r: Row) => (r.kind === "athlete" ? r.a.sport : r.g.focus);
 const rowAge = (r: Row) => (r.kind === "athlete" ? r.a.age : -1);
 const rowSex = (r: Row) => (r.kind === "athlete" ? r.a.gender : "~");
 const rowProgramming = (r: Row) =>
   r.kind === "athlete"
     ? coachOf(r.a.id, "programming")
-    : (r.g.coachNames[0] ?? "—");
+    : r.g.programmingCoach;
 const rowManagement = (r: Row) =>
-  r.kind === "athlete" ? coachOf(r.a.id, "management") : "—";
+  r.kind === "athlete" ? coachOf(r.a.id, "management") : r.g.managementCoach;
 const rowMembership = (r: Row) =>
-  r.kind === "athlete" ? bucketLabel[r.a.bucket] : "Team";
-const rowDue = (r: Row) => (r.kind === "athlete" ? dueValue(r.a) : 9998);
+  bucketLabel[r.kind === "athlete" ? r.a.bucket : r.g.bucket];
+const rowDue = (r: Row) =>
+  r.kind === "athlete" ? dueValue(r.a) : r.g.programDueInDays;
 const rowLastNote = (r: Row) =>
   r.kind === "athlete" ? daysSinceLastNote(r.a) : 9999;
 
@@ -120,7 +142,9 @@ export function MembersList({
   const [list, setList] = useState<Athlete[]>(athletes);
   const [tab, setTab] = useState<AthleteStatus>("active");
   const [query, setQuery] = useState("");
-  const [coachFilter, setCoachFilter] = useState<string>("all");
+  // M2 — one dropdown per coach role
+  const [progFilter, setProgFilter] = useState<CoachFilter>("all");
+  const [mgmtFilter, setMgmtFilter] = useState<CoachFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sportChecks, setSportChecks] = useState<Set<string>>(new Set());
   const [bucketChecks, setBucketChecks] = useState<Set<MemberBucket>>(new Set());
@@ -152,10 +176,14 @@ export function MembersList({
           coachOf(a.id, "management").toLowerCase().includes(q),
       );
     }
-    if (coachFilter !== "all") {
-      const staffId = coachFilter === "mine" ? viewerStaffId : coachFilter;
-      const ids = athleteIdsForStaff(staffId);
-      out = out.filter((a) => ids.has(a.id));
+    // M2 — each dropdown filters its own coach role
+    if (progFilter !== "all") {
+      const staffId = progFilter === "mine" ? viewerStaffId : progFilter;
+      out = out.filter((a) => roleStaffId(a.id, "programming") === staffId);
+    }
+    if (mgmtFilter !== "all") {
+      const staffId = mgmtFilter === "mine" ? viewerStaffId : mgmtFilter;
+      out = out.filter((a) => roleStaffId(a.id, "management") === staffId);
     }
     if (sportChecks.size > 0) {
       out = out.filter((a) => sportChecks.has(a.sport));
@@ -164,13 +192,11 @@ export function MembersList({
       out = out.filter((a) => bucketChecks.has(a.bucket));
     }
     return out;
-  }, [list, typeFilter, query, coachFilter, sportChecks, bucketChecks, viewerStaffId]);
+  }, [list, typeFilter, query, progFilter, mgmtFilter, sportChecks, bucketChecks, viewerStaffId]);
 
-  /** Teams matching the filters — they live under the Active tab (C13). */
+  /** Teams matching the filters — they live under the Active tab (C13/M1). */
   const baseTeams = useMemo(() => {
     if (typeFilter === "athletes") return [] as TrainingGroup[];
-    // Membership buckets are athlete-only — a bucket filter excludes teams.
-    if (bucketChecks.size > 0) return [] as TrainingGroup[];
     const q = query.trim().toLowerCase();
     let out = trainingGroups;
     if (q) {
@@ -179,13 +205,19 @@ export function MembersList({
           g.name.toLowerCase().includes(q) ||
           g.focus.toLowerCase().includes(q) ||
           g.program.toLowerCase().includes(q) ||
+          g.programmingCoach.toLowerCase().includes(q) ||
+          g.managementCoach.toLowerCase().includes(q) ||
           g.coachNames.join(" ").toLowerCase().includes(q),
       );
     }
-    if (coachFilter !== "all") {
-      const staffId = coachFilter === "mine" ? viewerStaffId : coachFilter;
-      const name = staffMembers.find((s) => s.id === staffId)?.name;
-      out = out.filter((g) => (name ? g.coachNames.includes(name) : false));
+    // M2 — teams match by their Program / Manage coach names
+    if (progFilter !== "all") {
+      const name = filterStaffName(progFilter, viewerStaffId);
+      out = out.filter((g) => g.programmingCoach === name);
+    }
+    if (mgmtFilter !== "all") {
+      const name = filterStaffName(mgmtFilter, viewerStaffId);
+      out = out.filter((g) => g.managementCoach === name);
     }
     if (sportChecks.size > 0) {
       out = out.filter((g) =>
@@ -194,8 +226,12 @@ export function MembersList({
         ),
       );
     }
+    // M1 — teams carry a membership Type now, so the bucket filter applies
+    if (bucketChecks.size > 0) {
+      out = out.filter((g) => bucketChecks.has(g.bucket));
+    }
     return out;
-  }, [typeFilter, bucketChecks, query, coachFilter, sportChecks, viewerStaffId]);
+  }, [typeFilter, bucketChecks, query, progFilter, mgmtFilter, sportChecks, viewerStaffId]);
 
   /** CM9 — bracketed tab counts that react to search + filters. */
   const counts = useMemo(() => {
@@ -321,13 +357,13 @@ export function MembersList({
         right={
           <Button variant="brand" size="sm" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
-            Add client
+            Add Member
           </Button>
         }
       />
 
       {/* Search + filters */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-end gap-2">
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -347,20 +383,41 @@ export function MembersList({
           <option value="athletes">Athletes</option>
           <option value="teams">Teams</option>
         </select>
-        <select
-          value={coachFilter}
-          onChange={(e) => setCoachFilter(e.target.value)}
-          aria-label="Filter by coach"
-          className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
-        >
-          <option value="all">All coaches</option>
-          <option value="mine">Only my clients</option>
-          {coaches.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        {/* M2 — one dropdown per coach role: Programming + Management */}
+        {(
+          [
+            {
+              label: "Programming Coach",
+              value: progFilter,
+              set: setProgFilter,
+            },
+            {
+              label: "Management Coach",
+              value: mgmtFilter,
+              set: setMgmtFilter,
+            },
+          ] as const
+        ).map(({ label, value, set }) => (
+          <label key={label} className="grid gap-0.5">
+            <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+              {label}
+            </span>
+            <select
+              value={value}
+              onChange={(e) => set(e.target.value)}
+              aria-label={`Filter by ${label.toLowerCase()}`}
+              className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
+            >
+              <option value="all">All Coaches</option>
+              <option value="mine">My Clients</option>
+              {coaches.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
         <div className="relative">
           <button
             type="button"
@@ -459,21 +516,22 @@ export function MembersList({
         <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
+              {/* M5/M6 — renamed + reordered: … Type, Program, Due, Manage, Last Comment */}
               <SortHeader label="Client" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
               <SortHeader label="Focus" active={sortKey === "focus"} dir={sortDir} onClick={() => toggleSort("focus")} />
               <SortHeader label="Age" active={sortKey === "age"} dir={sortDir} onClick={() => toggleSort("age")} />
               <SortHeader label="Sex" active={sortKey === "sex"} dir={sortDir} onClick={() => toggleSort("sex")} />
-              <SortHeader label="Programming" active={sortKey === "programming"} dir={sortDir} onClick={() => toggleSort("programming")} />
-              <SortHeader label="Management" active={sortKey === "management"} dir={sortDir} onClick={() => toggleSort("management")} />
-              <SortHeader label="Membership" active={sortKey === "membership"} dir={sortDir} onClick={() => toggleSort("membership")} />
+              <SortHeader label="Type" active={sortKey === "membership"} dir={sortDir} onClick={() => toggleSort("membership")} />
+              <SortHeader label="Program" active={sortKey === "programming"} dir={sortDir} onClick={() => toggleSort("programming")} />
               <SortHeader
-                label={tab === "active" ? "Program due" : "Follow up"}
+                label={tab === "active" ? "Due" : "Follow up"}
                 active={sortKey === "due"}
                 dir={sortDir}
                 onClick={() => toggleSort("due")}
               />
+              <SortHeader label="Manage" active={sortKey === "management"} dir={sortDir} onClick={() => toggleSort("management")} />
               <SortHeader
-                label="Last commented"
+                label="Last Comment"
                 active={sortKey === "lastNote"}
                 dir={sortDir}
                 onClick={() => toggleSort("lastNote")}
@@ -511,8 +569,12 @@ export function MembersList({
                   colSpan={10}
                   className="px-3 py-10 text-center text-sm text-muted-foreground"
                 >
-                  No {statusLabel[tab].toLowerCase()} clients
-                  {query || filterCount > 0 || coachFilter !== "all" || typeFilter !== "all"
+                  No {statusLabel[tab].toLowerCase()} members
+                  {query ||
+                  filterCount > 0 ||
+                  progFilter !== "all" ||
+                  mgmtFilter !== "all" ||
+                  typeFilter !== "all"
                     ? " match the filters."
                     : "."}
                 </td>
@@ -573,7 +635,8 @@ function SortHeader({
   );
 }
 
-/** "Last commented" cell — days since the last coach note (CM4). */
+/** "Last Comment" cell — days since the last coach note. M3: >7 days amber,
+ *  >14 days red, same urgency ramp as the due-now chip. */
 function LastNoteCell({ days }: { days: number }) {
   return (
     <td className="tnum px-3 py-2.5">
@@ -582,9 +645,17 @@ function LastNoteCell({ days }: { days: number }) {
       ) : (
         <span
           className={cn(
-            days >= STALE_DAYS && "font-semibold text-warning",
+            days > NOTE_DANGER_DAYS
+              ? "font-semibold text-destructive"
+              : days > NOTE_WARN_DAYS && "font-semibold text-warning",
           )}
-          title={days >= STALE_DAYS ? "No note in 14+ days" : undefined}
+          title={
+            days > NOTE_DANGER_DAYS
+              ? "No comment in over 14 days"
+              : days > NOTE_WARN_DAYS
+                ? "No comment in over 7 days"
+                : undefined
+          }
         >
           {days}d
         </span>
@@ -627,14 +698,11 @@ function MemberRow({
       <td className="px-3 py-2.5">{athlete.sport}</td>
       <td className="tnum px-3 py-2.5">{athlete.age}</td>
       <td className="px-3 py-2.5">{athlete.gender}</td>
-      <td className="px-3 py-2.5 text-muted-foreground">
-        {coachOf(athlete.id, "programming")}
-      </td>
-      <td className="px-3 py-2.5 text-muted-foreground">
-        {coachOf(athlete.id, "management")}
-      </td>
       <td className="px-3 py-2.5">
         <Pill tone="neutral">{bucketLabel[athlete.bucket]}</Pill>
+      </td>
+      <td className="px-3 py-2.5 text-muted-foreground">
+        {coachOf(athlete.id, "programming")}
       </td>
       <td className="px-3 py-2.5">
         {tab === "active" ? (
@@ -650,6 +718,9 @@ function MemberRow({
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
+      </td>
+      <td className="px-3 py-2.5 text-muted-foreground">
+        {coachOf(athlete.id, "management")}
       </td>
       <LastNoteCell days={daysSinceLastNote(athlete)} />
       {tab === "inactive" ? (
@@ -674,7 +745,8 @@ function MemberRow({
   );
 }
 
-/** A team-as-client row (C13) — opens the team profile. */
+/** A team-as-client row (M1) — the SAME columns as an athlete row: name shows
+ *  "Team: {name}", plus Type, Program/Manage coaches and the Due chip. */
 function TeamRow({
   group,
   onOpen,
@@ -682,6 +754,8 @@ function TeamRow({
   group: TrainingGroup;
   onOpen: () => void;
 }) {
+  const due = programDueMeta(group.programDueInDays);
+
   return (
     <tr
       onClick={onOpen}
@@ -692,10 +766,7 @@ function TeamRow({
           <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
-              {group.name}
-              <Pill tone="info" icon={<Users className="h-3 w-3" />}>
-                Team
-              </Pill>
+              Team: {group.name}
             </span>
             <span className="block text-xs text-muted-foreground">
               {group.program}
@@ -704,22 +775,23 @@ function TeamRow({
         </span>
       </td>
       <td className="px-3 py-2.5">{group.focus}</td>
-      <td className="tnum px-3 py-2.5 text-muted-foreground">
-        {group.athleteCount}
-        <span className="ml-0.5 text-xs">athletes</span>
-      </td>
       <td className="px-3 py-2.5 text-muted-foreground">—</td>
+      <td className="px-3 py-2.5 text-muted-foreground">—</td>
+      <td className="px-3 py-2.5">
+        <Pill tone="neutral">{bucketLabel[group.bucket]}</Pill>
+      </td>
       <td className="px-3 py-2.5 text-muted-foreground">
-        {group.coachNames.join(", ")}
-      </td>
-      <td className="px-3 py-2.5 text-muted-foreground">—</td>
-      <td className="px-3 py-2.5">
-        <Pill tone="info">Team</Pill>
+        {group.programmingCoach}
       </td>
       <td className="px-3 py-2.5">
-        <span className="text-xs text-muted-foreground">
-          Last session {fmtDay(group.lastSession)}
-        </span>
+        <Pill tone={due.tone} dot>
+          {group.programDueInDays <= 0
+            ? "Due NOW"
+            : `${group.programDueInDays}d`}
+        </Pill>
+      </td>
+      <td className="px-3 py-2.5 text-muted-foreground">
+        {group.managementCoach}
       </td>
       <td className="px-3 py-2.5">
         <span className="text-xs text-muted-foreground">—</span>
@@ -811,13 +883,13 @@ function AddMemberForm({
           onAdd(name.trim(), resolvedFocus, Number(yob) || new Date().getFullYear() - 16)
         }
       >
-        Add client
+        Add Member
       </Button>
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
       <span className="ml-auto text-xs text-muted-foreground">
-        New clients land in Active with the onboarding checklist ready.
+        New members land in Active, ready for onboarding.
       </span>
     </div>
   );

@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
-  ArrowUpDown,
   CheckCircle2,
   Globe,
   PencilLine,
@@ -27,13 +26,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { athletes } from "@/lib/demo/data";
 import {
   LIBRARY_TOTALS,
+  PROGRAM_CATEGORIES,
   programTemplates,
   trainingGroups,
   type ProgramTemplate,
 } from "@/lib/demo/training";
+import { cn } from "@/lib/utils";
+
+import { ManageCategoriesMenu } from "./manage-categories";
 
 const levelTone: Record<ProgramTemplate["level"], PillTone> = {
   Beginner: "info",
@@ -47,45 +58,48 @@ const LEVEL_ORDER: Record<ProgramTemplate["level"], number> = {
   Advanced: 2,
 };
 
-/** C23 — sort menu is Name / Newest / Level / Last modified (no "Weeks"). */
-type SortKey = "name" | "newest" | "level" | "modified";
+/* ---- column sorting (G3 — sortable headers like Members) ---- */
 
-const SORT_LABEL: Record<SortKey, string> = {
-  name: "Name",
-  newest: "Newest",
-  level: "Level",
-  modified: "Last modified",
-};
+type ColumnKey = "name" | "category" | "level" | "weeks" | "edited";
+
+interface ColumnSort {
+  key: ColumnKey;
+  dir: 1 | -1;
+}
 
 function lastEdited(tpl: ProgramTemplate): string {
   return tpl.lastModified ?? tpl.createdAt;
 }
 
-function sortTemplates(list: ProgramTemplate[], key: SortKey): ProgramTemplate[] {
-  const sorted = [...list];
+function compareByColumn(
+  a: ProgramTemplate,
+  b: ProgramTemplate,
+  key: ColumnKey,
+): number {
   switch (key) {
     case "name":
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
-      break;
-    case "newest":
-      sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      break;
+      return a.name.localeCompare(b.name);
+    case "category":
+      return a.category.localeCompare(b.category);
     case "level":
-      sorted.sort(
-        (a, b) =>
-          LEVEL_ORDER[b.level] - LEVEL_ORDER[a.level] ||
-          a.name.localeCompare(b.name),
-      );
-      break;
-    case "modified":
-      sorted.sort(
-        (a, b) =>
-          lastEdited(b).localeCompare(lastEdited(a)) ||
-          a.name.localeCompare(b.name),
-      );
-      break;
+      return LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level];
+    case "weeks":
+      return a.weeks - b.weeks;
+    case "edited":
+      // Ascending = most recently edited first.
+      return lastEdited(b).localeCompare(lastEdited(a));
   }
-  return sorted;
+}
+
+function sortRows(
+  rows: ProgramTemplate[],
+  sort: ColumnSort | null,
+): ProgramTemplate[] {
+  if (!sort) return rows;
+  return [...rows].sort((a, b) => {
+    const cmp = compareByColumn(a, b, sort.key) || a.name.localeCompare(b.name);
+    return cmp * sort.dir;
+  });
 }
 
 function fmtDate(iso: string): string {
@@ -113,20 +127,29 @@ const APPLY_TARGETS: ApplyTarget[] = [
 ];
 
 /**
- * Master-program library (C10/C23/C24). Every row opens the template editor
- * at its own URL; "Apply to client…" copies a master onto a client after a
- * confirm step — start fresh at Week 1, or append after their current weeks.
+ * G3 — the Program Library as a Members-style table: sortable Name /
+ * Category / Level / Weeks / Edited columns, search, and managed categories
+ * (add / rename / delete — renames update the rows using them). Every row
+ * keeps its "Apply to client…" + Edit actions and links to the template
+ * editor at its own URL.
  */
 export function ProgramLibrary() {
   const router = useRouter();
+  const [templates, setTemplates] = useState<ProgramTemplate[]>(programTemplates);
+  const [categories, setCategories] = useState<string[]>(() =>
+    Array.from(
+      new Set([...PROGRAM_CATEGORIES, ...programTemplates.map((t) => t.category)]),
+    ).sort((a, b) => a.localeCompare(b)),
+  );
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sort, setSort] = useState<ColumnSort | null>(null);
   const [creating, setCreating] = useState(false);
   const [applying, setApplying] = useState<{
     tpl: ProgramTemplate;
     target: ApplyTarget;
   } | null>(null);
   const [applied, setApplied] = useState<Record<string, string | undefined>>({});
+  const [flash, setFlash] = useState<string | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -134,18 +157,67 @@ export function ProgramLibrary() {
     return () => pending.forEach(clearTimeout);
   }, []);
 
-  const sorted = useMemo(() => {
+  function say(message: string) {
+    setFlash(message);
+    timers.current.push(setTimeout(() => setFlash(null), 2600));
+  }
+
+  const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q
-      ? programTemplates.filter(
+      ? templates.filter(
           (t) =>
             t.name.toLowerCase().includes(q) ||
+            t.category.toLowerCase().includes(q) ||
             t.tags.some((tag) => tag.toLowerCase().includes(q)) ||
             (t.labels ?? []).some((l) => l.toLowerCase().includes(q)),
         )
-      : programTemplates;
-    return sortTemplates(list, sortKey);
-  }, [query, sortKey]);
+      : templates;
+    return sortRows(list, sort);
+  }, [templates, query, sort]);
+
+  function toggleSort(key: ColumnKey) {
+    setSort((prev) =>
+      prev?.key === key
+        ? prev.dir === 1
+          ? { key, dir: -1 }
+          : null
+        : { key, dir: 1 },
+    );
+  }
+
+  /* ---- category management (G3) ---- */
+
+  function addCategory(cat: string) {
+    setCategories((prev) =>
+      prev.includes(cat)
+        ? prev
+        : [...prev, cat].sort((a, b) => a.localeCompare(b)),
+    );
+    say(`Category "${cat}" added.`);
+  }
+
+  function renameCategory(from: string, to: string) {
+    setCategories((prev) =>
+      Array.from(new Set(prev.map((c) => (c === from ? to : c)))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    );
+    setTemplates((prev) =>
+      prev.map((t) => (t.category === from ? { ...t, category: to } : t)),
+    );
+    say(`Category "${from}" renamed to "${to}" — programs updated.`);
+  }
+
+  function deleteCategory(cat: string) {
+    setCategories((prev) => prev.filter((c) => c !== cat));
+    setTemplates((prev) =>
+      prev.map((t) =>
+        t.category === cat ? { ...t, category: "Uncategorized" } : t,
+      ),
+    );
+    say(`Category "${cat}" deleted — its programs are now Uncategorized.`);
+  }
 
   function confirmApply(mode: "fresh" | "append") {
     if (!applying) return;
@@ -164,17 +236,16 @@ export function ProgramLibrary() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="mt-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           <span className="tnum font-semibold text-foreground">
             {LIBRARY_TOTALS.programs}
           </span>{" "}
-          programs in the library · showing {sorted.length} masters — click one
-          to edit it, or apply it to a client.
+          programs in the library · showing {rows.length} masters — click one to
+          edit it, or apply it to a client.
         </p>
         <span className="flex flex-wrap items-center gap-2">
-          {/* C23 — search the program library */}
           <span className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -183,25 +254,18 @@ export function ProgramLibrary() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search programs…"
               className="h-8 w-44 pl-9 text-xs"
-              aria-label="Search program library"
+              aria-label="Search Program Library"
             />
           </span>
-          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-            <SelectTrigger
-              className="h-8 w-36 text-xs"
-              aria-label="Sort program library"
-            >
-              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
-                <SelectItem key={key} value={key}>
-                  {SORT_LABEL[key]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ManageCategoriesMenu
+            categories={categories}
+            usageCount={(cat) =>
+              templates.filter((t) => t.category === cat).length
+            }
+            onAdd={addCategory}
+            onRename={renameCategory}
+            onDelete={deleteCategory}
+          />
           <Button variant="brand" size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
             New program
@@ -209,98 +273,148 @@ export function ProgramLibrary() {
         </span>
       </div>
 
+      {flash ? (
+        <p className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm font-medium text-success animate-fade-up">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {flash}
+        </p>
+      ) : null}
+
       <Card>
         <CardContent className="p-0">
-          <div className="divide-y divide-border">
-            {sorted.map((tpl) => {
-              const editHref = `/staff/programming/templates/${tpl.id}` as Route;
-              return (
-                <div
-                  key={tpl.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4 transition-colors hover:bg-accent/50"
-                >
-                  <Link href={editHref} className="min-w-0 flex-1 basis-64">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{tpl.name}</span>
-                      <PencilLine className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <Pill tone={levelTone[tpl.level]}>{tpl.level}</Pill>
-                      {/* C23 — weeks stay visible on every row */}
-                      <Pill tone="neutral" className="tnum">
-                        {tpl.weeks} wk × {tpl.daysPerWeek}{" "}
-                        {tpl.daysPerWeek === 1 ? "day" : "days"}
-                      </Pill>
-                      {tpl.remoteDays ? (
-                        <Pill tone="info" icon={<Globe className="h-3 w-3" />}>
-                          {tpl.remoteDays}× remote/wk
-                        </Pill>
-                      ) : null}
-                      {(tpl.labels ?? []).map((label) => (
-                        <Pill key={label} tone="brand">
-                          {label}
-                        </Pill>
-                      ))}
-                      {tpl.tags.map((tag) => (
-                        <Pill key={tag} tone="neutral">
-                          {tag}
-                        </Pill>
-                      ))}
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {tpl.description} — {tpl.createdBy} · Edited{" "}
-                      {fmtDate(lastEdited(tpl))}
-                    </p>
-                  </Link>
-
-                  <div className="shrink-0">
-                    {applied[tpl.id] ? (
-                      <Pill
-                        tone="success"
-                        icon={<CheckCircle2 className="h-3 w-3" />}
-                      >
-                        Applied to {applied[tpl.id]}
-                      </Pill>
-                    ) : (
-                      <Select
-                        value=""
-                        onValueChange={(targetId) => {
-                          const target = APPLY_TARGETS.find(
-                            (t) => t.id === targetId,
-                          );
-                          if (target) setApplying({ tpl, target });
-                        }}
-                      >
-                        <SelectTrigger
-                          className="h-8 w-48 text-xs"
-                          aria-label={`Apply ${tpl.name} to a client`}
-                        >
-                          <SelectValue placeholder="Apply to client…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {APPLY_TARGETS.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              <span className="flex items-center gap-1.5">
-                                {t.kind === "team" ? (
-                                  <Users className="h-3 w-3 text-muted-foreground" />
-                                ) : null}
-                                {t.name}
-                              </span>
-                            </SelectItem>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHead
+                  label="Name"
+                  columnKey="name"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Category"
+                  columnKey="category"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Level"
+                  columnKey="level"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Weeks"
+                  columnKey="weeks"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableHead
+                  label="Edited"
+                  columnKey="edited"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((tpl) => {
+                const editHref =
+                  `/staff/programming/templates/${tpl.id}` as Route;
+                return (
+                  <TableRow key={tpl.id}>
+                    <TableCell className="max-w-72">
+                      <Link href={editHref} className="group block min-w-0">
+                        <span className="flex items-center gap-1.5 font-semibold">
+                          <span className="truncate">{tpl.name}</span>
+                          <PencilLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                        </span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                          {tpl.remoteDays ? (
+                            <Pill
+                              tone="info"
+                              icon={<Globe className="h-3 w-3" />}
+                            >
+                              {tpl.remoteDays}× remote/wk
+                            </Pill>
+                          ) : null}
+                          {(tpl.labels ?? []).map((label) => (
+                            <Pill key={label} tone="brand">
+                              {label}
+                            </Pill>
                           ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {sorted.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">
-                No programs match — clear the search.
-              </p>
-            ) : null}
-          </div>
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {tpl.category}
+                    </TableCell>
+                    <TableCell>
+                      <Pill tone={levelTone[tpl.level]}>{tpl.level}</Pill>
+                    </TableCell>
+                    <TableCell className="tnum text-xs text-muted-foreground">
+                      {tpl.weeks} wk × {tpl.daysPerWeek}d
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {fmtDate(lastEdited(tpl))}
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex items-center justify-end gap-1.5">
+                        {applied[tpl.id] ? (
+                          <Pill
+                            tone="success"
+                            icon={<CheckCircle2 className="h-3 w-3" />}
+                          >
+                            Applied to {applied[tpl.id]}
+                          </Pill>
+                        ) : (
+                          <Select
+                            value=""
+                            onValueChange={(targetId) => {
+                              const target = APPLY_TARGETS.find(
+                                (t) => t.id === targetId,
+                              );
+                              if (target) setApplying({ tpl, target });
+                            }}
+                          >
+                            <SelectTrigger
+                              className="h-8 w-40 text-xs"
+                              aria-label={`Apply ${tpl.name} to a client`}
+                            >
+                              <SelectValue placeholder="Apply to client…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {APPLY_TARGETS.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>
+                                  <span className="flex items-center gap-1.5">
+                                    {t.kind === "team" ? (
+                                      <Users className="h-3 w-3 text-muted-foreground" />
+                                    ) : null}
+                                    {t.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Button asChild variant="outline" size="sm" className="h-8">
+                          <Link href={editHref}>Edit</Link>
+                        </Button>
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          {rows.length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">
+              No programs match — clear the search.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -328,6 +442,50 @@ export function ProgramLibrary() {
         />
       ) : null}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sortable header cell — aria-sort like Members (G3)                  */
+/* ------------------------------------------------------------------ */
+
+function SortableHead({
+  label,
+  columnKey,
+  sort,
+  onSort,
+  className,
+}: {
+  label: string;
+  columnKey: ColumnKey;
+  sort: ColumnSort | null;
+  onSort: (key: ColumnKey) => void;
+  className?: string;
+}) {
+  const active = sort?.key === columnKey;
+  const dir = active ? sort.dir : null;
+  return (
+    <TableHead
+      className={className}
+      aria-sort={dir === 1 ? "ascending" : dir === -1 ? "descending" : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(columnKey)}
+        title={`Sort by ${label.toLowerCase()}`}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <span aria-hidden className="text-[0.6rem] leading-none">
+          {dir === 1 ? "▲" : dir === -1 ? "▼" : (
+            <span className="opacity-40">▲▼</span>
+          )}
+        </span>
+      </button>
+    </TableHead>
   );
 }
 
@@ -489,7 +647,7 @@ function NewProgramModal({
         <CardContent className="flex flex-col gap-4 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <span className="eyebrow">Program library</span>
+              <span className="eyebrow">Program Library</span>
               <h3 className="text-lg">New program</h3>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">

@@ -1,10 +1,9 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { redirect } from "next/navigation";
-import { ArrowRight, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
-import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isAdmin, isStaff } from "@/lib/rbac";
@@ -74,9 +73,6 @@ export default async function StaffMessagingPage() {
     };
   });
 
-  const unread = threads.reduce((n, t) => n + t.unread, 0);
-  const minorThreads = threads.filter((t) => t.involvesMinor).length;
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -94,27 +90,6 @@ export default async function StaffMessagingPage() {
           ) : undefined
         }
       />
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile
-          label="Active threads"
-          value={threads.length}
-          icon={MessagesSquare}
-          accent
-        />
-        <StatTile
-          label="Unread"
-          value={unread}
-          icon={ArrowRight}
-          hint="messages awaiting a reply"
-        />
-        <StatTile
-          label="Minor threads"
-          value={minorThreads}
-          icon={ShieldCheck}
-          hint="Rule of Two monitored"
-        />
-      </div>
 
       <MessagingInbox rows={rows} admin={admin} />
     </div>

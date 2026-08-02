@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Check, Plus, UserPlus, X } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Pill } from "@/components/ui/pill";
@@ -30,10 +30,14 @@ interface Entry {
   state: BookingState;
 }
 
+/** Two-step removal: 1 = "Remove … ?", 2 = "Are you sure?" (R6 S5). */
+type RemovalStage = { id: string; step: 1 | 2 };
+
 /**
  * Round 5 (C33): coaches add + remove clients on a session directly —
- * additions land as pending until approved. Rows are streamlined to two
- * lines; only the flags that change coaching (payment, injury) survive.
+ * additions land as pending until approved. Round 6 (S5): the add control is
+ * a type-to-search picker, and removing someone takes two distinct
+ * confirmations before the booking is actually dropped.
  */
 export function RosterManager({
   initialRoster,
@@ -43,6 +47,9 @@ export function RosterManager({
   pool: RosterAthlete[];
 }) {
   const [roster, setRoster] = useState<Entry[]>(initialRoster);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [removal, setRemoval] = useState<RemovalStage | null>(null);
 
   const byId = new Map(pool.map((a) => [a.id, a]));
   const rows = roster
@@ -55,12 +62,20 @@ export function RosterManager({
     .filter((a) => !roster.some((e) => e.athleteId === a.id))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // S5: type-to-filter — empty query lists everyone still addable.
+  const matches = available.filter((a) =>
+    a.name.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
   function addAthlete(id: string) {
     setRoster((prev) => [...prev, { athleteId: id, state: "pending" }]);
+    setQuery("");
+    setSearchOpen(false);
   }
 
   function removeAthlete(id: string) {
     setRoster((prev) => prev.filter((e) => e.athleteId !== id));
+    setRemoval(null);
   }
 
   function approve(id: string) {
@@ -79,25 +94,73 @@ export function RosterManager({
         <span className="text-xs text-muted-foreground">
           {rows.length} client{rows.length === 1 ? "" : "s"}
         </span>
-        {/* Add client → lands as pending until approved */}
-        <label className="flex items-center gap-1.5">
-          <UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden />
-          <select
-            value=""
-            aria-label="Add a client to this session"
-            onChange={(e) => {
-              if (e.target.value) addAthlete(e.target.value);
-            }}
-            className="h-8 rounded-md border border-input bg-surface px-2 text-xs font-medium"
-          >
-            <option value="">Add client…</option>
-            {available.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
+
+        {/* S5: searchable add — type to filter, click a result to book */}
+        <div className="relative">
+          <label className="flex h-8 items-center gap-1.5 rounded-md border border-input bg-surface px-2 focus-within:border-brand/50">
+            <UserPlus
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => setSearchOpen(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setSearchOpen(false);
+              }}
+              placeholder="Add client — type to search"
+              aria-label="Search clients to add to this session"
+              className="w-48 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+          {searchOpen ? (
+            <div className="absolute right-0 top-9 z-20 max-h-64 w-72 overflow-auto rounded-lg border border-border bg-card p-1 shadow-raised">
+              {matches.length === 0 ? (
+                <p className="px-2.5 py-2 text-xs text-muted-foreground">
+                  {available.length === 0
+                    ? "Everyone is already on this session."
+                    : `No clients match “${query}”`}
+                </p>
+              ) : (
+                matches.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    // preventDefault keeps the input focused so blur doesn't
+                    // close the list before the click lands.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => addAthlete(a.id)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface"
+                  >
+                    <AthleteAvatar
+                      initials={a.initials}
+                      hue={a.hue}
+                      size="sm"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold">
+                        {a.name}
+                      </span>
+                      <span className="block truncate text-[0.68rem] text-muted-foreground">
+                        {a.focus} · {a.plan}
+                      </span>
+                    </span>
+                    <Plus
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                  </button>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -111,8 +174,12 @@ export function RosterManager({
               key={athlete.id}
               athlete={athlete}
               state={entry.state}
+              removalStep={removal?.id === athlete.id ? removal.step : 0}
               onApprove={() => approve(athlete.id)}
-              onRemove={() => removeAthlete(athlete.id)}
+              onRemoveStart={() => setRemoval({ id: athlete.id, step: 1 })}
+              onRemoveAdvance={() => setRemoval({ id: athlete.id, step: 2 })}
+              onRemoveConfirm={() => removeAthlete(athlete.id)}
+              onRemoveCancel={() => setRemoval(null)}
             />
           ))}
         </div>
@@ -128,13 +195,22 @@ export function RosterManager({
 function RosterRow({
   athlete,
   state,
+  removalStep,
   onApprove,
-  onRemove,
+  onRemoveStart,
+  onRemoveAdvance,
+  onRemoveConfirm,
+  onRemoveCancel,
 }: {
   athlete: RosterAthlete;
   state: BookingState;
+  /** 0 = not removing, 1 = first confirm, 2 = final confirm. */
+  removalStep: 0 | 1 | 2;
   onApprove: () => void;
-  onRemove: () => void;
+  onRemoveStart: () => void;
+  onRemoveAdvance: () => void;
+  onRemoveConfirm: () => void;
+  onRemoveCancel: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-soft">
@@ -164,38 +240,64 @@ function RosterRow({
           {athlete.plan}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {state === "pending" ? (
-          <>
-            <Pill tone="warning" dot>
-              Pending
+
+      {removalStep > 0 ? (
+        // S5: two distinct confirmations before the booking is dropped.
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <span className="max-w-[240px] text-right text-xs font-medium text-destructive">
+            {removalStep === 1
+              ? `Remove ${athlete.name} from this session?`
+              : "Are you sure? Their spot will be released."}
+          </span>
+          <button
+            type="button"
+            onClick={removalStep === 1 ? onRemoveAdvance : onRemoveConfirm}
+            className="flex h-7 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20"
+          >
+            {removalStep === 1 ? "Remove" : "Yes, remove"}
+          </button>
+          <button
+            type="button"
+            onClick={onRemoveCancel}
+            className="flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex shrink-0 items-center gap-1.5">
+          {state === "pending" ? (
+            <>
+              <Pill tone="warning" dot>
+                Pending
+              </Pill>
+              <button
+                type="button"
+                onClick={onApprove}
+                className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Approve
+              </button>
+            </>
+          ) : state === "waitlisted" ? (
+            <Pill tone="info">Waitlisted</Pill>
+          ) : (
+            <Pill tone="success" dot>
+              Confirmed
             </Pill>
-            <button
-              type="button"
-              onClick={onApprove}
-              className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
-            >
-              <Check className="h-3.5 w-3.5" />
-              Approve
-            </button>
-          </>
-        ) : state === "waitlisted" ? (
-          <Pill tone="info">Waitlisted</Pill>
-        ) : (
-          <Pill tone="success" dot>
-            Confirmed
-          </Pill>
-        )}
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${athlete.name} from this session`}
-          title="Remove from session"
-          className="rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+          )}
+          <button
+            type="button"
+            onClick={onRemoveStart}
+            aria-label={`Remove ${athlete.name} from this session`}
+            title="Remove from session"
+            className="rounded-md p-1.5 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

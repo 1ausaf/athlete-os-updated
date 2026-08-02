@@ -16,6 +16,7 @@ import {
   athleteById,
   fmtDay,
   fmtTime,
+  pastSessions,
   sessions,
   type Athlete,
 } from "@/lib/demo/data";
@@ -31,7 +32,10 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
 
-  const session = sessions.find((s) => s.id === params.sessionId);
+  // R6: past-tab rows link here too — resolve history as well as upcoming.
+  const session =
+    sessions.find((s) => s.id === params.sessionId) ??
+    pastSessions.find((s) => s.id === params.sessionId);
   if (!session) notFound();
 
   const confirmed = session.roster.filter((r) => r.state === "confirmed").length;

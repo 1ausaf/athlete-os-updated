@@ -1,11 +1,10 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Globe, Info } from "lucide-react";
+import { Globe, Info } from "lucide-react";
 
 import { ProgramBuilder } from "@/app/(staff)/staff/athletes/[athleteId]/program/program-builder";
 import { PageHeader } from "@/components/app/page-header";
-import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import {
@@ -20,6 +19,7 @@ import {
 import { isStaff } from "@/lib/rbac";
 
 import { TemplateLabels } from "./template-labels";
+import { TemplateTitle } from "./template-title";
 
 /**
  * Master-template editor (C10) — the program builder in TEMPLATE mode.
@@ -62,17 +62,38 @@ export default async function TemplateBuilderPage({
     });
   }
 
-  // C25 — real URL per template; back returns to the library tab.
-  const backHref = "/staff/programming?tab=programs" as Route;
-
   return (
     <div className="flex flex-col gap-6">
+      {/* G4 — every breadcrumb ancestor is a real link */}
+      <nav aria-label="Breadcrumb" className="eyebrow flex flex-wrap items-center gap-1.5">
+        <Link
+          href={"/staff/programming" as Route}
+          className="transition-colors hover:text-foreground"
+        >
+          Programming
+        </Link>
+        <span aria-hidden>/</span>
+        <Link
+          href={"/staff/programming?tab=programs" as Route}
+          className="transition-colors hover:text-foreground"
+        >
+          Program Library
+        </Link>
+        <span aria-hidden>/</span>
+        <span className="truncate text-foreground">{program.name}</span>
+      </nav>
+
       <PageHeader
-        eyebrow="Staff Workspace · Programming"
-        title={program.name}
+        // G6 — title is click-to-rename with the Level select beside it.
+        title={
+          <TemplateTitle
+            initialName={program.name}
+            initialLevel={tpl?.level ?? "Intermediate"}
+          />
+        }
         description={
           tpl
-            ? `${tpl.level} master · ${tpl.weeks} wk × ${tpl.daysPerWeek} d/wk — ${tpl.description}`
+            ? `${tpl.weeks} wk × ${tpl.daysPerWeek} d/wk master — ${tpl.description}`
             : `New master template · ${program.weeks.length} wk × ${program.weeks[0]?.days.length ?? 0} d/wk — name it, build it, then copy it onto athletes.`
         }
         actions={
@@ -83,12 +104,6 @@ export default async function TemplateBuilderPage({
               </Pill>
             ) : null}
             <Pill tone="brand">Master template</Pill>
-            <Button asChild variant="ghost" size="sm" className="no-print">
-              <Link href={backHref}>
-                <ArrowLeft className="h-4 w-4" />
-                Program library
-              </Link>
-            </Button>
           </>
         }
       />
