@@ -22,7 +22,7 @@ export default async function ParentProfilePage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Athlete Portal · Parent"
-        title="My profile"
+        title="My Profile"
         description="Your own contact card — separate from your kids' profiles. What you save here auto-fills each child's parent section for the coaching staff."
       />
       <div className="max-w-2xl">

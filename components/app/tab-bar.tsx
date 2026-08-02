@@ -35,7 +35,7 @@ export function TabBar<T extends string>({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 overflow-x-auto border-b border-border",
+        "flex items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
         className,
       )}
     >
@@ -73,7 +73,7 @@ export function TabLinkBar({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 overflow-x-auto border-b border-border",
+        "flex items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
         className,
       )}
     >

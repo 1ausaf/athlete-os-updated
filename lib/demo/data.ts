@@ -407,6 +407,7 @@ export const athletes: Athlete[] = [
     reminders: ["Parent requested check-in after session"],
     guardians: [
       { name: "Diane Okafor", relation: "Mother", email: "diane.okafor@example.com" },
+      { name: "Marcus Okafor", relation: "Father", email: "marcus.okafor@example.com" },
     ],
     lastActive: at(0, 7, 40),
     notes: [
@@ -466,6 +467,7 @@ export const athletes: Athlete[] = [
     reminders: [],
     guardians: [
       { name: "Diane Okafor", relation: "Mother", email: "diane.okafor@example.com" },
+      { name: "Marcus Okafor", relation: "Father", email: "marcus.okafor@example.com" },
     ],
     lastActive: at(-1, 17, 5),
     notes: [
@@ -968,7 +970,32 @@ export const parentAccounts: ParentAccount[] = [
     childAthleteIds: ["ath-maya", "ath-noah"],
     notifications: { push: true, email: true },
   },
+  {
+    // Round 7: BOTH parents can manage the same kids — Marcus sits in the
+    // same chats and gets the same notifications.
+    id: "parent-marcus",
+    name: "Marcus Okafor",
+    initials: "MO",
+    hue: 226,
+    email: "marcus.okafor@example.com",
+    phone: "+1 (416) 555-0179",
+    address: {
+      street: "12 Birchmount Rd",
+      city: "Scarborough",
+      region: "ON",
+      postal: "M1N 3J4",
+      country: "Canada",
+    },
+    relation: "Father",
+    childAthleteIds: ["ath-maya", "ath-noah"],
+    notifications: { push: true, email: true },
+  },
 ];
+
+/** Every parent managing a given child (round 7 — multi-parent support). */
+export function parentsOfAthlete(athleteId: string): ParentAccount[] {
+  return parentAccounts.filter((p) => p.childAthleteIds.includes(athleteId));
+}
 
 export function parentAccountById(id: string): ParentAccount | undefined {
   return parentAccounts.find((p) => p.id === id);
@@ -1278,6 +1305,8 @@ export const threads: Thread[] = [
       { id: "coach-ellis", name: "Coach Ellis", role: "coach" },
       { id: "ath-maya", name: "Maya Okafor", role: "athlete", isMinor: true },
       { id: "guardian-diane", name: "Diane Okafor", role: "guardian" },
+      // Round 7: both parents sit in the same chat.
+      { id: "guardian-marcus", name: "Marcus Okafor", role: "guardian" },
     ],
     unread: 2,
     updatedAt: at(0, 8, 10),

@@ -11,6 +11,7 @@ import {
   Film,
   ImageIcon,
   Italic,
+  List,
   Mic,
   Paperclip,
   Pause,
@@ -113,6 +114,23 @@ export function ChatComposer({
     setAttachments((prev) => [...prev, ...next]);
   }
 
+  /** Round 7: "- " lines render as bullets — this starts one at the cursor. */
+  function insertBullet() {
+    const el = areaRef.current;
+    if (!el) {
+      setValue((v) => (v.length === 0 || v.endsWith("\n") ? v + "- " : v + "\n- "));
+      return;
+    }
+    const s = el.selectionStart;
+    const atLineStart = s === 0 || value[s - 1] === "\n";
+    const insert = atLineStart ? "- " : "\n- ";
+    setValue((v) => v.slice(0, s) + insert + v.slice(el.selectionEnd));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(s + insert.length, s + insert.length);
+    });
+  }
+
   function toggleRecord() {
     if (!recording) {
       recordStart.current = Date.now();
@@ -205,6 +223,15 @@ export function ChatComposer({
         >
           <Italic className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          title="Bulleted list"
+          aria-label="Bulleted list"
+          onClick={insertBullet}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <List className="h-4 w-4" />
+        </button>
         {mentionNames && mentionNames.length > 0 ? (
           <span className="relative">
             <button
@@ -279,7 +306,7 @@ export function ChatComposer({
           }}
         />
         <span className="ml-auto hidden text-[0.7rem] text-muted-foreground sm:block">
-          {hint ?? "Ctrl+Enter sends"}
+          {hint ?? "Ctrl+Enter"}
         </span>
         <Button variant="brand" size="sm" onClick={send}>
           <Send className="h-3.5 w-3.5" />
@@ -324,10 +351,26 @@ function formatInline(text: string, keyBase: string): ReactNode[] {
   return parts;
 }
 
-/** Render a chat body: linkify URLs, apply bold + italic markers, keep newlines. */
+/** Render a chat body: linkify URLs, apply bold + italic markers, keep
+ *  newlines; "- " lines render as bullets (round 7). */
 export function renderChatBody(body: string): ReactNode {
-  return body.split("\n").map((line, li) => (
-    <span key={li} className="block min-h-[1em]">
+  return body.split("\n").map((rawLine, li) => {
+    const isBullet = /^\s*- /.test(rawLine);
+    const line = isBullet ? rawLine.replace(/^\s*- /, "") : rawLine;
+    return renderChatLine(line, li, isBullet);
+  });
+}
+
+function renderChatLine(line: string, li: number, isBullet: boolean): ReactNode {
+  return (
+    <span
+      key={li}
+      className={
+        isBullet
+          ? "relative block min-h-[1em] pl-4 before:absolute before:left-1 before:content-['•']"
+          : "block min-h-[1em]"
+      }
+    >
       {line.split(URL_RE).map((seg, si) =>
         /^(https?:\/\/|www\.)/.test(seg) ? (
           <a
@@ -344,7 +387,7 @@ export function renderChatBody(body: string): ReactNode {
         ),
       )}
     </span>
-  ));
+  );
 }
 
 /** A voice-note bubble with 1× / 1.5× / 2× playback (round 5, A13). */

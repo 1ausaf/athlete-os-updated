@@ -1,11 +1,14 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Dumbbell,
   History,
   Home,
   Link2,
@@ -55,12 +58,10 @@ interface SetLog {
   weight: { value: number; unit: Unit } | null;
   /** Display unit for THIS row — driven by the exercise-level lb⇄kg toggle. */
   unit: Unit;
-  /**
-   * What the athlete actually did (reps, time, distance…). This is the whole
-   * story — no separate hit/miss control. A result below target IS the miss
-   * (client: "if you record how many were done you don't need hit/miss").
-   */
+  /** What the athlete actually did (reps, time, distance…). */
   result: string;
+  /** Round 7: the ✗ beside the ✓ — "they hit, they miss". */
+  missed?: boolean;
 }
 
 interface WorkoutLoggerProps {
@@ -172,7 +173,20 @@ export function WorkoutLogger({
   prs,
   preferredUnit,
 }: WorkoutLoggerProps) {
-  const [tab, setTab] = useState<LandingTab>("published");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Round 7 (R7-3): the tab lives in the URL so views are copy-pasteable.
+  const [tab, setTab] = useState<LandingTab>(() =>
+    searchParams.get("tab") === "past" ? "past" : "published",
+  );
+
+  function selectTab(t: LandingTab) {
+    setTab(t);
+    router.replace(
+      (t === "past" ? "/athlete/training?tab=past" : "/athlete/training") as Route,
+      { scroll: false },
+    );
+  }
   /**
    * Which workout is open. Null = the landing page (tabs + PR panel). When
    * opened from the Past tab we keep the session so the header can flag
@@ -185,7 +199,6 @@ export function WorkoutLogger({
   const [logs, setLogs] = useState<Record<string, SetLog[]>>(() =>
     buildInitialLogs(days, preferredUnit),
   );
-  const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const [video, setVideo] = useState<{ lib: LibraryExercise; index: number } | null>(
     null,
   );
@@ -212,13 +225,13 @@ export function WorkoutLogger({
    * done." Circuits (warm-up movement lists) still want every movement.
    */
   const isDone = (key: string, circuitLen?: number): boolean => {
-    if (doneOverride[key] != null) return doneOverride[key];
     if (circuitLen) {
       const items = circuitDone[key] ?? [];
       return items.length >= circuitLen && items.slice(0, circuitLen).every(Boolean);
     }
     const rows = logs[key] ?? [];
-    return rows.length > 0 && rows.some((r) => r.result.trim() !== "");
+    // A missed set was still attempted — it counts as logged (round 7).
+    return rows.length > 0 && rows.some((r) => r.result.trim() !== "" || r.missed);
   };
 
   const dayProgress = (day: ProgramDay) => {
@@ -290,16 +303,27 @@ export function WorkoutLogger({
           return {
             ...row,
             result: row.result.trim() === "" ? target : "",
+            missed: false,
           };
         }),
       };
     });
   }
 
-  function toggleDone(key: string, circuitLen?: number) {
-    const next = !isDone(key, circuitLen);
-    setDoneOverride((prev) => ({ ...prev, [key]: next }));
+  /** Round 7: the ✗ — mark a set missed (tap again to clear). */
+  function toggleSetMiss(key: string, idx: number) {
     flashSaved();
+    setLogs((prev) => {
+      const rows = prev[key] ?? [];
+      return {
+        ...prev,
+        [key]: rows.map((row, i) => {
+          if (i !== idx) return row;
+          const missed = !row.missed;
+          return { ...row, missed, ...(missed ? { result: "" } : null) };
+        }),
+      };
+    });
   }
 
   /* -------------------------------------------------- Landing view */
@@ -309,15 +333,15 @@ export function WorkoutLogger({
       <>
         <TabBar<LandingTab>
           tabs={[
-            { value: "published", label: "Published workouts" },
+            { value: "published", label: "Published Workouts" },
             {
               value: "past",
-              label: "Past completed sessions",
+              label: "Past Completed Sessions",
               count: completed.length,
             },
           ]}
           active={tab}
-          onSelect={setTab}
+          onSelect={selectTab}
         />
 
         {tab === "published" ? (
@@ -337,61 +361,66 @@ export function WorkoutLogger({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              {/* Round 7: same row format as Past Completed Sessions — just
+                  "Day N — Title" + where it happens. No movement counts, no
+                  focus copy. */}
+              <ul className="flex flex-col gap-2">
                 {days.map((day, i) => {
                   const p = dayProgress(day);
+                  const complete = p.total > 0 && p.done >= p.total;
                   return (
-                    <button
+                    <li
                       key={day.id}
-                      type="button"
-                      onClick={() =>
-                        setOpen({ dayId: day.id, completedSession: null })
-                      }
-                      className="flex flex-col gap-2 rounded-xl border border-border bg-surface/50 p-4 text-left transition-colors hover:border-brand/30 hover:bg-accent/40"
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
                     >
-                      <div className="flex w-full flex-wrap items-center gap-2">
-                        <span className="tnum text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                          Day {day.dayNumber}
-                        </span>
-                        {i === 0 ? (
-                          <Pill tone="brand" dot>
-                            Up next
-                          </Pill>
-                        ) : null}
-                        <Pill
-                          tone={day.location === "gym" ? "neutral" : "info"}
-                          icon={
-                            day.location === "gym" ? (
-                              <MapPin className="h-3 w-3" />
-                            ) : (
-                              <Home className="h-3 w-3" />
-                            )
-                          }
-                          className="ml-auto"
-                        >
-                          {LOCATION_LABEL[day.location]}
-                        </Pill>
-                      </div>
-                      <span className="text-sm font-semibold leading-snug">
-                        {day.title}
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+                          complete
+                            ? "bg-success/10 text-success"
+                            : "bg-brand/10 text-brand-ink",
+                        )}
+                      >
+                        {complete ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <Dumbbell className="h-4 w-4" />
+                        )}
                       </span>
-                      <p className="line-clamp-2 text-xs text-muted-foreground">
-                        {day.focus}
-                      </p>
-                      <div className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-                        <span className="tnum">
-                          {p.total} movement{p.total === 1 ? "" : "s"}
-                        </span>
-                        {p.done > 0 ? (
-                          <span className="tnum font-semibold text-success">
-                            · {p.done}/{p.total} done
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-semibold">
+                            Day {day.dayNumber} — {day.title}
                           </span>
-                        ) : null}
+                          {i === 0 ? (
+                            <Pill tone="brand" dot>
+                              Up next
+                            </Pill>
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          {day.location === "gym" ? (
+                            <MapPin className="h-3 w-3" aria-hidden />
+                          ) : (
+                            <Home className="h-3 w-3" aria-hidden />
+                          )}
+                          {LOCATION_LABEL[day.location]}
+                        </div>
                       </div>
-                    </button>
+                      <Button
+                        type="button"
+                        variant={i === 0 ? "brand" : "outline"}
+                        size="sm"
+                        onClick={() =>
+                          setOpen({ dayId: day.id, completedSession: null })
+                        }
+                      >
+                        Start session
+                      </Button>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </CardContent>
           </Card>
         ) : (
@@ -649,17 +678,14 @@ export function WorkoutLogger({
                         onToggleCircuitItem={(idx, len) =>
                           toggleCircuitItem(exKey(activeDay.id, ex.slot), idx, len)
                         }
-                        onToggleDone={() =>
-                          toggleDone(
-                            exKey(activeDay.id, ex.slot),
-                            circuitFor(ex)?.length,
-                          )
-                        }
                         onUpdateSet={(idx, patch) =>
                           updateSet(exKey(activeDay.id, ex.slot), idx, patch)
                         }
                         onToggleCheck={(idx, target) =>
                           toggleSetCheck(exKey(activeDay.id, ex.slot), idx, target)
+                        }
+                        onToggleMiss={(idx) =>
+                          toggleSetMiss(exKey(activeDay.id, ex.slot), idx)
                         }
                         onSetUnit={(u) =>
                           setSectionUnit(exKey(activeDay.id, ex.slot), u)
@@ -695,12 +721,6 @@ export function WorkoutLogger({
                       len,
                     )
                   }
-                  onToggleDone={() =>
-                    toggleDone(
-                      exKey(activeDay.id, group.exercises[0]!.slot),
-                      circuitFor(group.exercises[0]!)?.length,
-                    )
-                  }
                   onUpdateSet={(idx, patch) =>
                     updateSet(
                       exKey(activeDay.id, group.exercises[0]!.slot),
@@ -713,6 +733,12 @@ export function WorkoutLogger({
                       exKey(activeDay.id, group.exercises[0]!.slot),
                       idx,
                       target,
+                    )
+                  }
+                  onToggleMiss={(idx) =>
+                    toggleSetMiss(
+                      exKey(activeDay.id, group.exercises[0]!.slot),
+                      idx,
                     )
                   }
                   onSetUnit={(u) =>
@@ -797,9 +823,9 @@ function ExerciseBlock({
   isLastInGroup = true,
   circuitState,
   onToggleCircuitItem,
-  onToggleDone,
   onUpdateSet,
   onToggleCheck,
+  onToggleMiss,
   onSetUnit,
   onOpenVideo,
 }: {
@@ -815,9 +841,10 @@ function ExerciseBlock({
   isLastInGroup?: boolean;
   circuitState: boolean[];
   onToggleCircuitItem: (idx: number, len: number) => void;
-  onToggleDone: () => void;
   onUpdateSet: (idx: number, patch: Partial<SetLog>) => void;
   onToggleCheck: (idx: number, target: string) => void;
+  /** Round 7: the ✗ beside the ✓ — mark the set missed. */
+  onToggleMiss: (idx: number) => void;
   /** The section-level lb⇄kg toggle (A7) — flips every set in this block. */
   onSetUnit: (u: Unit) => void;
   onOpenVideo: (lib: LibraryExercise, index: number) => void;
@@ -897,6 +924,8 @@ function ExerciseBlock({
             </p>
           ) : null}
           {usesPct && lib?.referenceMax && refEntry ? (
+            // Round 7 (R7-7): the note follows the section's lb⇄kg toggle so
+            // "this part shows the right measurements" when units flip.
             <p className="no-print mt-1 text-xs text-muted-foreground">
               Loads are % of{" "}
               <span className="font-semibold text-foreground">
@@ -904,15 +933,10 @@ function ExerciseBlock({
               </span>{" "}
               — ref max{" "}
               <span className="tnum font-semibold text-foreground">
-                {refEntry.value} {refEntry.unit}
-              </span>{" "}
-              <span className="tnum">
-                ({convertRaw(
-                  refEntry.value,
-                  refEntry.unit,
-                  refEntry.unit === "lb" ? "kg" : "lb",
-                )}{" "}
-                {refEntry.unit === "lb" ? "kg" : "lb"})
+                {refEntry.unit === sectionUnit
+                  ? refEntry.value
+                  : convertRaw(refEntry.value, refEntry.unit, sectionUnit)}{" "}
+                {sectionUnit}
               </span>
             </p>
           ) : null}
@@ -944,24 +968,8 @@ function ExerciseBlock({
               ))}
             </span>
           ) : null}
-          {/* ✓-only section toggle (A5) — no "Mark done" label */}
-          <button
-            type="button"
-            onClick={onToggleDone}
-            aria-pressed={done}
-            aria-label={
-              done ? `${name}: marked done — tap to undo` : `${name}: mark done`
-            }
-            title={done ? "Done — tap to undo" : "Mark done"}
-            className={cn(
-              "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
-              done
-                ? "border-success/40 bg-success/10 text-success"
-                : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
-            )}
-          >
-            <Check className="h-4 w-4" />
-          </button>
+          {/* Round 7: the section-level check is gone — the per-set ✓/✗
+              marks are the record, and the Done pill derives from them. */}
         </span>
       </div>
 
@@ -1026,7 +1034,7 @@ function ExerciseBlock({
         </ol>
       ) : (
       <div className="mt-3 md:mt-0">
-        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_1.75rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Set</span>
           <span className="text-center">Target</span>
           <span>
@@ -1044,11 +1052,12 @@ function ExerciseBlock({
           const row: SetLog =
             rows[i] ?? { weight: null, unit: defaultUnit, result: "" };
           const logged = row.result.trim() !== "";
+          const missed = Boolean(row.missed);
           const short = logged && belowTarget(row.result, set.target);
           return (
             <div
               key={i}
-              className="print-set-row grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_1.75rem] items-center gap-x-2 border-t border-border/60 py-1.5"
+              className="print-set-row grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 border-t border-border/60 py-1.5"
             >
               <span className="tnum text-xs font-semibold text-muted-foreground">
                 {i + 1}
@@ -1093,31 +1102,32 @@ function ExerciseBlock({
                 </span>
               )}
 
-              {/* Result cell — what was done IS the record. A number under
-                  target quietly reads amber; no separate miss button. */}
+              {/* Result cell — what was done IS the record. Under-target reads
+                  amber; a missed set reads red (round 7). */}
               <Input
                 type="text"
                 aria-label={`Set ${i + 1} result for ${name}`}
-                placeholder={set.target}
+                placeholder={missed ? "Missed" : set.target}
                 className={cn(
                   "tnum h-8 w-full min-w-0 px-1.5 text-sm",
                   short && "text-warning",
+                  missed && "border-destructive/50 placeholder:text-destructive/70",
                 )}
                 value={row.result}
                 onChange={(e) => onUpdateSet(i, { result: e.target.value })}
               />
 
-              {/* One-tap log: empty → fill the target; filled → clear */}
-              <span className="flex items-center justify-center">
+              {/* Round 7: ✓ hit + ✗ miss, side by side. */}
+              <span className="flex items-center justify-center gap-1">
                 <button
                   type="button"
                   aria-label={
                     logged
                       ? `Set ${i + 1}: clear logged result`
-                      : `Set ${i + 1}: log as written (${set.target})`
+                      : `Set ${i + 1}: hit — log as written (${set.target})`
                   }
                   aria-pressed={logged}
-                  title={logged ? "Clear this set" : "Log the set as written"}
+                  title={logged ? "Clear this set" : "Hit — log the set as written"}
                   onClick={() => onToggleCheck(i, set.target)}
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
@@ -1129,6 +1139,25 @@ function ExerciseBlock({
                   )}
                 >
                   <Check className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={
+                    missed
+                      ? `Set ${i + 1}: clear the miss`
+                      : `Set ${i + 1}: mark missed`
+                  }
+                  aria-pressed={missed}
+                  title={missed ? "Missed — tap to clear" : "Miss"}
+                  onClick={() => onToggleMiss(i)}
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
+                    missed
+                      ? "border-destructive/50 bg-destructive/10 text-destructive"
+                      : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <X className="h-3 w-3" />
                 </button>
               </span>
             </div>

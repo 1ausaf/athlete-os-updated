@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   AtSign,
+  Bell,
   Camera,
   CheckCircle2,
   HeartPulse,
@@ -56,6 +57,9 @@ export function ProfileForm({
 }) {
   const [p, setP] = useState<AthleteProfile>(initial);
   const [saved, setSaved] = useState(false);
+  // Round 7 (R7-17): notification prefs — BOTH on by default.
+  const [pushOn, setPushOn] = useState(true);
+  const [emailOn, setEmailOn] = useState(true);
 
   const set = <K extends keyof AthleteProfile>(
     key: K,
@@ -237,6 +241,39 @@ export function ProfileForm({
               section can still be flipped on the floor.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Notifications — both ON by default (round 7, R7-17) */}
+      <Card>
+        <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-muted-foreground" aria-hidden />
+            <h3 className="text-base">Notifications</h3>
+          </div>
+          {(
+            [
+              ["Push notifications", pushOn, setPushOn],
+              ["Email", emailOn, setEmailOn],
+            ] as const
+          ).map(([label, value, setValue]) => (
+            <label
+              key={label}
+              className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-surface/50 p-3"
+            >
+              <span className="text-sm font-semibold">{label}</span>
+              <input
+                type="checkbox"
+                checked={value}
+                onChange={(e) => setValue(e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]"
+              />
+            </label>
+          ))}
+          <p className="text-xs text-muted-foreground text-pretty">
+            You&apos;re notified about scheduling, training program updates,
+            invoices, messages and announcements.
+          </p>
         </CardContent>
       </Card>
 

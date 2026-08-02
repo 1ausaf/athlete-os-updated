@@ -65,7 +65,7 @@ export function AthleteNav({
   if (isParent) {
     items.push({
       href: "/athlete/parent" as Route,
-      label: "My profile",
+      label: "My Profile",
       icon: CircleUserRound,
     });
   }

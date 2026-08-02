@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
-import type { ParentAccount } from "@/lib/demo/data";
+import { parentAccounts, type ParentAccount } from "@/lib/demo/data";
 
 import { openChildProfile } from "./actions";
 
@@ -198,12 +198,13 @@ export function ParentProfileForm({
         </CardContent>
       </Card>
 
-      {/* Linked kids */}
+      {/* Round 7: "Managed Accounts" — future team-coach accounts manage
+          their roster the same way. */}
       <Card>
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-muted-foreground" aria-hidden />
-            <h3 className="text-base">Your athletes</h3>
+            <h3 className="text-base">Managed Accounts</h3>
           </div>
           <ul className="flex flex-col gap-2">
             {kids.map((kid) => (
@@ -240,6 +241,25 @@ export function ParentProfileForm({
           <p className="text-xs text-muted-foreground">
             Your contact info auto-fills each child&apos;s parent section.
           </p>
+          {/* Round 7 (R7-20): more than one parent can manage the same kids —
+              co-managers sit in the same chats and get the same notifications. */}
+          {(() => {
+            const coParents = parentAccounts.filter(
+              (p) =>
+                p.id !== account.id &&
+                p.childAthleteIds.some((id) =>
+                  account.childAthleteIds.includes(id),
+                ),
+            );
+            return coParents.length > 0 ? (
+              <p className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-surface/50 p-2.5 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5" aria-hidden />
+                Also managed by{" "}
+                {coParents.map((p) => `${p.name} (${p.relation})`).join(", ")} —
+                they see the same chats and get the same notifications.
+              </p>
+            ) : null;
+          })()}
         </CardContent>
       </Card>
 

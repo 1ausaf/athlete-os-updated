@@ -108,7 +108,7 @@ export default async function AthleteDashboardPage() {
             <TileHeader
               icon={Megaphone}
               title="Announcements"
-              href={"/athlete/messages?tab=announcements" as Route}
+              href={"/athlete/messages" as Route}
               cta="All news"
             />
             {topAnnouncements.length === 0 ? (
@@ -118,7 +118,7 @@ export default async function AthleteDashboardPage() {
                 {topAnnouncements.map((a) => (
                   <li key={a.id}>
                     <Link
-                      href={"/athlete/messages?tab=announcements" as Route}
+                      href={"/athlete/messages" as Route}
                       className="flex items-center gap-2.5 rounded-lg border border-border bg-surface/50 px-3 py-2.5 transition-colors hover:bg-accent/50"
                     >
                       <Megaphone
@@ -259,15 +259,14 @@ export default async function AthleteDashboardPage() {
               </div>
               <Progress value={progressPct} />
             </div>
+            {/* Round 7: one CTA — "view schedule is not the schedule for
+                training… it's just start session". */}
             <div className="ml-auto flex flex-wrap gap-2">
               <Button asChild variant="brand">
                 <Link href={"/athlete/training" as Route}>
-                  Start Day {nextDays[0]?.dayNumber ?? athlete.program.day}
+                  Start session
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={"/athlete/sessions" as Route}>View schedule</Link>
               </Button>
             </div>
           </div>

@@ -171,6 +171,9 @@ export interface Assessment {
   extRotation: AccessoryBlock;
   performance: { rows: PerformanceRow[]; notes: string };
   results: ResultRow[];
+  /** Round 7: areas of concern are discussed in person, not written — this
+   *  free-text "Other Notes" box replaced the results table in the UI. */
+  otherNotes: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -351,6 +354,7 @@ export function blankAssessment(athleteId: string): Assessment {
       notes: "",
     },
     results: RESULT_CATEGORIES.map((category) => ({ category, summary: "" })),
+    otherNotes: "",
   };
 }
 
@@ -414,17 +418,10 @@ function jordanAssessment(): Assessment {
   a.performance.rows[3]!.value = 1.72; // 10Y sprint
   a.performance.notes = "Elastic profile strong; sprint time will drop with cleaner knee drive.";
 
-  a.results = [
-    { category: "Flexibility", summary: "Left posterior chain + bilateral psoas — daily mobility block assigned." },
-    { category: "Klatt", summary: "Left knee valgus on single-leg landings — priority for injury prevention." },
-    { category: "Rocker", summary: "Early hip hinge strategy; retrain ankle-first descent." },
-    { category: "Wobble & SitFit", summary: "Left ankle stability lags right — add single-leg balance work." },
-    { category: "Overhead Squat", summary: "Ankle dorsiflexion is the limiter; heels-elevated work short-term." },
-    { category: "Shoulder & Posture", summary: "Left IR deficit + protracted scap — pull volume 2:1 over press." },
-    { category: "Muscle Fibre Type", summary: "Mixed (7 reps @ 85%) — train strength and reps in parallel." },
-    { category: "Strength Ratio", summary: "Scott curl ratio on target; trap-3 right/left gap to close." },
-    { category: "Performance", summary: "Jumps above age-group average; sprint mechanics the next lever." },
-  ];
+  // Round 7: areas of concern are discussed with the athlete in person —
+  // the record keeps a free-text "Other Notes" instead of the results table.
+  a.otherNotes =
+    "Retest ankle dorsiflexion in 6 weeks. Bar is drifting on heavy snatch singles — video review scheduled. Cleared for full sprint volumes.";
   return a;
 }
 
@@ -511,7 +508,7 @@ export const assessmentSummaries: AssessmentSummary[] = [
     id: "asmt-jordan-remap-2026",
     athleteId: "ath-jordan",
     type: "remapping",
-    name: "LPS Remapping™ Assessment — 2026",
+    name: "LPS Remapping™ Assessment",
     performedBy: "Coach Ellis",
     date: at(-40),
     status: "complete",
@@ -520,7 +517,7 @@ export const assessmentSummaries: AssessmentSummary[] = [
     id: "asmt-jordan-combine-2026",
     athleteId: "ath-jordan",
     type: "combine",
-    name: "Combine Testing — Spring 2026",
+    name: "Combine Testing",
     performedBy: "Coach Nadia",
     date: at(-95),
     status: "complete",
@@ -529,7 +526,7 @@ export const assessmentSummaries: AssessmentSummary[] = [
     id: "asmt-jordan-remap-2025",
     athleteId: "ath-jordan",
     type: "remapping",
-    name: "LPS Remapping™ Assessment — 2025",
+    name: "LPS Remapping™ Assessment",
     performedBy: "Coach Clance",
     date: at(-400),
     status: "complete",
@@ -538,7 +535,7 @@ export const assessmentSummaries: AssessmentSummary[] = [
     id: "asmt-maya-remap-2026",
     athleteId: "ath-maya",
     type: "remapping",
-    name: "LPS Remapping™ Assessment — 2026",
+    name: "LPS Remapping™ Assessment",
     performedBy: "Coach Ellis",
     date: at(14),
     status: "pending",

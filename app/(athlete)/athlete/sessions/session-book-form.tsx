@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -58,6 +59,15 @@ const fmtDay = (iso: string) => DAY_FMT.format(new Date(iso));
 const fmtTime = (iso: string) => TIME_FMT.format(new Date(iso));
 const fmtRange = (a: string, b: string) => `${fmtTime(a)}–${fmtTime(b)}`;
 
+/** Round 7 (R7-10): the Past Sessions range filter — 30 days is the default. */
+type PastRange = "30d" | "3m" | "1y" | "all";
+const PAST_RANGES: { key: PastRange; label: string; days: number | null }[] = [
+  { key: "30d", label: "Last 30 days", days: 30 },
+  { key: "3m", label: "Last 3 months", days: 92 },
+  { key: "1y", label: "Last year", days: 365 },
+  { key: "all", label: "All", days: null },
+];
+
 const WEEK_MS = 7 * 86_400_000;
 
 /** Monday-anchored start-of-week timestamp — the grouping key. */
@@ -106,7 +116,9 @@ const byStart = (a: MyBooking, b: MyBooking) =>
 type SessionsTab = "book" | "booked" | "past";
 
 /** Round 5 (A10): "book this pattern for the next N weeks" options. */
-const REPEAT_OPTIONS = [2, 4, 6, 8, 12] as const;
+// Round 7: "instead of these increments, it'll be two, three, four, five,
+// six, seven, eight."
+const REPEAT_OPTIONS = [2, 3, 4, 5, 6, 7, 8] as const;
 
 export function SessionBooking({
   slots,
@@ -161,6 +173,8 @@ export function SessionBooking({
   }, [slots, thisWeekKey]);
 
   /* ---- state: `bookings` is the single source of truth ---- */
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<MyBooking[]>(() =>
     [...initialBookings].sort(byStart),
   );
@@ -170,10 +184,34 @@ export function SessionBooking({
   );
   const [flash, setFlash] = useState<Flash | null>(null);
   const [rescheduling, setRescheduling] = useState<MyBooking | null>(null);
-  /** The three-tab layout: Book / Booked / Past (round 5, A9). */
-  const [tab, setTab] = useState<SessionsTab>("book");
+  /** The three-tab layout: Book / Booked / Past — URL-backed (R7-3). */
+  const [tab, setTab] = useState<SessionsTab>(() => {
+    const t = searchParams.get("tab");
+    return t === "booked" || t === "past" ? t : "book";
+  });
   /** 1 = just the ticked slots; N = repeat the pattern for N weeks (A10). */
   const [repeatWeeks, setRepeatWeeks] = useState(1);
+  /** Round 7 (R7-10): past-history range — 30 days default, like analytics. */
+  const [pastRange, setPastRange] = useState<PastRange>("30d");
+  const visiblePast = useMemo(() => {
+    const days = PAST_RANGES.find((r) => r.key === pastRange)?.days ?? null;
+    if (days == null) return pastSessions;
+    const cutoff = Date.now() - days * 86_400_000;
+    return pastSessions.filter((p) => new Date(p.startsAt).getTime() >= cutoff);
+  }, [pastSessions, pastRange]);
+
+  function selectTab(t: SessionsTab) {
+    setTab(t);
+    // Round 7 bug fix (f_017): the sticky "N selected · Book" bar floated
+    // over the other tabs — leaving Book clears the selection.
+    if (t !== "book") setSelected(new Set());
+    router.replace(
+      (t === "book"
+        ? "/athlete/sessions"
+        : `/athlete/sessions?tab=${t}`) as Route,
+      { scroll: false },
+    );
+  }
 
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const availableRef = useRef<HTMLDivElement | null>(null);
@@ -432,15 +470,15 @@ export function SessionBooking({
         </Card>
       ) : null}
 
-      {/* Three tabs: Book / Booked / Past (round 5, A9 — line style) */}
+      {/* Three tabs: Book / Booked / Past — Title Case + URL-backed (R7) */}
       <TabBar<SessionsTab>
         tabs={[
-          { value: "book", label: "Book sessions" },
+          { value: "book", label: "Book Sessions" },
           { value: "booked", label: "Booked", count: bookings.length },
-          { value: "past", label: "Past sessions", count: pastSessions.length },
+          { value: "past", label: "Past Sessions", count: pastSessions.length },
         ]}
         active={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
       />
 
       {tab === "book" ? (
@@ -552,26 +590,47 @@ export function SessionBooking({
       </section>
       ) : null}
 
-      {/* Past sessions — attendance history (round 5, A9) */}
+      {/* Past Sessions — attendance history w/ range filter (R7-10) */}
       {tab === "past" ? (
       <section className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg">Past sessions</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg">Past Sessions</h2>
+          {/* Like analytics: 30 days default, longer ranges a tap away */}
+          <div className="ml-auto flex items-center rounded-lg border border-border bg-surface p-0.5">
+            {PAST_RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                aria-pressed={pastRange === r.key}
+                onClick={() => setPastRange(r.key)}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  pastRange === r.key
+                    ? "bg-brand text-brand-foreground shadow-soft"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
         <p className="tnum text-sm text-muted-foreground">
-          {pastSessions.length}{" "}
-          {pastSessions.length === 1 ? "session" : "sessions"} ·{" "}
-          {pastSessions.filter((p) => p.attended).length} attended
-          {pastSessions.some((p) => !p.attended)
-            ? ` · ${pastSessions.filter((p) => !p.attended).length} no-show`
+          {visiblePast.length}{" "}
+          {visiblePast.length === 1 ? "session" : "sessions"} ·{" "}
+          {visiblePast.filter((p) => p.attended).length} attended
+          {visiblePast.some((p) => !p.attended)
+            ? ` · ${visiblePast.filter((p) => !p.attended).length} no-show`
             : ""}
         </p>
-        {pastSessions.length === 0 ? (
-          <Empty>No past sessions yet — your history builds here.</Empty>
+        {visiblePast.length === 0 ? (
+          <Empty>
+            Nothing in this range — try a longer one, your history builds here.
+          </Empty>
         ) : (
           <Card>
             <ul className="divide-y divide-border">
-              {pastSessions.map((p) => {
+              {visiblePast.map((p) => {
                 const d = new Date(p.startsAt);
                 return (
                   <li

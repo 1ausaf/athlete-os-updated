@@ -520,40 +520,31 @@ export function AssessmentForm({
         </CardContent>
       </Card>
 
-      <SectionBanner>Results & Areas of Concern</SectionBanner>
+      {/* Round 7: areas of concern are discussed in person — the record just
+          keeps a free-text notes box. */}
+      <SectionBanner>Other Notes</SectionBanner>
 
       <Card>
-        <CardContent className="flex flex-col gap-2.5 p-5">
-          {a.results.map((r, i) => (
-            <div
-              key={r.category}
-              className="grid gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center"
-            >
-              <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                {r.category}
-              </span>
-              {edit ? (
-                <Input
-                  value={r.summary}
-                  placeholder="Key takeaway for this category…"
-                  aria-label={`${r.category} result summary`}
-                  className="h-9 text-sm"
-                  onChange={(e) =>
-                    patch((d) => {
-                      d.results[i]!.summary = e.target.value;
-                      return d;
-                    })
-                  }
-                />
-              ) : (
-                <p className="text-sm">
-                  {r.summary || (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </p>
-              )}
-            </div>
-          ))}
+        <CardContent className="flex flex-col gap-2 p-5">
+          {edit ? (
+            <textarea
+              value={a.otherNotes}
+              rows={4}
+              placeholder="Anything else worth keeping with this assessment…"
+              aria-label="Other notes"
+              className="w-full resize-y rounded-md border border-input bg-surface px-3 py-2 text-sm outline-none focus:border-brand/50"
+              onChange={(e) =>
+                patch((d) => {
+                  d.otherNotes = e.target.value;
+                  return d;
+                })
+              }
+            />
+          ) : (
+            <p className="text-sm text-pretty">
+              {a.otherNotes || <span className="text-muted-foreground">—</span>}
+            </p>
+          )}
         </CardContent>
       </Card>
 

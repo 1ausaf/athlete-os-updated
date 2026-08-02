@@ -13,13 +13,11 @@ import {
 } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
-import { RuleOfTwoBanner } from "@/components/app/rule-of-two";
 import {
   ChatComposer,
   renderChatBody,
   VoiceNoteBubble,
 } from "@/components/app/chat-composer";
-import { TabBar } from "@/components/app/tab-bar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
@@ -51,10 +49,9 @@ function initialsFor(name: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Main tabbed portal: team chat + read-only announcements              */
+/* Round 7: no tabs — "they only have one channel", so the page goes    */
+/* straight to the chat, with the read-only news feed compact below.    */
 /* ------------------------------------------------------------------ */
-
-type MessagesTab = "chat" | "announcements";
 
 export function MessagesClient({
   athleteId,
@@ -65,7 +62,6 @@ export function MessagesClient({
   participants,
   initialMessages,
   announcements,
-  initialTab = "chat",
 }: {
   athleteId: string;
   athleteName: string;
@@ -76,34 +72,26 @@ export function MessagesClient({
   participants: ThreadParticipant[];
   initialMessages: ChatMessage[];
   announcements: Announcement[];
-  initialTab?: MessagesTab;
 }) {
-  const [tab, setTab] = useState<MessagesTab>(initialTab);
-
   return (
-    <div className="flex flex-col gap-4">
-      <TabBar<MessagesTab>
-        tabs={[
-          { value: "chat", label: "Chat" },
-          { value: "announcements", label: "Announcements" },
-        ]}
-        active={tab}
-        onSelect={setTab}
+    <div className="flex flex-col gap-6">
+      <CoachChat
+        athleteId={athleteId}
+        athleteName={athleteName}
+        isMinor={isMinor}
+        isParentView={isParentView}
+        parentName={parentName}
+        participants={participants}
+        initialMessages={initialMessages}
       />
 
-      {tab === "chat" ? (
-        <CoachChat
-          athleteId={athleteId}
-          athleteName={athleteName}
-          isMinor={isMinor}
-          isParentView={isParentView}
-          parentName={parentName}
-          participants={participants}
-          initialMessages={initialMessages}
-        />
-      ) : (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Megaphone className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <h2 className="text-base">Announcements</h2>
+        </div>
         <AnnouncementsFeed announcements={announcements} />
-      )}
+      </div>
     </div>
   );
 }
@@ -184,8 +172,8 @@ function CoachChat({
           </div>
         </div>
 
-        {/* Safe-Sport status: minors get the Rule-of-Two note, adults the
-            compact permitted state. Never the adult line for a minor. */}
+        {/* Round 7: minors keep the Rule-of-Two note; adults get NOTHING —
+            the "direct 1:1 permitted" line is gone. */}
         {isMinor ? (
           <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/[0.06] px-3 py-2.5 text-xs">
             <ShieldCheck
@@ -200,9 +188,7 @@ function CoachChat({
               chat, so it can never become a private 1:1 with a minor.
             </span>
           </div>
-        ) : (
-          <RuleOfTwoBanner participants={participants} />
-        )}
+        ) : null}
 
         {/* Conversation */}
         <div
@@ -291,34 +277,102 @@ function CoachChat({
 }
 
 /** Media card for sent/received attachments (photos, video, voice, files). */
+/**
+ * Round 7: "clicking on a video would be nice to be able to play or see a
+ * preview" — the card expands into an inline mock player.
+ */
+function VideoAttachmentCard({
+  name,
+  duration,
+}: {
+  name: string;
+  duration: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  return (
+    <span className="block max-w-full">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((o) => !o);
+          if (open) setPlaying(false);
+        }}
+        aria-expanded={open}
+        aria-label={`${open ? "Hide" : "Show"} preview of ${name}`}
+        className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-left transition-colors hover:border-brand/40"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand-ink">
+          <Film className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold">{name}</span>
+          <span className="block text-[0.68rem] text-muted-foreground">
+            Video · {duration} · {open ? "hide preview" : "tap to preview"}
+          </span>
+        </span>
+        <a
+          href={DEMO_DOWNLOAD_URI}
+          download={name}
+          aria-label={`Download ${name}`}
+          title="Download video (demo)"
+          onClick={(e) => e.stopPropagation()}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </a>
+      </button>
+
+      {open ? (
+        <span className="mt-2 block overflow-hidden rounded-xl border border-border bg-black">
+          <button
+            type="button"
+            onClick={() => setPlaying((p) => !p)}
+            aria-label={playing ? "Pause video" : "Play video"}
+            className="relative flex aspect-video w-full items-center justify-center"
+          >
+            {/* Demo player — a real deployment streams the uploaded file. */}
+            <span
+              className={cn(
+                "absolute inset-0 bg-gradient-to-br from-zinc-800 via-zinc-900 to-black",
+                playing && "animate-pulse",
+              )}
+              aria-hidden
+            />
+            <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition-transform hover:scale-105">
+              {playing ? (
+                <span className="flex gap-1" aria-hidden>
+                  <span className="h-4 w-1.5 rounded-sm bg-white" />
+                  <span className="h-4 w-1.5 rounded-sm bg-white" />
+                </span>
+              ) : (
+                <span
+                  className="ml-1 border-y-8 border-l-[14px] border-y-transparent border-l-white"
+                  aria-hidden
+                />
+              )}
+            </span>
+            <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[0.65rem] font-semibold text-white">
+              {playing ? "Playing (demo)" : duration}
+            </span>
+          </button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
   if (attachment.kind === "voice") {
     return <VoiceNoteBubble duration={attachment.duration} />;
   }
   if (attachment.kind === "video") {
     return (
-      <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-left">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand-ink">
-          <Film className="h-4 w-4" />
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-xs font-semibold">
-            {attachment.name}
-          </span>
-          <span className="block text-[0.68rem] text-muted-foreground">
-            Video · {attachment.duration}
-          </span>
-        </span>
-        <a
-          href={DEMO_DOWNLOAD_URI}
-          download={attachment.name}
-          aria-label={`Download ${attachment.name}`}
-          title="Download video (demo)"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-        >
-          <Download className="h-3.5 w-3.5" />
-        </a>
-      </span>
+      <VideoAttachmentCard
+        name={attachment.name}
+        duration={attachment.duration}
+      />
     );
   }
   if (attachment.kind === "image") {
