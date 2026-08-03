@@ -58,7 +58,8 @@ export function ParentProfileForm({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Identity + photo */}
+      {/* Identity + photo — full width; the rest splits into two columns on
+          lg like the other profile pages (round 8, P5). */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
           <div className="relative">
@@ -88,6 +89,7 @@ export function ParentProfileForm({
         </CardContent>
       </Card>
 
+      <div className="grid items-start gap-4 lg:grid-cols-2">
       {/* Contact + address */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
@@ -154,6 +156,7 @@ export function ParentProfileForm({
         </CardContent>
       </Card>
 
+      <div className="flex flex-col gap-4">
       {/* Notifications */}
       <Card>
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
@@ -262,6 +265,8 @@ export function ParentProfileForm({
           })()}
         </CardContent>
       </Card>
+      </div>
+      </div>
 
       <div className="flex items-center gap-3">
         <Button variant="brand" onClick={handleSave}>

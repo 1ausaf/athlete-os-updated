@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { TabLinkBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
 import { requireUserWithProfile } from "@/lib/auth";
-import { isStaff } from "@/lib/rbac";
+import { isAdmin, isStaff } from "@/lib/rbac";
 import { pastSessions, sessions } from "@/lib/demo/data";
 
 import { SessionsList } from "./sessions-list";
@@ -24,6 +24,7 @@ export default async function StaffSessionsPage({
 }) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
+  const admin = isAdmin(user);
 
   const view = searchParams?.view === "past" ? "past" : "upcoming";
 
@@ -38,14 +39,14 @@ export default async function StaffSessionsPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Sessions"
-        title="Sessions"
-        description="Every block on the schedule — date, time, who has it, plus the bookings and briefing behind each one."
+        eyebrow="Team Workspace · Bookings"
+        title="Bookings"
+        description="Every block on the schedule — date, time, who has it, plus the bookings and briefings behind each one."
         actions={
           <Button asChild variant="brand" size="sm">
             <Link href={"/staff/sessions/huddle-brief" as Route}>
               <Clipboard className="h-4 w-4" />
-              Open huddle brief
+              Briefings
             </Link>
           </Button>
         }
@@ -73,6 +74,7 @@ export default async function StaffSessionsPage({
         key={view}
         mode={view}
         sessions={view === "upcoming" ? upcoming : past}
+        isAdmin={admin}
       />
     </div>
   );

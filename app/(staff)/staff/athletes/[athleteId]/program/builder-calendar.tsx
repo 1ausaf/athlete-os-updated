@@ -1,7 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, Dumbbell, GripVertical, Home } from "lucide-react";
+import { useEffect, useState, type ComponentType } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  CopyPlus,
+  Dumbbell,
+  GripVertical,
+  Home,
+  Repeat2,
+} from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -44,9 +53,6 @@ export interface BuilderCalendarWeek {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/** Cells stay scannable — extra movements collapse into "+N more". */
-const MAX_MOVE_LINES = 5;
-
 const STATE_DOT: Record<CalendarPublishState, string> = {
   published: "bg-success",
   scheduled: "bg-info",
@@ -64,12 +70,24 @@ interface DragPayload {
   dayId: string;
 }
 
+/** G8 — right-click context menu anchored at the cursor. */
+interface DayMenu {
+  x: number;
+  y: number;
+  weekNumber: number;
+  dayId: string;
+  dayLabel: string;
+}
+
 export function BuilderCalendar({
   weeks,
   activeDayId,
   onSelectDay,
   onMoveDay,
   onReorderSession,
+  onCopyDay,
+  onDuplicateDay,
+  onRepeatWeek,
 }: {
   weeks: BuilderCalendarWeek[];
   activeDayId?: string;
@@ -83,11 +101,26 @@ export function BuilderCalendar({
   ) => void;
   /** G5 — move a session up/down within its own day cell. */
   onReorderSession: (weekNumber: number, dayId: string, dir: -1 | 1) => void;
+  /** G8 — right-click actions on a day chip. */
+  onCopyDay: (weekNumber: number, dayId: string) => void;
+  onDuplicateDay: (weekNumber: number, dayId: string) => void;
+  onRepeatWeek: (weekNumber: number) => void;
 }) {
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [over, setOver] = useState<{ weekNumber: number; dayNumber: number } | null>(
     null,
   );
+  const [menu, setMenu] = useState<DayMenu | null>(null);
+
+  // G8 — Escape closes the context menu (click-away is the backdrop).
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
 
   function handleDrop(toWeekNumber: number, toDayNumber: number) {
     if (drag) onMoveDay(drag.weekNumber, drag.dayId, toWeekNumber, toDayNumber);
@@ -171,11 +204,21 @@ export function BuilderCalendar({
                         sessions.map((day, sessionIdx) => {
                           const isActive = day.id === activeDayId;
                           const isDragging = drag?.dayId === day.id;
-                          const shown = day.moves.slice(0, MAX_MOVE_LINES);
-                          const extra = day.moves.length - shown.length;
                           return (
                             <div
                               key={day.id}
+                              // G8 — right-click opens the day actions menu
+                              onContextMenu={(ev) => {
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                setMenu({
+                                  x: ev.clientX,
+                                  y: ev.clientY,
+                                  weekNumber: week.weekNumber,
+                                  dayId: day.id,
+                                  dayLabel: day.label,
+                                });
+                              }}
                               className={cn(
                                 "flex min-h-[5.5rem] flex-1 items-stretch rounded-lg border transition-colors",
                                 isActive
@@ -232,10 +275,10 @@ export function BuilderCalendar({
                                 <span className="line-clamp-1 text-xs font-semibold leading-tight">
                                   {day.title}
                                 </span>
-                                {/* G5 — the whole block reads at a glance */}
-                                {shown.length > 0 ? (
+                                {/* G5/G7 — EVERY movement listed; cells grow */}
+                                {day.moves.length > 0 ? (
                                   <span className="flex flex-col">
-                                    {shown.map((m, i) => (
+                                    {day.moves.map((m, i) => (
                                       <span
                                         key={`${day.id}-m${i}`}
                                         className="truncate text-[0.65rem] leading-[1.35] text-muted-foreground"
@@ -248,11 +291,6 @@ export function BuilderCalendar({
                                         <span className="tnum">{m.sets}</span>
                                       </span>
                                     ))}
-                                    {extra > 0 ? (
-                                      <span className="text-[0.65rem] leading-[1.35] text-muted-foreground/70">
-                                        +{extra} more
-                                      </span>
-                                    ) : null}
                                   </span>
                                 ) : (
                                   <span className="text-[0.65rem] text-muted-foreground/60">
@@ -315,10 +353,96 @@ export function BuilderCalendar({
           </span>
         ))}
         <span className="ml-auto">
-          Click a day to open it · drag the handle to another cell · arrows
-          reorder sessions within a day.
+          Click a day to open it · right-click for actions · drag the handle to
+          another cell · arrows reorder sessions within a day.
         </span>
       </div>
+
+      {/* G8 — right-click context menu: click-away or Escape closes it */}
+      {menu ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close day menu"
+            onClick={() => setMenu(null)}
+            onContextMenu={(ev) => {
+              ev.preventDefault();
+              setMenu(null);
+            }}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            role="menu"
+            aria-label={`Day ${menu.dayLabel} actions`}
+            className="fixed z-50 w-56 rounded-xl border border-border bg-card p-1.5 shadow-raised"
+            style={{
+              top: Math.min(menu.y, window.innerHeight - 170),
+              left: Math.min(menu.x, window.innerWidth - 240),
+            }}
+          >
+            <p className="px-2.5 pb-1 pt-1.5 text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
+              Day {menu.dayLabel} · Wk {menu.weekNumber}
+            </p>
+            <ContextMenuItem
+              icon={Copy}
+              label="Copy day"
+              hint="To the cross-client clipboard"
+              onClick={() => {
+                onCopyDay(menu.weekNumber, menu.dayId);
+                setMenu(null);
+              }}
+            />
+            <ContextMenuItem
+              icon={CopyPlus}
+              label="Duplicate day"
+              hint="Adds a second session on this weekday"
+              onClick={() => {
+                onDuplicateDay(menu.weekNumber, menu.dayId);
+                setMenu(null);
+              }}
+            />
+            <ContextMenuItem
+              icon={Repeat2}
+              label="Repeat week forward"
+              hint={`Copies Week ${menu.weekNumber} across the later weeks`}
+              onClick={() => {
+                onRepeatWeek(menu.weekNumber);
+                setMenu(null);
+              }}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+/** One row of the right-click menu (G8). */
+function ContextMenuItem({
+  icon: Icon,
+  label,
+  hint,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  hint?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent"
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0">
+        <span className="block font-medium">{label}</span>
+        {hint ? (
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        ) : null}
+      </span>
+    </button>
   );
 }

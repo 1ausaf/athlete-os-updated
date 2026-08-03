@@ -53,15 +53,16 @@ export default async function AthleteAssessmentPage() {
                     <ClipboardCheck className="h-5 w-5" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">
+                    {/* Round 8 (M39): no type tag pill — the type lives in
+                        the meta line instead. */}
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold">
                         {s.name}
                       </span>
-                      <Pill tone={s.type === "remapping" ? "brand" : "info"}>
-                        {ASSESSMENT_TYPE_LABEL[s.type]}
-                      </Pill>
                     </span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span>{ASSESSMENT_TYPE_LABEL[s.type]}</span>
+                      <span aria-hidden>·</span>
                       <span className="inline-flex items-center gap-1">
                         <UserRound className="h-3 w-3" aria-hidden />
                         Performed by {s.performedBy}

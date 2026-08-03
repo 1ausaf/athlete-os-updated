@@ -30,8 +30,8 @@ export default async function AthleteMessagesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Member Portal · Messages"
-        title="Messages"
+        eyebrow="Member Portal · Chat"
+        title="Chat"
         description={
           athlete.isMinor
             ? "One channel to the whole coaching staff. Chats with minor athletes always keep a second adult present — the Rule of Two."

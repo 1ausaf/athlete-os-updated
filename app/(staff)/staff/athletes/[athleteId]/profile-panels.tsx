@@ -42,15 +42,15 @@ import {
   assignmentsForAthlete,
   staffMembers,
 } from "@/lib/demo/staff";
+import { nutritionProtocols } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
 /**
- * Round 6 profile panels. The status card became "Details" (P9) with
- * manageable Type/Focus dropdowns and the double-confirm Delete Member;
- * Contact & Links carries the external stack as full-width editable rows
- * (P11); Coaches became Team Management (P12); Financial gained the
- * owner-gated Manage button (P13); the Goal card became Goals & Medical
- * History (P17) and Nutrition moved into a top-bar dropdown (P4/P9).
+ * Round 6 profile panels, round-8 pass: the Type/Focus manage gears and
+ * Delete Member are admin-only (C15); Nutrition gained an in-place protocol
+ * editor (C13); Instagram is a selectable @handle and email a mailto link
+ * (C16); coaches see only the billing status pill (C18). The links editor and
+ * management card are exported for the group profile to reuse (C21).
  */
 
 const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutral"> = {
@@ -75,18 +75,21 @@ const FIELD_LABEL =
 /* persists in localStorage.                                           */
 /* ------------------------------------------------------------------ */
 
-function ManagedSelect({
+export function ManagedSelect({
   label,
   storageKey,
   defaults,
   value,
   onChange,
+  manageable = true,
 }: {
   label: string;
   storageKey: string;
   defaults: string[];
   value: string;
   onChange: (v: string) => void;
+  /** C15 — the manage gear (add/rename/delete options) is admin-only. */
+  manageable?: boolean;
 }) {
   const [options, setOptions] = useState<string[]>(defaults);
   const [loaded, setLoaded] = useState(false);
@@ -140,16 +143,18 @@ function ManagedSelect({
     <div className="flex flex-col gap-0.5">
       <span className={cn(FIELD_LABEL, "flex items-center justify-between")}>
         {label}
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={`Manage ${label} options`}
-          title={`Manage ${label} options — add, rename or delete`}
-          className="rounded p-0.5 transition-colors hover:text-foreground"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-        </button>
+        {manageable ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={`Manage ${label} options`}
+            title={`Manage ${label} options — add, rename or delete`}
+            className="rounded p-0.5 transition-colors hover:text-foreground"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </span>
       <div className="relative">
         <select
@@ -277,9 +282,12 @@ function birthdayLabel(dob: string | undefined, yearOfBirth: number): string {
 export function DetailsCard({
   athlete,
   dob,
+  admin,
 }: {
   athlete: Athlete;
   dob?: string;
+  /** C15 — manage gears + Delete Member render for admin/owner only. */
+  admin: boolean;
 }) {
   const [status, setStatus] = useState<AthleteStatus>(athlete.status);
   const [followUp, setFollowUp] = useState<string>(
@@ -377,6 +385,7 @@ export function DetailsCard({
             defaults={Object.values(bucketLabel)}
             value={bucket}
             onChange={setBucket}
+            manageable={admin}
           />
           <ManagedSelect
             label="Focus"
@@ -384,6 +393,7 @@ export function DetailsCard({
             defaults={focusDefaults}
             value={focus}
             onChange={setFocus}
+            manageable={admin}
           />
 
           <div className="flex flex-col gap-0.5">
@@ -408,22 +418,25 @@ export function DetailsCard({
           <span className="text-[0.7rem] text-muted-foreground">
             Saves locally in this demo.
           </span>
-          <button
-            type="button"
-            onClick={handleDeleteClick}
-            className={cn(
-              "text-right text-xs transition-colors",
-              armed
-                ? "font-semibold text-destructive"
-                : "text-muted-foreground/70 hover:text-destructive",
-            )}
-          >
-            {armed ? (
-              <>Really delete? This can&apos;t be undone — click again to confirm</>
-            ) : (
-              "Delete Member"
-            )}
-          </button>
+          {/* C15 — deleting a member is admin/owner only */}
+          {admin ? (
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              className={cn(
+                "text-right text-xs transition-colors",
+                armed
+                  ? "font-semibold text-destructive"
+                  : "text-muted-foreground/70 hover:text-destructive",
+              )}
+            >
+              {armed ? (
+                <>Really delete? This can&apos;t be undone — click again to confirm</>
+              ) : (
+                "Delete Member"
+              )}
+            </button>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -441,13 +454,62 @@ const NUTRITION_LABEL: Record<Athlete["nutrition"], string> = {
   pro: "Pro",
 };
 
-export function NutritionButton({ initial }: { initial: Athlete["nutrition"] }) {
+export function NutritionButton({
+  athleteId,
+  initial,
+}: {
+  athleteId: string;
+  initial: Athlete["nutrition"];
+}) {
   const [tier, setTier] = useState<Athlete["nutrition"]>(initial);
   const [open, setOpen] = useState(false);
+  // C13 — the in-place protocol editor, seeded from the member's protocol.
+  const seed = nutritionProtocols[athleteId];
+  const [editing, setEditing] = useState(false);
+  const [summary, setSummary] = useState(seed?.summary ?? "");
+  const [meals, setMeals] = useState<string[]>(() =>
+    seed
+      ? seed.exampleMeals.map((m) => `${m.meal} — ${m.example}`)
+      : [
+          "Breakfast — protein + healthy fats",
+          "Lunch — meat + vegetables",
+          "Dinner — meat + vegetables",
+        ],
+  );
+  const [supplements, setSupplements] = useState<string[]>(() =>
+    seed
+      ? seed.supplements.map((s) => `${s.name} — ${s.dose}, ${s.timing}`)
+      : ["Multivitamin — 2 caps, with meals"],
+  );
+  const [notes, setNotes] = useState(seed?.notes ?? "");
+  const [savedFlash, setSavedFlash] = useState(false);
 
   function pick(next: Athlete["nutrition"]) {
     setTier(next);
     setOpen(false);
+  }
+
+  function saveProtocol() {
+    setSavedFlash(true);
+    window.setTimeout(() => {
+      setSavedFlash(false);
+      setEditing(false);
+    }, 900);
+  }
+
+  function setLine(
+    setter: (updater: (prev: string[]) => string[]) => void,
+    i: number,
+    v: string,
+  ) {
+    setter((prev) => prev.map((line, j) => (j === i ? v : line)));
+  }
+
+  function removeLine(
+    setter: (updater: (prev: string[]) => string[]) => void,
+    i: number,
+  ) {
+    setter((prev) => prev.filter((_, j) => j !== i));
   }
 
   return (
@@ -483,6 +545,15 @@ export function NutritionButton({ initial }: { initial: Athlete["nutrition"] }) 
                 <p className="eyebrow px-2 pb-1.5">
                   Current tier · {NUTRITION_LABEL[tier]}
                 </p>
+                {/* C13 — edit what the member sees in their portal */}
+                <MenuButton
+                  onClick={() => {
+                    setEditing(true);
+                    setOpen(false);
+                  }}
+                >
+                  Edit nutrition protocol…
+                </MenuButton>
                 <MenuButton
                   onClick={() => pick(tier === "pro" ? "standard" : "pro")}
                 >
@@ -498,6 +569,149 @@ export function NutritionButton({ initial }: { initial: Athlete["nutrition"] }) 
             </p>
           </div>
         </>
+      ) : null}
+
+      {/* C13 — the protocol editor dialog */}
+      {editing ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            aria-hidden
+            onClick={() => setEditing(false)}
+          />
+          <div
+            role="dialog"
+            aria-label="Edit nutrition protocol"
+            className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-raised"
+          >
+            <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
+              <Salad className="h-5 w-5 text-muted-foreground" aria-hidden />
+              <h3 className="text-base">
+                Nutrition Protocol · {NUTRITION_LABEL[tier]}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                aria-label="Close protocol editor"
+                className="ml-auto rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4 overflow-y-auto p-5 scrollbar-slim">
+              <label className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>Protocol summary</span>
+                <Textarea
+                  rows={3}
+                  value={summary}
+                  placeholder="The one-paragraph rule this member eats by…"
+                  className="text-sm leading-relaxed"
+                  onChange={(e) => setSummary(e.target.value)}
+                />
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                <span className={FIELD_LABEL}>Meal checklist</span>
+                {meals.map((m, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <Input
+                      value={m}
+                      aria-label={`Meal line ${i + 1}`}
+                      className="h-9 flex-1 text-sm"
+                      onChange={(e) => setLine(setMeals, i, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove meal line ${i + 1}`}
+                      title="Remove line"
+                      onClick={() => removeLine(setMeals, i)}
+                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setMeals((prev) => [...prev, ""])}
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add meal line
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className={FIELD_LABEL}>Supplements</span>
+                {supplements.map((s, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <Input
+                      value={s}
+                      aria-label={`Supplement ${i + 1}`}
+                      className="h-9 flex-1 text-sm"
+                      onChange={(e) =>
+                        setLine(setSupplements, i, e.target.value)
+                      }
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove supplement ${i + 1}`}
+                      title="Remove supplement"
+                      onClick={() => removeLine(setSupplements, i)}
+                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSupplements((prev) => [...prev, ""])}
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add supplement
+                </button>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>Notes</span>
+                <Textarea
+                  rows={3}
+                  value={notes}
+                  placeholder="Weigh-in cadence, hard rules, anything the member should read…"
+                  className="text-sm leading-relaxed"
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
+              <span className="text-xs text-muted-foreground">
+                This is exactly what the member sees in their portal. Saves
+                locally in this demo.
+              </span>
+              <span className="ml-auto flex items-center gap-2">
+                {savedFlash ? (
+                  <Pill tone="success" dot>
+                    Saved
+                  </Pill>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button variant="brand" size="sm" onClick={saveProtocol}>
+                  Save protocol
+                </Button>
+              </span>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -549,15 +763,16 @@ function normalizeUrl(u: string): string {
   return v && !/^https?:\/\//.test(v) ? `https://${v}` : v;
 }
 
-export function ContactLinksCard({
-  athlete,
-  profile,
+/** The editable external-link rows — shared by the member profile's Contact &
+ *  Links card and the group profile's Links card (C21). */
+export function LinksEditor({
+  storageKey,
+  defaults = DEFAULT_LINKS,
 }: {
-  athlete: Athlete;
-  profile?: AthleteProfile;
+  storageKey: string;
+  defaults?: ProfileLink[];
 }) {
-  const storageKey = `aos-links-${athlete.id}`;
-  const [links, setLinks] = useState<ProfileLink[]>(DEFAULT_LINKS);
+  const [links, setLinks] = useState<ProfileLink[]>(defaults);
   const [loaded, setLoaded] = useState(false);
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -604,22 +819,9 @@ export function ContactLinksCard({
     setAdding(false);
   }
 
-  const guardian = profile?.guardian;
-  const emergency = profile?.emergencyContact;
-
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-5">
-        <div className="flex items-center gap-2">
-          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
-          <h3 className="text-base">Contact &amp; Links</h3>
-        </div>
-
-        {/* Links — full-width rows; Program/Assessment/Chat live in the top
-            buttons now, so only the external stack remains here. */}
-        <div>
-          <span className="eyebrow">Links</span>
-          <div className="mt-2 flex flex-col gap-1.5">
+    <div>
+      <div className="mt-2 flex flex-col gap-1.5">
             {links.map((link, i) =>
               editIdx === i ? (
                 <div
@@ -774,10 +976,39 @@ export function ContactLinksCard({
               </button>
             )}
           </div>
-          <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
-            The external stack changes — edit or add links any time. Saves
-            locally in this demo.
-          </p>
+      <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
+        The external stack changes — edit or add links any time. Saves
+        locally in this demo.
+      </p>
+    </div>
+  );
+}
+
+export function ContactLinksCard({
+  athlete,
+  profile,
+}: {
+  athlete: Athlete;
+  profile?: AthleteProfile;
+}) {
+  const guardian = profile?.guardian;
+  const emergency = profile?.emergencyContact;
+  // C16 — the app renders the @ itself; stored handles may carry one or not.
+  const igHandle = profile?.instagram?.replace(/^@/, "");
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex items-center gap-2">
+          <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Contact &amp; Links</h3>
+        </div>
+
+        {/* Links — full-width rows; Program/Assessment/Chat live in the top
+            buttons now, so only the external stack remains here. */}
+        <div>
+          <span className="eyebrow">Links</span>
+          <LinksEditor storageKey={`aos-links-${athlete.id}`} />
         </div>
 
         {/* Contact — member on the left, parent/emergency on the right */}
@@ -790,20 +1021,32 @@ export function ContactLinksCard({
               {profile ? (
                 <>
                   <p>{profile.phone}</p>
-                  <p className="break-words">{profile.email}</p>
+                  {/* C16 — email is a mailto link */}
+                  <p className="break-words">
+                    <a
+                      href={`mailto:${profile.email}`}
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      {profile.email}
+                    </a>
+                  </p>
                   <p className="text-pretty">
                     {profile.address.street}, {profile.address.city}{" "}
                     {profile.address.region} {profile.address.postal}
                   </p>
-                  {profile.instagram ? (
-                    <a
-                      href={`https://instagram.com/${profile.instagram.replace(/^@/, "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      Instagram · {profile.instagram}
-                    </a>
+                  {/* C16 — "Instagram: @handle", selectable AND a real link */}
+                  {igHandle ? (
+                    <p>
+                      Instagram:{" "}
+                      <a
+                        href={`https://instagram.com/${igHandle}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="select-all text-brand-ink underline-offset-2 hover:underline"
+                      >
+                        @{igHandle}
+                      </a>
+                    </p>
                   ) : null}
                   {profile.hudl ? (
                     <a
@@ -856,16 +1099,35 @@ export function ContactLinksCard({
 
 export function TeamManagementCard({ athlete }: { athlete: Athlete }) {
   const base = assignmentsForAthlete(athlete.id);
-  const [programming, setProgramming] = useState(
-    base.find((a) => a.role === "programming")?.staffId ?? "",
+  return (
+    <ManagementCard
+      initialProgramming={base.find((a) => a.role === "programming")?.staffId ?? ""}
+      initialManagement={base.find((a) => a.role === "management")?.staffId ?? ""}
+      initialAssistants={base
+        .filter((a) => a.role === "assistant")
+        .map((a) => a.staffId)}
+      footnote="Assignments drive who's in this member's chat thread and whose queue they appear in. Saves locally in this demo."
+    />
   );
-  const [management, setManagement] = useState(
-    base.find((a) => a.role === "management")?.staffId ?? "",
-  );
+}
+
+/** The Program / Manage / Assistants selects — shared by member and group
+ *  profiles (C21: "same Team Management section as members"). */
+export function ManagementCard({
+  initialProgramming,
+  initialManagement,
+  initialAssistants,
+  footnote,
+}: {
+  initialProgramming: string;
+  initialManagement: string;
+  initialAssistants: string[];
+  footnote: string;
+}) {
+  const [programming, setProgramming] = useState(initialProgramming);
+  const [management, setManagement] = useState(initialManagement);
   // C9: MULTIPLE assistant coaches — add appends underneath, each removable.
-  const [assistants, setAssistants] = useState<string[]>(
-    base.filter((a) => a.role === "assistant").map((a) => a.staffId),
-  );
+  const [assistants, setAssistants] = useState<string[]>(initialAssistants);
 
   const availableAssistants = staffMembers.filter(
     (s) => !assistants.includes(s.id),
@@ -955,18 +1217,15 @@ export function TeamManagementCard({ athlete }: { athlete: Athlete }) {
           </select>
         </div>
 
-        <p className="text-[0.7rem] text-muted-foreground">
-          Assignments drive who&apos;s in this member&apos;s chat thread and
-          whose queue they appear in. Saves locally in this demo.
-        </p>
+        <p className="text-[0.7rem] text-muted-foreground">{footnote}</p>
       </CardContent>
     </Card>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* P13 — Financial: owner/admin get a working Manage button; coaches   */
-/* get a "No Access Granted" flash.                                    */
+/* C18 — Financial: coaches see ONLY the billing-status pill; balances,*/
+/* invoice amounts and the Manage button are admin/owner-only.         */
 /* ------------------------------------------------------------------ */
 
 export function FinancialCard({
@@ -977,21 +1236,6 @@ export function FinancialCard({
   admin: boolean;
 }) {
   const billing = billingMeta[athlete.billing.state];
-  const [denied, setDenied] = useState(false);
-  const timer = useRef<number | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  function handleDenied() {
-    setDenied(true);
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setDenied(false), 2600);
-  }
 
   return (
     <Card>
@@ -999,49 +1243,45 @@ export function FinancialCard({
         <div className="flex items-center gap-2">
           <CreditCard className="h-5 w-5 text-muted-foreground" aria-hidden />
           <h3 className="text-base">Financial</h3>
-          <span className="ml-auto flex items-center gap-2">
-            {denied ? (
-              <Pill tone="danger" dot>
-                No Access Granted
-              </Pill>
-            ) : null}
-            {admin ? (
+          {admin ? (
+            <span className="ml-auto">
               <Button asChild variant="outline" size="sm">
                 <Link href={"/staff/billing" as Route}>Manage</Link>
               </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleDenied}>
-                Manage
-              </Button>
-            )}
-          </span>
+            </span>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-2 text-sm">
+          {/* Everyone sees the status pill — is this member in good standing? */}
           <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-3">
             <span className="font-medium">{athlete.planName}</span>
             <Pill tone={billing.tone} dot>
               {billing.label}
             </Pill>
           </div>
-          <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
-            <span>Next invoice</span>
-            <span className="tnum font-semibold text-foreground">
-              {fmtDay(athlete.billing.nextInvoice)}
-            </span>
-          </div>
-          {athlete.billing.amountDueCents > 0 ? (
-            <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
-              <span>Outstanding</span>
-              <span className="tnum font-semibold text-destructive">
-                {money2(athlete.billing.amountDueCents)}
-              </span>
-            </div>
+          {admin ? (
+            <>
+              <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+                <span>Next invoice</span>
+                <span className="tnum font-semibold text-foreground">
+                  {fmtDay(athlete.billing.nextInvoice)}
+                </span>
+              </div>
+              {athlete.billing.amountDueCents > 0 ? (
+                <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+                  <span>Outstanding</span>
+                  <span className="tnum font-semibold text-destructive">
+                    {money2(athlete.billing.amountDueCents)}
+                  </span>
+                </div>
+              ) : null}
+            </>
           ) : null}
           <p className="px-1 text-[0.7rem] text-muted-foreground">
             {admin
               ? "Manage opens Billing — mark paid / cancel live there; Square handles cards."
-              : "Billing actions are owner/admin only."}
+              : "Coaches see the billing status only — balances and actions are admin-only."}
           </p>
         </div>
       </CardContent>

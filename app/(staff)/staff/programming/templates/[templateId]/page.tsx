@@ -1,11 +1,10 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
-import { Globe, Info } from "lucide-react";
+import { Info } from "lucide-react";
 
 import { ProgramBuilder } from "@/app/(staff)/staff/athletes/[athleteId]/program/program-builder";
 import { PageHeader } from "@/components/app/page-header";
-import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import {
   athleteMaxes,
@@ -19,7 +18,7 @@ import {
 import { isStaff } from "@/lib/rbac";
 
 import { TemplateLabels } from "./template-labels";
-import { TemplateTitle } from "./template-title";
+import { TemplateDescription, TemplateTitle } from "./template-title";
 
 /**
  * Master-template editor (C10) — the program builder in TEMPLATE mode.
@@ -31,7 +30,14 @@ export default async function TemplateBuilderPage({
   searchParams,
 }: {
   params: { templateId: string };
-  searchParams?: { name?: string; weeks?: string; days?: string };
+  searchParams?: {
+    name?: string;
+    weeks?: string;
+    days?: string;
+    /** G9 — deep link into a week/day of the builder. */
+    week?: string;
+    day?: string;
+  };
 }) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
@@ -84,28 +90,11 @@ export default async function TemplateBuilderPage({
       </nav>
 
       <PageHeader
-        // G6 — title is click-to-rename with the Level select beside it.
-        title={
-          <TemplateTitle
-            initialName={program.name}
-            initialLevel={tpl?.level ?? "Intermediate"}
-          />
-        }
-        description={
-          tpl
-            ? `${tpl.weeks} wk × ${tpl.daysPerWeek} d/wk master — ${tpl.description}`
-            : `New master template · ${program.weeks.length} wk × ${program.weeks[0]?.days.length ?? 0} d/wk — name it, build it, then copy it onto athletes.`
-        }
-        actions={
-          <>
-            {tpl?.remoteDays ? (
-              <Pill tone="info" icon={<Globe className="h-3 w-3" />}>
-                {tpl.remoteDays}× remote/wk
-              </Pill>
-            ) : null}
-            <Pill tone="brand">Master template</Pill>
-          </>
-        }
+        // G6 — click-to-rename title; the level select and the remote/master
+        // chips are gone (round 8) — the labels below carry the audience.
+        title={<TemplateTitle initialName={program.name} />}
+        // R8 (G6) — description is click-to-edit with a placeholder when empty.
+        description={<TemplateDescription initial={tpl?.description ?? ""} />}
       />
 
       {/* C25 — audience labels live on the template header */}
@@ -123,6 +112,9 @@ export default async function TemplateBuilderPage({
         library={exerciseLibrary}
         maxes={athleteMaxes["ath-jordan"] ?? {}}
         mode="template"
+        // G9 — ?week=2&day=… deep links open that week/day
+        initialWeek={Number(searchParams?.week) || undefined}
+        initialDay={searchParams?.day}
       />
     </div>
   );

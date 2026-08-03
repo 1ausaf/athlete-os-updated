@@ -164,6 +164,19 @@ function groupExercises(
 
 type LandingTab = "published" | "past";
 
+/** Round 8 (M19): Completed Workouts range chips — 30 days is the default. */
+type CompletedRange = "30d" | "3m" | "1y" | "all";
+const COMPLETED_RANGES: {
+  key: CompletedRange;
+  label: string;
+  days: number | null;
+}[] = [
+  { key: "30d", label: "Last 30 Days", days: 30 },
+  { key: "3m", label: "Last 3 Months", days: 92 },
+  { key: "1y", label: "Last Year", days: 365 },
+  { key: "all", label: "All", days: null },
+];
+
 export function WorkoutLogger({
   days,
   exercises,
@@ -187,15 +200,64 @@ export function WorkoutLogger({
       { scroll: false },
     );
   }
+  /** Round 8 (M18): sessions completed locally — the Completed tab's list. */
+  const [localCompleted, setLocalCompleted] =
+    useState<CompletedSession[]>(completed);
+  /** Days completed THIS visit — they read green in Upcoming (M18). */
+  const [completedDayIds, setCompletedDayIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  /** Round 8 (M19): Completed Workouts range filter — 30 days default. */
+  const [completedRange, setCompletedRange] = useState<CompletedRange>("30d");
+  const visibleCompleted = useMemo(() => {
+    const rangeDays =
+      COMPLETED_RANGES.find((r) => r.key === completedRange)?.days ?? null;
+    if (rangeDays == null) return localCompleted;
+    const cutoff = Date.now() - rangeDays * 86_400_000;
+    return localCompleted.filter(
+      (s) => new Date(s.completedOn).getTime() >= cutoff,
+    );
+  }, [localCompleted, completedRange]);
+  /** Success flash on the landing page after Complete Session (M18). */
+  const [landingFlash, setLandingFlash] = useState<string | null>(null);
+  const landingFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Which workout is open. Null = the landing page (tabs + PR panel). When
    * opened from the Past tab we keep the session so the header can flag
    * "Editing a completed session" (A2 — fix forgotten/wrong entries).
+   * Round 8 (M12): the open workout lives in the URL (?workout=dayId).
    */
   const [open, setOpen] = useState<{
     dayId: string;
     completedSession: CompletedSession | null;
-  } | null>(null);
+  } | null>(() => {
+    const w = searchParams.get("workout");
+    if (w && days.some((d) => d.id === w)) {
+      return {
+        dayId: w,
+        completedSession: completed.find((c) => c.dayId === w) ?? null,
+      };
+    }
+    return null;
+  });
+
+  /** Round 8 (M12): opening a workout CHANGES THE URL; back clears it. */
+  function openWorkout(dayId: string, completedSession: CompletedSession | null) {
+    setOpen({ dayId, completedSession });
+    router.replace(`/athlete/training?workout=${dayId}` as Route, {
+      scroll: false,
+    });
+  }
+
+  function closeWorkout() {
+    setOpen(null);
+    router.replace(
+      (tab === "past"
+        ? "/athlete/training?tab=past"
+        : "/athlete/training") as Route,
+      { scroll: false },
+    );
+  }
   const [logs, setLogs] = useState<Record<string, SetLog[]>>(() =>
     buildInitialLogs(days, preferredUnit),
   );
@@ -255,6 +317,54 @@ export function WorkoutLogger({
     const idx = days.findIndex((d) => d.id === activeDay.id);
     return days[idx + 1] ?? null;
   }, [days, activeDay]);
+
+  function flashLanding(text: string) {
+    if (landingFlashTimer.current) clearTimeout(landingFlashTimer.current);
+    setLandingFlash(text);
+    landingFlashTimer.current = setTimeout(() => setLandingFlash(null), 8000);
+  }
+
+  /** Every set with a result (or a marked miss) + every checked circuit item. */
+  function countLoggedSets(day: ProgramDay): number {
+    let n = 0;
+    for (const section of day.sections) {
+      for (const ex of section.exercises) {
+        const key = exKey(day.id, ex.slot);
+        const circuit = circuitFor(ex);
+        if (circuit) {
+          n += (circuitDone[key] ?? []).filter(Boolean).length;
+        } else {
+          n += (logs[key] ?? []).filter(
+            (r) => r.result.trim() !== "" || r.missed,
+          ).length;
+        }
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Round 8 (M18): the bottom "Complete Session" button — moves the workout
+   * into Completed Workouts and returns to the landing tabs. Until it's
+   * pressed, the workout stays in Upcoming.
+   */
+  function completeSession() {
+    if (!activeDay) return;
+    const setsLogged = countLoggedSets(activeDay);
+    const entry: CompletedSession = {
+      dayId: activeDay.id,
+      dayNumber: activeDay.dayNumber,
+      title: activeDay.title,
+      completedOn: new Date().toISOString(),
+      summary: `${setsLogged} ${setsLogged === 1 ? "set" : "sets"}`,
+    };
+    setLocalCompleted((prev) => [entry, ...prev]);
+    setCompletedDayIds((prev) => new Set([...prev, activeDay.id]));
+    closeWorkout();
+    flashLanding(
+      `Day ${activeDay.dayNumber} — ${activeDay.title} completed — it moved to Completed Workouts.`,
+    );
+  }
 
   function updateSet(key: string, idx: number, patch: Partial<SetLog>) {
     setLogs((prev) => ({
@@ -331,13 +441,31 @@ export function WorkoutLogger({
   if (!open || !activeDay) {
     return (
       <>
+        {landingFlash ? (
+          <div
+            role="status"
+            className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/[0.08] p-3"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
+            <p className="min-w-0 flex-1 text-sm text-pretty">{landingFlash}</p>
+            <button
+              type="button"
+              onClick={() => setLandingFlash(null)}
+              className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
+
         <TabBar<LandingTab>
           tabs={[
-            { value: "published", label: "Published Workouts" },
+            { value: "published", label: "Upcoming Workouts" },
             {
               value: "past",
-              label: "Past Completed Sessions",
-              count: completed.length,
+              label: "Completed Workouts",
+              count: localCompleted.length,
             },
           ]}
           active={tab}
@@ -365,13 +493,23 @@ export function WorkoutLogger({
                   "Day N — Title" + where it happens. No movement counts, no
                   focus copy. */}
               <ul className="flex flex-col gap-2">
-                {days.map((day, i) => {
+                {days.map((day) => {
                   const p = dayProgress(day);
-                  const complete = p.total > 0 && p.done >= p.total;
+                  const completedNow = completedDayIds.has(day.id);
+                  const complete =
+                    completedNow || (p.total > 0 && p.done >= p.total);
+                  // Up next = the first day not yet completed this visit.
+                  const upNext =
+                    days.find((d) => !completedDayIds.has(d.id))?.id === day.id;
                   return (
                     <li
                       key={day.id}
-                      className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                      className={cn(
+                        "flex flex-wrap items-center gap-3 rounded-lg border p-3",
+                        complete
+                          ? "border-success/40 bg-success/[0.06]"
+                          : "border-border bg-surface/50",
+                      )}
                     >
                       <span
                         className={cn(
@@ -392,7 +530,11 @@ export function WorkoutLogger({
                           <span className="truncate text-sm font-semibold">
                             Day {day.dayNumber} — {day.title}
                           </span>
-                          {i === 0 ? (
+                          {completedNow ? (
+                            <Pill tone="success" dot>
+                              Completed
+                            </Pill>
+                          ) : upNext ? (
                             <Pill tone="brand" dot>
                               Up next
                             </Pill>
@@ -409,13 +551,29 @@ export function WorkoutLogger({
                       </div>
                       <Button
                         type="button"
-                        variant={i === 0 ? "brand" : "outline"}
+                        variant={
+                          upNext && !completedNow ? "brand" : "outline"
+                        }
                         size="sm"
                         onClick={() =>
-                          setOpen({ dayId: day.id, completedSession: null })
+                          openWorkout(
+                            day.id,
+                            completedNow
+                              ? localCompleted.find(
+                                  (c) => c.dayId === day.id,
+                                ) ?? null
+                              : null,
+                          )
                         }
                       >
-                        Start session
+                        {completedNow ? (
+                          <>
+                            <PencilLine className="h-3.5 w-3.5" aria-hidden />
+                            Edit Workout
+                          </>
+                        ) : (
+                          "Start Workout"
+                        )}
                       </Button>
                     </li>
                   );
@@ -426,26 +584,48 @@ export function WorkoutLogger({
         ) : (
           <Card>
             <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  <History className="h-5 w-5 text-brand-ink" aria-hidden />
-                  <h3 className="text-base">Past completed sessions</h3>
+              <div className="flex flex-wrap items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-brand-ink" aria-hidden />
+                    <h3 className="text-base">Completed Workouts</h3>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground text-pretty">
+                    Forgot to log a set, or entered the wrong unit? Open any
+                    completed workout and fix the entries — everything stays
+                    editable.
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground text-pretty">
-                  Forgot to log a set, or entered the wrong unit? Open any
-                  completed session and fix the entries — everything stays
-                  editable.
-                </p>
+                {/* Round 8 (M19): range chips — 30 days default */}
+                <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
+                  {COMPLETED_RANGES.map((r) => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      aria-pressed={completedRange === r.key}
+                      onClick={() => setCompletedRange(r.key)}
+                      className={cn(
+                        "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                        completedRange === r.key
+                          ? "bg-brand text-brand-foreground shadow-soft"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {completed.length === 0 ? (
+              {visibleCompleted.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
-                  No completed sessions yet — finish a published workout and it
-                  lands here.
+                  {localCompleted.length === 0
+                    ? "No completed workouts yet — finish an upcoming workout and it lands here."
+                    : "Nothing in this range — try a longer one."}
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {completed.map((s, i) => {
+                  {visibleCompleted.map((s, i) => {
                     const dayExists = days.some((d) => d.id === s.dayId);
                     return (
                       <li
@@ -468,12 +648,10 @@ export function WorkoutLogger({
                           variant="outline"
                           size="sm"
                           disabled={!dayExists}
-                          onClick={() =>
-                            setOpen({ dayId: s.dayId, completedSession: s })
-                          }
+                          onClick={() => openWorkout(s.dayId, s)}
                         >
                           <PencilLine className="h-3.5 w-3.5" aria-hidden />
-                          Open log
+                          Edit Workout
                         </Button>
                       </li>
                     );
@@ -549,7 +727,7 @@ export function WorkoutLogger({
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => setOpen(null)}
+          onClick={closeWorkout}
         >
           <ChevronLeft className="h-4 w-4" aria-hidden />
           All workouts
@@ -606,16 +784,17 @@ export function WorkoutLogger({
                 onClick={() => window.print()}
               >
                 <Printer className="h-4 w-4" />
-                Print workout
+                Print Workout
               </Button>
             </div>
           </div>
 
           <div>
+            {/* Round 8 (M13): "Workout Progress" as a percentage */}
             <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Exercises completed</span>
+              <span>Workout Progress</span>
               <span className="tnum font-semibold text-foreground">
-                {activeProgress.done} / {activeProgress.total}
+                {completionPct}%
               </span>
             </div>
             <Progress
@@ -759,28 +938,57 @@ export function WorkoutLogger({
             whole exercise done, so a stopped-after-the-max day still reads
             right. Your coach sees everything.
           </p>
+
+          {/* Round 8 (M18): Complete Session moves the workout to Completed
+              Workouts — until then it stays in Upcoming. */}
+          <div className="no-print flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground text-pretty">
+              {editingCompleted
+                ? "Edits save as you go — head back whenever you're done."
+                : "Done for the day? Completing moves this workout into Completed Workouts."}
+            </p>
+            {editingCompleted ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeWorkout}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                Back to Completed Workouts
+              </Button>
+            ) : (
+              <Button type="button" variant="brand" onClick={completeSession}>
+                <CheckCircle2 className="h-4 w-4" aria-hidden />
+                Complete Session
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Round 5 (A4): print the session sheet at ~12px so a full day fits on
-          one page. Scoped to .session-print — staff print paths untouched. */}
+      {/* Round 8 (M15): print ~2pt smaller than round 5 so a full day fits
+          comfortably; the ✓/✗ mark controls never print (their grid column
+          collapses too), while the Last/Best history + % ref-max lines DO
+          print. Scoped to .session-print — staff print paths untouched. */}
       <style>{`
         @media print {
-          .session-print { font-size: 11px; }
+          .session-print { font-size: 9px; }
           .session-print .print-tight { padding: 0.5rem !important; gap: 0.5rem !important; }
-          .session-print h3 { font-size: 12px !important; }
-          .session-print .text-lg { font-size: 12px !important; }
-          .session-print .text-base { font-size: 11px !important; }
-          .session-print .text-sm { font-size: 10.5px !important; }
-          .session-print .text-xs { font-size: 9.5px !important; }
-          .session-print .eyebrow { font-size: 8.5px !important; }
+          .session-print h3 { font-size: 10px !important; }
+          .session-print .text-lg { font-size: 10px !important; }
+          .session-print .text-base { font-size: 9px !important; }
+          .session-print .text-sm { font-size: 8.5px !important; }
+          .session-print .text-xs { font-size: 7.5px !important; }
+          .session-print .eyebrow { font-size: 6.5px !important; }
           .session-print .p-4 { padding: 0.35rem 0.5rem !important; }
           .session-print .py-2 { padding-top: 0.15rem !important; padding-bottom: 0.15rem !important; }
           .session-print .gap-3 { gap: 0.35rem !important; }
           .session-print .gap-5 { gap: 0.45rem !important; }
           .session-print .print-set-row { padding-top: 1px !important; padding-bottom: 1px !important; }
-          .session-print .print-set-row input { height: 1rem !important; font-size: 9.5px !important; }
+          .session-print .print-set-row input { height: 1rem !important; font-size: 7.5px !important; }
           .session-print .rounded-xl { border-radius: 0.4rem !important; }
+          .session-print .print-set-head,
+          .session-print .print-set-row { grid-template-columns: 1.25rem 3rem minmax(0,1.6fr) minmax(0,1fr) !important; }
         }
       `}</style>
 
@@ -874,7 +1082,9 @@ function ExerciseBlock({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{name}</span>
-            {lib?.videoUrl ? (
+            {/* Round 8 (M16): circuit blocks drop the block-level play button
+                — every movement row carries its own. */}
+            {lib?.videoUrl && !lib.circuit ? (
               <button
                 type="button"
                 onClick={() => onOpenVideo(lib, 0)}
@@ -894,11 +1104,7 @@ function ExerciseBlock({
                 PR
               </Pill>
             ) : null}
-            {done ? (
-              <Pill tone="success" icon={<Check className="h-3 w-3" />}>
-                Done
-              </Pill>
-            ) : null}
+            {/* Round 8 (M17): no "Done" pill — the green block state says it */}
           </div>
           {ex.instructions ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -906,7 +1112,8 @@ function ExerciseBlock({
             </p>
           ) : null}
           {hist ? (
-            <p className="no-print mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+            // Round 8 (M15): Last/Best PRINTS — coaches want it on paper.
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
               <History className="h-3 w-3" aria-hidden />
               <span>
                 Last ({daysAgo(hist.lastDate)}):{" "}
@@ -926,7 +1133,8 @@ function ExerciseBlock({
           {usesPct && lib?.referenceMax && refEntry ? (
             // Round 7 (R7-7): the note follows the section's lb⇄kg toggle so
             // "this part shows the right measurements" when units flip.
-            <p className="no-print mt-1 text-xs text-muted-foreground">
+            // Round 8 (M15): the % / ref-max line PRINTS too.
+            <p className="mt-1 text-xs text-muted-foreground">
               Loads are % of{" "}
               <span className="font-semibold text-foreground">
                 {lib.referenceMax}
@@ -1020,7 +1228,7 @@ function ExerciseBlock({
                   title={itemDone ? "Complete — tap to undo" : "Mark complete"}
                   onClick={() => lib?.circuit && onToggleCircuitItem(i, lib.circuit.length)}
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
+                    "no-print flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
                     itemDone
                       ? "border-success/50 bg-success/15 text-success"
                       : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
@@ -1034,7 +1242,7 @@ function ExerciseBlock({
         </ol>
       ) : (
       <div className="mt-3 md:mt-0">
-        <div className="grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="print-set-head grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
           <span>Set</span>
           <span className="text-center">Target</span>
           <span>
@@ -1046,7 +1254,7 @@ function ExerciseBlock({
             ) : null}
           </span>
           <span>{resultHeader}</span>
-          <span aria-hidden />
+          <span aria-hidden className="no-print" />
         </div>
         {ex.sets.map((set, i) => {
           const row: SetLog =
@@ -1117,8 +1325,8 @@ function ExerciseBlock({
                 onChange={(e) => onUpdateSet(i, { result: e.target.value })}
               />
 
-              {/* Round 7: ✓ hit + ✗ miss, side by side. */}
-              <span className="flex items-center justify-center gap-1">
+              {/* Round 7: ✓ hit + ✗ miss, side by side. Never printed (M15). */}
+              <span className="no-print flex items-center justify-center gap-1">
                 <button
                   type="button"
                   aria-label={

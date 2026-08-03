@@ -193,6 +193,8 @@ export const staffMembers: StaffMember[] = [
     certifications: [
       { name: "CSCS", status: "valid", expires: at(320) },
       { name: "Standard First Aid + CPR-C", status: "valid", expires: at(190) },
+      // Round 8 (S5): an expired doc so the Update/renewal flow demos.
+      { name: "NCCP Weightlifting L1", status: "expired", expires: at(-30) },
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-90) },
     notifications: { push: true, email: true },

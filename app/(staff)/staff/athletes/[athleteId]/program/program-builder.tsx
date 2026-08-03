@@ -18,6 +18,7 @@ import {
   Library,
   Link2,
   Link2Off,
+  ListChecks,
   Minus,
   Pencil,
   Plus,
@@ -28,6 +29,8 @@ import {
   Video,
   X,
 } from "lucide-react";
+import type { Route } from "next";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 
 import { VideoModal } from "@/components/app/video-modal";
@@ -430,6 +433,8 @@ export function ProgramBuilder({
   library,
   maxes,
   mode = "athlete",
+  initialWeek,
+  initialDay,
 }: {
   athleteId?: string;
   athleteName: string;
@@ -440,14 +445,30 @@ export function ProgramBuilder({
   maxes: Record<string, ReferenceMaxEntry>;
   /** "template" = editing a master template — no per-athlete publish controls. */
   mode?: "athlete" | "template";
+  /** G9 — deep link (?week=2&day=…): open this week/day on mount. */
+  initialWeek?: number;
+  initialDay?: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [weeks, setWeeks] = useState<EdWeek[]>(() => toEditable(program));
-  const [activeWeekNo, setActiveWeekNo] = useState(
-    () => program.weeks[0]?.weekNumber ?? 1,
+  // G9 — honor a ?week=/&day= deep link when it points at a real week/day.
+  const [activeWeekNo, setActiveWeekNo] = useState(() =>
+    initialWeek && program.weeks.some((w) => w.weekNumber === initialWeek)
+      ? initialWeek
+      : program.weeks[0]?.weekNumber ?? 1,
   );
-  const [activeDayId, setActiveDayId] = useState(
-    () => program.weeks[0]?.days[0]?.id ?? "",
-  );
+  const [activeDayId, setActiveDayId] = useState(() => {
+    const weekNo =
+      initialWeek && program.weeks.some((w) => w.weekNumber === initialWeek)
+        ? initialWeek
+        : program.weeks[0]?.weekNumber ?? 1;
+    const week = program.weeks.find((w) => w.weekNumber === weekNo);
+    if (initialDay && week?.days.some((d) => d.id === initialDay)) {
+      return initialDay;
+    }
+    return week?.days[0]?.id ?? "";
+  });
   const [view, setView] = useState<"builder" | "calendar">("builder");
   const [autoPub, setAutoPub] = useState<AutoPublishRule>(program.autoPublish);
   const [autoPubOpen, setAutoPubOpen] = useState(false);
@@ -507,6 +528,25 @@ export function ProgramBuilder({
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
   }, [weeks, autoPub]);
+
+  // G9 — the URL mirrors the selection (?week=2&day=…) so week/day views are
+  // shareable deep links. Other params (e.g. the New-program name/weeks/days)
+  // are preserved; router.replace keeps history clean.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (
+      params.get("week") === String(activeWeekNo) &&
+      params.get("day") === (activeDayId || null)
+    ) {
+      return;
+    }
+    params.set("week", String(activeWeekNo));
+    if (activeDayId) params.set("day", activeDayId);
+    else params.delete("day");
+    router.replace(`${pathname}?${params.toString()}` as Route, {
+      scroll: false,
+    });
+  }, [activeWeekNo, activeDayId, pathname, router]);
 
   const activeWeek =
     weeks.find((w) => w.weekNumber === activeWeekNo) ?? weeks[0];
@@ -891,13 +931,18 @@ export function ProgramBuilder({
 
   /* ---- toolbar actions ---- */
 
-  function copyDay() {
+  /** Copy a specific day (G8 — also reachable from the calendar menu). */
+  function copyDayById(weekNo: number, dayId: string) {
+    const day = weeks
+      .find((w) => w.weekNumber === weekNo)
+      ?.days.find((d) => d.id === dayId);
+    if (!day) return;
     const payload: DayClipboard = {
       v: 2,
       sourceAthleteName: athleteName,
-      dayTitle: active!.title,
-      dayNumber: active!.dayNumber,
-      sections: active!.sections,
+      dayTitle: day.title,
+      dayNumber: day.dayNumber,
+      sections: day.sections,
     };
     try {
       window.localStorage.setItem(CLIPBOARD_KEY, JSON.stringify(payload));
@@ -905,7 +950,35 @@ export function ProgramBuilder({
       // Storage blocked — the in-memory clipboard below still covers this tab.
     }
     setClipboard(payload);
-    say(`Copied Day ${active!.dayNumber} — open any client's builder and paste.`);
+    say(`Copied Day ${day.dayLabel ?? day.dayNumber} — open any client's builder and paste.`);
+  }
+
+  function copyDay() {
+    copyDayById(activeWeek!.weekNumber, active!.id);
+  }
+
+  /** G8 — clone a day in place: it becomes another session on its weekday. */
+  function duplicateDay(weekNo: number, dayId: string) {
+    const week = weeks.find((w) => w.weekNumber === weekNo);
+    const src = week?.days.find((d) => d.id === dayId);
+    if (!week || !src) return;
+    const copy: EdDay = {
+      ...src,
+      id: uid(),
+      published: false,
+      sections: cloneSections(src.sections),
+    };
+    snapshot();
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === weekNo
+          ? { ...w, days: relabelDays([...w.days, copy]) }
+          : w,
+      ),
+    );
+    say(
+      `Day ${src.dayLabel ?? src.dayNumber} duplicated — now ${src.dayNumber}A/${src.dayNumber}B on ${CAL_WEEKDAY[src.dayNumber - 1]}.`,
+    );
   }
 
   function pasteDay() {
@@ -920,8 +993,10 @@ export function ProgramBuilder({
     );
   }
 
-  function repeatWeek() {
-    const source = activeWeek!;
+  /** Repeat a week forward (G8 — also reachable from the calendar menu). */
+  function repeatWeekFrom(weekNo: number) {
+    const source = weeks.find((w) => w.weekNumber === weekNo);
+    if (!source) return;
     snapshot();
     setWeeks((prev) =>
       prev.map((w) => {
@@ -945,6 +1020,10 @@ export function ProgramBuilder({
     say(
       `Week ${source.weekNumber} copied forward across the remaining weeks — publish states untouched.`,
     );
+  }
+
+  function repeatWeek() {
+    repeatWeekFrom(activeWeek!.weekNumber);
   }
 
   /** G6 — Save to Library asks: new program or overwrite this one. */
@@ -1429,6 +1508,10 @@ export function ProgramBuilder({
             }}
             onMoveDay={moveCalendarDay}
             onReorderSession={reorderSession}
+            // G8 — right-click day actions
+            onCopyDay={copyDayById}
+            onDuplicateDay={duplicateDay}
+            onRepeatWeek={repeatWeekFrom}
           />
           {mode === "athlete" ? (
             <p className="text-xs text-muted-foreground">
@@ -2095,6 +2178,24 @@ export function ProgramBuilder({
                                   />
                                 </div>
                                 <span className="flex shrink-0 items-center no-print">
+                                  {/* R8 (G4) — circuit blocks save back to the
+                                      Circuit Library */}
+                                  {def?.circuit ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      title="Save to Circuit Library"
+                                      aria-label={`Save ${def.name} to the Circuit Library`}
+                                      onClick={() =>
+                                        say(
+                                          `"${def.name}" saved to the Circuit Library — find it under Programming → Circuit Library.`,
+                                        )
+                                      }
+                                    >
+                                      <ListChecks className="h-4 w-4" />
+                                    </Button>
+                                  ) : null}
                                   {exIdx < section.exercises.length - 1 ? (
                                     <Button
                                       variant="ghost"

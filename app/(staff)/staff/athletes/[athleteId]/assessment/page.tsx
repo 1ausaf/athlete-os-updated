@@ -116,13 +116,12 @@ export default async function StaffAssessmentPage({
             </Button>
           }
         />
-        <div className="max-w-3xl">
-          <CombinePanel
-            initialResults={record ? record.results : BLANK_COMBINE}
-            initialNotes={record ? record.notes : ""}
-            editable={!record}
-          />
-        </div>
+        {/* C14 — assessment editors run full-width like other pages */}
+        <CombinePanel
+          initialResults={record ? record.results : BLANK_COMBINE}
+          initialNotes={record ? record.notes : ""}
+          editable={!record}
+        />
       </div>
     );
   }

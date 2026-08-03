@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Route } from "next";
 
 import { PageHeader } from "@/components/app/page-header";
-import { Pill } from "@/components/ui/pill";
 import { requireAthleteContext } from "@/lib/demo/session";
 import {
   generateBookableSlots,
@@ -14,20 +13,17 @@ import {
 import { SessionBooking } from "./session-book-form";
 
 export default async function AthleteSessionsPage() {
-  const { athlete } = requireAthleteContext();
+  const { athlete, isParentView, children } = requireAthleteContext();
   const slots = generateBookableSlots(12);
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Round 8 (M21): Sessions → Bookings; the plan line moved into the
+          weekly-cadence card (M23). */}
       <PageHeader
-        eyebrow="Member Portal · Schedule"
-        title="Sessions"
+        eyebrow="Member Portal · Bookings"
+        title="Bookings"
         description="Book times across the next 12 weeks, keep an eye on what's booked, and count your past sessions — all in one place."
-        actions={
-          <Pill tone="brand" dot>
-            {athlete.planName}
-          </Pill>
-        }
       />
 
       <SessionBooking
@@ -37,8 +33,12 @@ export default async function AthleteSessionsPage() {
         frequencyPerWeek={athlete.frequencyPerWeek}
         bookedThisWeek={athlete.bookedThisWeek}
         frequencyLabel={athlete.frequency}
+        planName={athlete.planName}
         overdue={athlete.billing.state === "overdue"}
         lockedTypes={[...restrictedSessionTypesFor(athlete.id)]}
+        isParentView={isParentView}
+        bookKids={children.map((c) => ({ id: c.id, name: c.name }))}
+        activeKidId={athlete.id}
       />
 
       <p className="text-xs text-muted-foreground">

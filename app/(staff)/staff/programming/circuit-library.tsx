@@ -8,6 +8,7 @@ import {
   Minus,
   Plus,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -77,10 +78,16 @@ function sortCircuits(list: CircuitTemplate[], key: SortKey): CircuitTemplate[] 
 /**
  * G1 — the Circuit Library: named, ordered movement circuits (the dynamic
  * warm-up is the canonical example) dropped into programs as one block.
- * Search + sort like the other libraries; a row expands to the full ordered
- * list; "New circuit" builds one from name/category + movement rows.
+ * Round 8 (G4): circuits are EDITABLE — clicking one opens a single-section
+ * builder view (rename, category, movement rows, add/remove, delete with a
+ * two-step confirm). "Edited" is now "Last Modified".
  */
-export function CircuitLibrary() {
+export function CircuitLibrary({
+  canManageCategories = false,
+}: {
+  /** R8 (G2) — Level-3+ coaches, coach managers and admins only. */
+  canManageCategories?: boolean;
+}) {
   const [circuits, setCircuits] = useState<CircuitTemplate[]>(circuitLibrary);
   const [categories, setCategories] = useState<string[]>(() =>
     Array.from(new Set(circuitLibrary.map((c) => c.category))).sort((a, b) =>
@@ -89,7 +96,7 @@ export function CircuitLibrary() {
   );
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,6 +181,31 @@ export function CircuitLibrary() {
     say(`"${name}" added to the Circuit Library — saves locally in this demo.`);
   }
 
+  /* ---- circuit editing (G4) ---- */
+
+  function saveCircuit(
+    id: string,
+    patch: {
+      name: string;
+      category: string;
+      movements: { name: string; prescription: string }[];
+    },
+  ) {
+    const today = new Date().toISOString().slice(0, 10);
+    setCircuits((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...patch, lastModified: today } : c)),
+    );
+    setEditing(null);
+    say(`"${patch.name}" updated — saves locally in this demo.`);
+  }
+
+  function deleteCircuit(id: string) {
+    const name = circuits.find((c) => c.id === id)?.name ?? "Circuit";
+    setCircuits((prev) => prev.filter((c) => c.id !== id));
+    setEditing(null);
+    say(`"${name}" deleted from the Circuit Library.`);
+  }
+
   return (
     <div className="mt-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -182,7 +214,7 @@ export function CircuitLibrary() {
             {circuits.length}
           </span>{" "}
           circuits — reusable ordered blocks (warm-ups, finishers, arm care)
-          dropped into programs as one piece.
+          dropped into programs as one piece. Click one to edit it.
         </p>
         <span className="flex flex-wrap items-center gap-2">
           <span className="relative">
@@ -212,15 +244,18 @@ export function CircuitLibrary() {
               ))}
             </SelectContent>
           </Select>
-          <ManageCategoriesMenu
-            categories={categories}
-            usageCount={(cat) =>
-              circuits.filter((c) => c.category === cat).length
-            }
-            onAdd={addCategory}
-            onRename={renameCategory}
-            onDelete={deleteCategory}
-          />
+          {/* R8 (G2) — category management is Level-3+ / manager / admin only */}
+          {canManageCategories ? (
+            <ManageCategoriesMenu
+              categories={categories}
+              usageCount={(cat) =>
+                circuits.filter((c) => c.category === cat).length
+              }
+              onAdd={addCategory}
+              onRename={renameCategory}
+              onDelete={deleteCategory}
+            />
+          ) : null}
           <Button variant="brand" size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
             New circuit
@@ -244,12 +279,13 @@ export function CircuitLibrary() {
                 <TableHead>Category</TableHead>
                 <TableHead>Movements</TableHead>
                 <TableHead>Created by</TableHead>
-                <TableHead>Edited</TableHead>
+                {/* R8 (G4) — "Edited" renamed */}
+                <TableHead>Last Modified</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((c) => {
-                const isOpen = expanded === c.id;
+                const isOpen = editing === c.id;
                 const preview = c.movements
                   .slice(0, 3)
                   .map((m) => m.name)
@@ -258,8 +294,13 @@ export function CircuitLibrary() {
                 return (
                   <Fragment key={c.id}>
                     <TableRow
-                      onClick={() => setExpanded(isOpen ? null : c.id)}
+                      onClick={() => setEditing(isOpen ? null : c.id)}
                       aria-expanded={isOpen}
+                      title={
+                        isOpen
+                          ? `Close ${c.name}`
+                          : `Edit ${c.name} — opens the circuit like a program section`
+                      }
                       className={cn(
                         "cursor-pointer",
                         isOpen && "bg-accent/50 hover:bg-accent/50",
@@ -297,23 +338,15 @@ export function CircuitLibrary() {
                     </TableRow>
                     {isOpen ? (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={5} className="bg-surface/40 py-3">
-                          <ol className="flex flex-col gap-1">
-                            {c.movements.map((m, i) => (
-                              <li
-                                key={`${m.name}-${i}`}
-                                className="flex items-baseline gap-2.5 text-sm"
-                              >
-                                <span className="tnum w-5 shrink-0 text-right text-xs font-bold text-muted-foreground">
-                                  {i + 1}
-                                </span>
-                                <span className="font-medium">{m.name}</span>
-                                <span className="tnum text-xs text-muted-foreground">
-                                  {m.prescription}
-                                </span>
-                              </li>
-                            ))}
-                          </ol>
+                        <TableCell colSpan={5} className="bg-surface/40 p-3">
+                          {/* G4 — edit the circuit like one program section */}
+                          <CircuitSectionEditor
+                            circuit={c}
+                            categories={categories}
+                            onCancel={() => setEditing(null)}
+                            onSave={(patch) => saveCircuit(c.id, patch)}
+                            onDelete={() => deleteCircuit(c.id)}
+                          />
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -342,13 +375,203 @@ export function CircuitLibrary() {
 }
 
 /* ------------------------------------------------------------------ */
-/* New-circuit modal — name/category + ordered movement rows           */
+/* Circuit editor (G4) — a single program-section view: the coach only */
+/* sees THIS circuit. Rename, category, ordered movement rows with     */
+/* add/remove, Save, and a two-step Delete.                            */
 /* ------------------------------------------------------------------ */
 
 interface DraftMovement {
   name: string;
   prescription: string;
 }
+
+function CircuitSectionEditor({
+  circuit,
+  categories,
+  onCancel,
+  onSave,
+  onDelete,
+}: {
+  circuit: CircuitTemplate;
+  categories: string[];
+  onCancel: () => void;
+  onSave: (patch: {
+    name: string;
+    category: string;
+    movements: DraftMovement[];
+  }) => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(circuit.name);
+  const [category, setCategory] = useState(circuit.category);
+  const [movements, setMovements] = useState<DraftMovement[]>(() =>
+    circuit.movements.map((m) => ({ ...m })),
+  );
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const filled = movements.filter((m) => m.name.trim());
+  const canSave = name.trim().length > 0 && filled.length > 0;
+
+  function patchMovement(idx: number, patch: Partial<DraftMovement>) {
+    setMovements((prev) =>
+      prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-col gap-2.5"
+      onClick={(e) => e.stopPropagation()}
+      role="group"
+      aria-label={`Edit circuit ${circuit.name}`}
+    >
+      {/* Section header — the same dot + uppercase title as the builder */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full bg-brand" />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-label="Circuit name"
+          title="Click to rename this circuit"
+          className="min-w-40 rounded-md border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wider text-foreground transition-colors hover:border-border focus-visible:border-border focus-visible:outline-none"
+        />
+        <span className="flex items-center gap-1.5">
+          <Label className="text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+            Category
+          </Label>
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger
+              className="h-7 w-36 text-xs"
+              aria-label="Circuit category"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from(new Set([...categories, category])).map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </span>
+      </div>
+
+      {/* Ordered movement rows — name + prescription, like a section */}
+      <Card>
+        <CardContent className="flex flex-col gap-1.5 p-3">
+          {movements.map((m, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[1.25rem_1fr_7rem_1.75rem] items-center gap-1.5"
+            >
+              <span className="tnum text-right text-xs font-bold text-muted-foreground">
+                {i + 1}
+              </span>
+              <Input
+                value={m.name}
+                onChange={(e) => patchMovement(i, { name: e.target.value })}
+                placeholder="Movement name"
+                aria-label={`Movement ${i + 1} name`}
+                className="h-8 text-xs"
+              />
+              <Input
+                value={m.prescription}
+                onChange={(e) =>
+                  patchMovement(i, { prescription: e.target.value })
+                }
+                placeholder="e.g. 2×10"
+                aria-label={`Movement ${i + 1} prescription`}
+                className="tnum h-8 text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                aria-label={`Remove movement row ${i + 1}`}
+                disabled={movements.length <= 1}
+                onClick={() =>
+                  setMovements((prev) => prev.filter((_, x) => x !== i))
+                }
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-1 self-start"
+            onClick={() =>
+              setMovements((prev) => [...prev, { name: "", prescription: "" }])
+            }
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add movement
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* G4 — delete is two-step, like every destructive action */}
+        {confirmDelete ? (
+          <span className="flex items-center gap-1.5">
+            <Button variant="destructive" size="sm" onClick={onDelete}>
+              Confirm delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Keep it
+            </Button>
+          </span>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            title="Delete this circuit — asks to confirm"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete circuit
+          </Button>
+        )}
+        <span className="ml-auto flex items-center gap-2">
+          <span className="text-[0.65rem] text-muted-foreground">
+            Saves locally in this demo.
+          </span>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="brand"
+            size="sm"
+            disabled={!canSave}
+            onClick={() =>
+              onSave({
+                name: name.trim(),
+                category,
+                movements: filled.map((m) => ({
+                  name: m.name.trim(),
+                  prescription: m.prescription.trim() || "—",
+                })),
+              })
+            }
+          >
+            Save circuit
+          </Button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* New-circuit modal — name/category + ordered movement rows           */
+/* ------------------------------------------------------------------ */
 
 function NewCircuitModal({
   categories,

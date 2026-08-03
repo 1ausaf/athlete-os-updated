@@ -3,27 +3,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Mail,
   MailOpen,
-  Megaphone,
   MoreVertical,
   Pin,
   PinOff,
   Search,
-  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 
-import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { TabBar } from "@/components/app/tab-bar";
 import { Input } from "@/components/ui/input";
-import { Pill, type PillTone } from "@/components/ui/pill";
+import { Pill } from "@/components/ui/pill";
 import {
-  relTime,
-  type Thread,
-  type ThreadParticipant,
-} from "@/lib/demo/data";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { relTime, type Thread } from "@/lib/demo/data";
+import { cn } from "@/lib/utils";
 
 /** Serializable inbox row prepared server-side (assignments + admin flag). */
 export interface InboxThread {
@@ -34,12 +40,12 @@ export interface InboxThread {
   involved: boolean;
   /** Follows the thread without being assigned (hardcoded demo set). */
   subscribed: boolean;
-  /** WHY the viewer is in the thread — assignment role, Admin, or View only. */
-  reason: { label: string; tone: PillTone } | null;
+  /** R8 (H4) — the viewer's relationship to the member ("—" when null). */
+  roleLabel: string | null;
 }
 
 type InboxFilter = "involved" | "subscribed" | "everything";
-type SortMode = "activity" | "unread" | "read";
+type SortKey = "name" | "role" | "activity" | "unread";
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: "involved", label: "Involved" },
@@ -51,26 +57,17 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
 const PIN_STORAGE_KEY = "lps-staff-messaging-pins";
 const MAX_PINS = 5;
 
-function hueFor(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
-  return h;
+/** H2 — rows carry just the member/group name (broadcasts use the subject). */
+function displayName(row: InboxThread): string {
+  return row.athleteName ?? row.thread.subject;
 }
 
-function initialsFor(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0]![0]}${parts[1]![0]}`.toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-function isCompliant(t: Thread): boolean {
-  if (!t.involvesMinor) return true;
-  const guardian = t.participants.some((p) => p.role === "guardian");
-  const secondCoach =
-    t.participants.filter((p) => p.role === "coach").length >= 2;
-  return guardian || secondCoach;
-}
-
+/**
+ * R8 (H4): the inbox reads like the Members table now — sortable Name /
+ * Role / Last Activity / Unread columns, no avatars (H2), no Rule-of-Two
+ * pills (H3 — the admin auto-adds parents). Search, pins and the ⋮ menu
+ * survive from earlier rounds.
+ */
 export function MessagingInbox({
   rows,
   admin,
@@ -78,12 +75,15 @@ export function MessagingInbox({
   rows: InboxThread[];
   admin: boolean;
 }) {
+  const router = useRouter();
   // Admins land on Everything (oversight); coaches land on their own threads.
   const [filter, setFilter] = useState<InboxFilter>(
     admin ? "everything" : "involved",
   );
   const [query, setQuery] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("activity");
+  // H4 — column sorting; Last Activity (newest first) is the default.
+  const [sortKey, setSortKey] = useState<SortKey>("activity");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   // X1 — local read/unread overrides (id → forced state) + pinned ids.
   const [readOverride, setReadOverride] = useState<
     Record<string, "read" | "unread">
@@ -161,6 +161,16 @@ export function MessagingInbox({
     setPinned([...pinned, id]);
   }
 
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Text columns start ascending; activity + unread start "most first".
+      setSortDir(key === "name" || key === "role" ? "asc" : "desc");
+    }
+  }
+
   const counts = useMemo(
     () => ({
       involved: rows.filter((r) => r.involved).length,
@@ -186,13 +196,30 @@ export function MessagingInbox({
       return haystack.includes(q);
     });
 
-    const byActivity = (a: InboxThread, b: InboxThread) =>
-      b.thread.updatedAt > a.thread.updatedAt ? 1 : -1;
     const unreadCount = (r: InboxThread) => {
       const o = readOverride[r.thread.id];
       if (o === "read") return 0;
       if (o === "unread") return Math.max(1, r.thread.unread);
       return r.thread.unread;
+    };
+
+    const compare = (a: InboxThread, b: InboxThread): number => {
+      let cmp = 0;
+      if (sortKey === "name") {
+        cmp = displayName(a).localeCompare(displayName(b));
+      } else if (sortKey === "role") {
+        cmp = (a.roleLabel ?? "—").localeCompare(b.roleLabel ?? "—");
+      } else if (sortKey === "unread") {
+        cmp = unreadCount(a) - unreadCount(b);
+      } else {
+        cmp = a.thread.updatedAt.localeCompare(b.thread.updatedAt);
+      }
+      if (cmp === 0) {
+        // Stable fallback: newest activity first.
+        cmp = -a.thread.updatedAt.localeCompare(b.thread.updatedAt);
+        return cmp;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
     };
 
     matches.sort((a, b) => {
@@ -204,22 +231,14 @@ export function MessagingInbox({
         if (pb === -1) return -1;
         return pa - pb;
       }
-      // X4 — read/unread grouping, newest-first within each group.
-      if (sortMode === "unread") {
-        const d = Number(unreadCount(b) > 0) - Number(unreadCount(a) > 0);
-        if (d !== 0) return d;
-      } else if (sortMode === "read") {
-        const d = Number(unreadCount(a) > 0) - Number(unreadCount(b) > 0);
-        if (d !== 0) return d;
-      }
-      return byActivity(a, b);
+      return compare(a, b);
     });
     return matches;
-  }, [rows, filter, query, sortMode, pinned, readOverride]);
+  }, [rows, filter, query, sortKey, sortDir, pinned, readOverride]);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter tabs (shared line style, CM2) + chat search + sort (X4) */}
+      {/* Filter tabs (shared line style, CM2) + chat search */}
       <TabBar
         tabs={FILTERS.map(({ key, label }) => ({
           value: key,
@@ -240,53 +259,90 @@ export function MessagingInbox({
             className="pl-8"
           />
         </div>
-        <select
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as SortMode)}
-          aria-label="Sort chats"
-          className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
-        >
-          <option value="activity">Last activity</option>
-          <option value="unread">Unread first</option>
-          <option value="read">Read first</option>
-        </select>
       </div>
 
       {!admin ? (
         <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Threads are created automatically when you&rsquo;re assigned to a
-          client — coaches can&rsquo;t start private chats (Safe-Sport).
+          Chats are created automatically when you&rsquo;re assigned to a
+          member — coaches can&rsquo;t start private chats (Safe-Sport).
         </p>
       ) : null}
 
-      {/* Thread list */}
-      <div className="flex flex-col gap-3">
-        {visible.map((row) => (
-          <ThreadRow
-            key={row.thread.id}
-            row={row}
-            unread={unreadOf(row)}
-            isPinned={pinned.includes(row.thread.id)}
-            menuOpen={menuFor === row.thread.id}
-            onToggleMenu={() =>
-              setMenuFor((cur) =>
-                cur === row.thread.id ? null : row.thread.id,
-              )
-            }
-            onMarkRead={(read) => markRead(row.thread.id, read)}
-            onTogglePin={() => togglePin(row.thread.id)}
-          />
-        ))}
-        {visible.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            {filter === "involved" && counts.involved === 0
-              ? "No assigned threads yet — a thread opens automatically when you're assigned to a client."
-              : filter === "subscribed" && counts.subscribed === 0
-                ? "You're not subscribed to any extra threads."
-                : "No threads match."}
-          </div>
-        ) : null}
+      {/* H4 — the chats table */}
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-soft">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <SortableHead
+                label="Name"
+                sortKey="name"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
+                label="Role"
+                sortKey="role"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
+                label="Last Activity"
+                sortKey="activity"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
+                label="Unread"
+                sortKey="unread"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <TableHead className="w-10 text-right">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.map((row) => (
+              <InboxRow
+                key={row.thread.id}
+                row={row}
+                unread={unreadOf(row)}
+                isPinned={pinned.includes(row.thread.id)}
+                menuOpen={menuFor === row.thread.id}
+                onOpen={() =>
+                  router.push(`/staff/messaging/${row.thread.id}` as Route)
+                }
+                onToggleMenu={() =>
+                  setMenuFor((cur) =>
+                    cur === row.thread.id ? null : row.thread.id,
+                  )
+                }
+                onMarkRead={(read) => markRead(row.thread.id, read)}
+                onTogglePin={() => togglePin(row.thread.id)}
+              />
+            ))}
+            {visible.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="p-8 text-center text-sm text-muted-foreground"
+                >
+                  {filter === "involved" && counts.involved === 0
+                    ? "No assigned chats yet — a chat opens automatically when you're assigned to a member."
+                    : filter === "subscribed" && counts.subscribed === 0
+                      ? "You're not subscribed to any extra chats."
+                      : "No chats match."}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
       </div>
 
       {/* Click-away layer for the row menus (sits below the open menu). */}
@@ -312,11 +368,51 @@ export function MessagingInbox({
   );
 }
 
-function ThreadRow({
+function SortableHead({
+  label,
+  sortKey,
+  current,
+  dir,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey;
+  dir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+}) {
+  const active = current === sortKey;
+  const Icon = !active ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <Icon
+          className={cn(
+            "h-3 w-3",
+            active ? "text-brand-ink" : "text-muted-foreground/60",
+          )}
+          aria-hidden
+        />
+      </button>
+    </TableHead>
+  );
+}
+
+function InboxRow({
   row,
   unread,
   isPinned,
   menuOpen,
+  onOpen,
   onToggleMenu,
   onMarkRead,
   onTogglePin,
@@ -325,82 +421,74 @@ function ThreadRow({
   unread: number;
   isPinned: boolean;
   menuOpen: boolean;
+  onOpen: () => void;
   onToggleMenu: () => void;
   onMarkRead: (read: boolean) => void;
   onTogglePin: () => void;
 }) {
-  const { thread, reason } = row;
-  const compliant = isCompliant(thread);
+  const { thread } = row;
   const lastMessage = thread.messages[thread.messages.length - 1];
-  const isBroadcast = thread.kind === "broadcast";
 
   return (
-    <Link
-      href={`/staff/messaging/${thread.id}` as Route}
-      className="block rounded-xl border border-border bg-card shadow-soft transition-colors hover:border-brand/40"
+    <TableRow
+      onClick={onOpen}
+      className="cursor-pointer transition-colors hover:bg-surface/60"
     >
-      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-        <ParticipantStack participants={thread.participants} />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate font-semibold">{thread.subject}</span>
-            {isPinned ? (
-              <Pin
-                className="h-3.5 w-3.5 shrink-0 text-brand-ink"
-                aria-label="Pinned chat"
-              />
-            ) : null}
-            {unread > 0 ? (
-              <Pill tone="brand" dot>
-                {unread} new
-              </Pill>
-            ) : null}
-          </div>
-          <p className="mt-0.5 line-clamp-1 text-sm text-muted-foreground">
-            {lastMessage
-              ? `${lastMessage.senderName}: ${lastMessage.body}`
-              : "No messages yet"}
-          </p>
+      {/* H2 — just the name (plus pin + unread badge), no avatars/icons */}
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/staff/messaging/${thread.id}` as Route}
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "truncate font-semibold hover:underline",
+              unread > 0 && "text-foreground",
+            )}
+          >
+            {displayName(row)}
+          </Link>
+          {isPinned ? (
+            <Pin
+              className="h-3.5 w-3.5 shrink-0 text-brand-ink"
+              aria-label="Pinned chat"
+            />
+          ) : null}
+          {unread > 0 ? (
+            <Pill tone="brand" dot>
+              {unread} new
+            </Pill>
+          ) : null}
         </div>
+        <p className="mt-0.5 line-clamp-1 max-w-md text-xs text-muted-foreground">
+          {lastMessage
+            ? `${lastMessage.senderName}: ${lastMessage.body}`
+            : "No messages yet"}
+        </p>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+        {row.roleLabel ?? "—"}
+      </TableCell>
+      <TableCell className="tnum whitespace-nowrap text-sm text-muted-foreground">
+        {relTime(thread.updatedAt)}
+      </TableCell>
+      <TableCell className="tnum text-sm">
+        {unread > 0 ? (
+          <span className="font-semibold text-brand-ink">{unread}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
 
-        <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-end">
-          <span className="text-xs text-muted-foreground">
-            {relTime(thread.updatedAt)}
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {reason ? <Pill tone={reason.tone}>{reason.label}</Pill> : null}
-            {isBroadcast ? (
-              <Pill tone="info" icon={<Megaphone className="h-3 w-3" />}>
-                Broadcast
-              </Pill>
-            ) : null}
-            {thread.involvesMinor ? (
-              compliant ? (
-                <Pill tone="success" icon={<ShieldCheck className="h-3 w-3" />}>
-                  Rule of Two
-                </Pill>
-              ) : (
-                <Pill tone="danger" icon={<ShieldAlert className="h-3 w-3" />}>
-                  Second adult required
-                </Pill>
-              )
-            ) : null}
-          </div>
-        </div>
-
-        {/* X1 — per-thread ⋮ menu (read state + pinning), inside the link
-            so clicks must not navigate. */}
-        <span
-          className="relative self-start sm:self-center"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
+      {/* X1 — per-thread ⋮ menu (read state + pinning); clicks must not
+          trigger the row navigation. */}
+      <TableCell
+        className="w-10 text-right"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="relative inline-block">
           <button
             type="button"
-            aria-label={`Thread options for ${thread.subject}`}
+            aria-label={`Chat options for ${displayName(row)}`}
             aria-expanded={menuOpen}
             onClick={onToggleMenu}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -408,7 +496,7 @@ function ThreadRow({
             <MoreVertical className="h-4 w-4" />
           </button>
           {menuOpen ? (
-            <span className="absolute right-0 top-full z-30 mt-1 block w-44 rounded-lg border border-border bg-card p-1 shadow-raised">
+            <span className="absolute right-0 top-full z-30 mt-1 block w-44 rounded-lg border border-border bg-card p-1 text-left shadow-raised">
               <button
                 type="button"
                 onClick={() => onMarkRead(unread > 0)}
@@ -446,36 +534,7 @@ function ThreadRow({
             </span>
           ) : null}
         </span>
-      </div>
-    </Link>
-  );
-}
-
-function ParticipantStack({
-  participants,
-}: {
-  participants: ThreadParticipant[];
-}) {
-  const shown = participants.slice(0, 4);
-  const extra = participants.length - shown.length;
-  return (
-    <div className="flex items-center">
-      <div className="flex -space-x-2">
-        {shown.map((p) => (
-          <AthleteAvatar
-            key={p.id}
-            initials={initialsFor(p.name)}
-            hue={hueFor(p.id)}
-            size="sm"
-            ring
-          />
-        ))}
-      </div>
-      {extra > 0 ? (
-        <span className="ml-2 text-xs font-medium text-muted-foreground">
-          +{extra}
-        </span>
-      ) : null}
-    </div>
+      </TableCell>
+    </TableRow>
   );
 }

@@ -117,6 +117,15 @@ export function jordanTeamChannel(): TeamChannel {
       { kind: "video", name: "jordan-trapbar-hips.mp4", duration: "0:38" },
     ],
   });
+  messages.push({
+    id: "seed-ellis-photo",
+    senderId: "coach-ellis",
+    senderName: "Coach Ellis",
+    senderRole: "coach",
+    body: "Whiteboard from this morning — your next block's targets are on the right.",
+    at: new Date(lastAt + 41 * 60000).toISOString(),
+    attachments: [{ kind: "image", name: "block-c-whiteboard.jpg" }],
+  });
 
   // Channel roster: existing coaches first, then Coach Nadia, then
   // Victoria Flores (admin — she manages this client), then the athlete.

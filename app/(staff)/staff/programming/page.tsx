@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { StatTile } from "@/components/app/stat-tile";
 import { TabLinkBar } from "@/components/app/tab-bar";
 import { requireUserWithProfile } from "@/lib/auth";
+import { canManageProgramLibraries, staffById } from "@/lib/demo/staff";
 import {
   circuitLibrary,
   exerciseLibrary,
@@ -32,6 +33,12 @@ export default async function ProgrammingPage({
 }) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
+
+  // R8 (G2/G5) — role-gated library management: Level-3+ coaches, coach
+  // managers and admins manage categories; deleting exercises is admin-only.
+  const member = staffById(user.id);
+  const canManageCategories = member ? canManageProgramLibraries(member) : false;
+  const isAdmin = member?.role === "owner" || member?.role === "admin";
 
   const tab: LibraryTab = ["programs", "circuits", "exercises"].includes(
     searchParams?.tab ?? "",
@@ -90,9 +97,13 @@ export default async function ProgrammingPage({
         ]}
       />
 
-      {tab === "programs" ? <ProgramLibrary /> : null}
-      {tab === "circuits" ? <CircuitLibrary /> : null}
-      {tab === "exercises" ? <ExerciseLibrary /> : null}
+      {tab === "programs" ? (
+        <ProgramLibrary canManageCategories={canManageCategories} />
+      ) : null}
+      {tab === "circuits" ? (
+        <CircuitLibrary canManageCategories={canManageCategories} />
+      ) : null}
+      {tab === "exercises" ? <ExerciseLibrary isAdmin={isAdmin} /> : null}
     </div>
   );
 }

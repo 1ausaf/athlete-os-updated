@@ -41,11 +41,11 @@ import {
 } from "./profile-panels";
 
 /**
- * Round-6 member profile. The header is avatar + name with exactly four
- * actions (P1/P3/P4); notes moved to the RIGHT under the two 30-day tiles
- * (P2/P5); the left column stacks Details → Contact & Links → Team
- * Management → Latest Personal Records → Upcoming Sessions → Financial →
- * Goals & Medical History (P9–P17).
+ * Round-8 member profile. The header is avatar + name with four MATCHING
+ * outline actions (C12); notes live RIGHT under the two 30-day tiles; the
+ * left column stacks Details → Goals & Medical History → Latest Personal
+ * Records → Contact & Links → Team Management → Upcoming Bookings →
+ * Financial (C17/C19/C20).
  */
 export default async function StaffAthleteProfilePage({
   params,
@@ -95,13 +95,14 @@ export default async function StaffAthleteProfilePage({
                 Assessment
               </Link>
             </Button>
-            <Button asChild variant="brand" size="sm">
+            {/* C12 — all four actions share the same outline style */}
+            <Button asChild variant="outline" size="sm">
               <Link href={`/staff/athletes/${athlete.id}/program` as Route}>
                 <Dumbbell className="h-4 w-4" />
                 Program
               </Link>
             </Button>
-            <NutritionButton initial={athlete.nutrition} />
+            <NutritionButton athleteId={athlete.id} initial={athlete.nutrition} />
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`/staff/messaging/${threadIdForAthlete(athlete.id)}` as Route}
@@ -120,16 +121,20 @@ export default async function StaffAthleteProfilePage({
       {/* P5 — cards stack LEFT; notes live RIGHT under the two stat tiles */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div className="flex flex-col gap-6">
-          {/* P9 — Details */}
-          <DetailsCard athlete={athlete} dob={profile?.dob} />
+          {/* C15 — Details; the manage gears + delete are admin-only */}
+          <DetailsCard athlete={athlete} dob={profile?.dob} admin={admin} />
 
-          {/* P11 — Contact & Links */}
-          <ContactLinksCard athlete={athlete} profile={profile} />
+          {/* C17 — Goals & Medical History sits directly below Details */}
+          <GoalsMedicalCard
+            initialGoals={
+              athleteGoals[athlete.id] ??
+              `Build toward the next ${athlete.sport} season with a full, healthy block.`
+            }
+            initialPastInjuries={athlete.pastInjuries ?? ""}
+            initialLimitations={athlete.currentLimitations ?? ""}
+          />
 
-          {/* P12 — Team Management */}
-          <TeamManagementCard athlete={athlete} />
-
-          {/* P16 — Latest Personal Records (up to 5) */}
+          {/* C20 — Latest Personal Records (up to 5) */}
           <Section icon={Trophy} title="Latest Personal Records">
             {latestPrs.length === 0 ? (
               <Empty>No records logged yet.</Empty>
@@ -165,8 +170,14 @@ export default async function StaffAthleteProfilePage({
             )}
           </Section>
 
-          {/* P15 — Upcoming Sessions: each row opens the staff session page */}
-          <Section icon={CalendarDays} title="Upcoming Sessions">
+          {/* C20 — Contact & Links */}
+          <ContactLinksCard athlete={athlete} profile={profile} />
+
+          {/* C20 — Team Management */}
+          <TeamManagementCard athlete={athlete} />
+
+          {/* C19 — Upcoming Bookings: each row opens the staff session page */}
+          <Section icon={CalendarDays} title="Upcoming Bookings">
             {upcoming.length === 0 ? (
               <Empty>No upcoming bookings.</Empty>
             ) : (
@@ -206,18 +217,8 @@ export default async function StaffAthleteProfilePage({
             )}
           </Section>
 
-          {/* P13 — Financial, below Upcoming Sessions */}
+          {/* C18 — Financial last; coaches see the status pill only */}
           <FinancialCard athlete={athlete} admin={admin} />
-
-          {/* P17 — Goals & Medical History */}
-          <GoalsMedicalCard
-            initialGoals={
-              athleteGoals[athlete.id] ??
-              `Build toward the next ${athlete.sport} season with a full, healthy block.`
-            }
-            initialPastInjuries={athlete.pastInjuries ?? ""}
-            initialLimitations={athlete.currentLimitations ?? ""}
-          />
         </div>
 
         <div className="flex flex-col gap-6">

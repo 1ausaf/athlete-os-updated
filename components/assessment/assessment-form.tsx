@@ -37,11 +37,14 @@ export function AssessmentForm({
   athlete,
   mode,
   onSaved,
+  hideSaveBar = false,
 }: {
   initial: Assessment;
   athlete: Athlete;
   mode: "edit" | "view";
   onSaved?: () => void;
+  /** Round 8 (C14): the staff editor renders its own Complete-Assessment bar. */
+  hideSaveBar?: boolean;
 }) {
   const [a, setA] = useState<Assessment>(initial);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -548,7 +551,7 @@ export function AssessmentForm({
         </CardContent>
       </Card>
 
-      {edit ? (
+      {edit && !hideSaveBar ? (
         <div className="sticky bottom-4 z-30 flex items-center gap-3 self-center rounded-xl border border-border bg-card/95 px-4 py-2.5 shadow-raised backdrop-blur">
           {savedFlash ? (
             <Pill tone="success" icon={<CheckCircle2 className="h-3.5 w-3.5" />}>

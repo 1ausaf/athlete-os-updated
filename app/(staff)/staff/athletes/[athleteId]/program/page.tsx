@@ -24,8 +24,11 @@ import { ProgramBuilder } from "./program-builder";
  */
 export default async function ProgramBuilderPage({
   params,
+  searchParams,
 }: {
   params: { athleteId: string };
+  /** G9 — ?week=2&day=… deep links open that week/day in the builder. */
+  searchParams?: { week?: string; day?: string };
 }) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
@@ -98,6 +101,9 @@ export default async function ProgramBuilderPage({
         program={jordanProgram}
         library={exerciseLibrary}
         maxes={athleteMaxes[athlete.id] ?? athleteMaxes["ath-jordan"] ?? {}}
+        // G9 — ?week=2&day=… deep links open that week/day
+        initialWeek={Number(searchParams?.week) || undefined}
+        initialDay={searchParams?.day}
       />
     </div>
   );

@@ -56,7 +56,7 @@ export default async function AthleteTrainingPage() {
         <PageHeader
           eyebrow="Member Portal · Training"
           title="Training"
-          description="Published workouts run in sequence — finish a day to unlock the next. Past completed sessions stay editable, and your personal records live below."
+          description="Upcoming workouts run in sequence — finish a day to unlock the next. Completed workouts stay editable, and your personal records live below."
         />
       </div>
 

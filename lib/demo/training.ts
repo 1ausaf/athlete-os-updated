@@ -1403,6 +1403,9 @@ export const completedSessions: CompletedSession[] = [
   { dayId: "day-2", dayNumber: 2, title: "Recovery & Core", completedOn: at(-10, 8), summary: "8 sets · 24 min" },
   { dayId: "day-3", dayNumber: 3, title: "Upper Strength", completedOn: at(-11, 9), summary: "15 sets · 44 min" },
   { dayId: "day-1", dayNumber: 1, title: "Lower Power", completedOn: at(-16, 17), summary: "16 sets · 49 min" },
+  // Older history so the Last Year / All range chips have something to show.
+  { dayId: "day-3", dayNumber: 3, title: "Upper Strength", completedOn: at(-120, 9), summary: "14 sets · 45 min" },
+  { dayId: "day-1", dayNumber: 1, title: "Lower Power", completedOn: at(-400, 17), summary: "15 sets · 50 min" },
 ];
 
 /* ------------------------------------------------------------------ */

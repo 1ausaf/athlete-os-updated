@@ -1,17 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import {
   ArrowDown,
   ArrowUp,
   CalendarClock,
+  CornerDownRight,
   Filter,
+  Minus,
   Plus,
   Search,
   Trash2,
+  Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { TabBar } from "@/components/app/tab-bar";
@@ -40,12 +44,12 @@ import { cn } from "@/lib/utils";
 import { programDueMeta } from "./program-due";
 
 /**
- * Round-6 members list: one table for EVERY client — athletes AND teams in
- * the SAME row shape (M1: "Team: {name}" rows carry Type, Program/Manage
- * coaches, Due and Focus like anyone). Two coach dropdowns filter by role
- * (M2), and the "Last Comment" column colors stale rows amber then red (M3).
- * Column order (M6): Client, Focus, Age, Sex, Type, Program, Due, Manage,
- * Last Comment.
+ * Round-8 members list: one table for EVERY member — individuals AND groups.
+ * Groups render as "Group: {name}" rows with a +/− expander; their linked
+ * members NEST underneath, indented and alphabetical, and don't count toward
+ * the tab totals — the group counts as one (C9). Status tabs live in the URL
+ * (C8), the coach filters are labeled Program / Manage (C3), and the add
+ * buttons are admin-only links to the onboarding pages (C4/C10).
  */
 
 const STATUS_TABS: AthleteStatus[] = ["active", "paused", "inactive"];
@@ -67,18 +71,28 @@ type SortKey =
   | "due"
   | "lastNote";
 type SortDir = "asc" | "desc";
-type TypeFilter = "all" | "athletes" | "teams";
-/** M2 — "All Coaches" | "My Clients" | a specific staff id, per coach role. */
+/** C6 — All / Individual / Groups. */
+type TypeFilter = "all" | "individual" | "groups";
+/** M2 — "All Coaches" | "My Members" | a specific staff id, per coach role. */
 type CoachFilter = "all" | "mine" | (string & {});
 
 /** M3 — Last Comment aging: >7 days amber, >14 days red. */
 const NOTE_WARN_DAYS = 7;
 const NOTE_DANGER_DAYS = 14;
 
-/** A list row is either an athlete or a training team (C13/C15). */
+/** C11 — the filter panel shows FULL focus names, no abbreviations. */
+const FOCUS_FULL_NAME: Record<string, string> = {
+  "Olympic WL": "Olympic Weightlifting",
+};
+
+function focusDisplay(s: string): string {
+  return FOCUS_FULL_NAME[s] ?? s;
+}
+
+/** A top-level list row is either an ungrouped member or a group (C9). */
 type Row =
   | { kind: "athlete"; a: Athlete }
-  | { kind: "team"; g: TrainingGroup };
+  | { kind: "group"; g: TrainingGroup };
 
 function roleStaffId(
   athleteId: string,
@@ -112,9 +126,9 @@ function dueValue(a: Athlete): number {
   return 9999;
 }
 
-/* --- sort accessors across the mixed athlete/team rows (M1: one shape) --- */
+/* --- sort accessors across the mixed member/group rows (one shape) --- */
 const rowName = (r: Row) =>
-  r.kind === "athlete" ? r.a.name : `Team: ${r.g.name}`;
+  r.kind === "athlete" ? r.a.name : `Group: ${r.g.name}`;
 const rowFocus = (r: Row) => (r.kind === "athlete" ? r.a.sport : r.g.focus);
 const rowAge = (r: Row) => (r.kind === "athlete" ? r.a.age : -1);
 const rowSex = (r: Row) => (r.kind === "athlete" ? r.a.gender : "~");
@@ -134,15 +148,21 @@ const rowLastNote = (r: Row) =>
 export function MembersList({
   athletes,
   viewerStaffId,
+  admin,
+  initialStatus,
 }: {
   athletes: Athlete[];
   viewerStaffId: string;
+  /** C4/C10/C11/C15 — add buttons + filter management are admin-only. */
+  admin: boolean;
+  /** C8 — seeded from ?status= so tab links are shareable. */
+  initialStatus: AthleteStatus;
 }) {
   const router = useRouter();
   const [list, setList] = useState<Athlete[]>(athletes);
-  const [tab, setTab] = useState<AthleteStatus>("active");
+  const [tab, setTab] = useState<AthleteStatus>(initialStatus);
   const [query, setQuery] = useState("");
-  // M2 — one dropdown per coach role
+  // C3 — one dropdown per coach role: Program + Manage
   const [progFilter, setProgFilter] = useState<CoachFilter>("all");
   const [mgmtFilter, setMgmtFilter] = useState<CoachFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -151,7 +171,10 @@ export function MembersList({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("due");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [adding, setAdding] = useState(false);
+  // C9 — groups start expanded so the nesting is visible at a glance.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(trainingGroups.map((g) => g.id)),
+  );
 
   const focusOptions = useMemo(
     () => Array.from(new Set(list.map((a) => a.sport))).sort(),
@@ -162,11 +185,11 @@ export function MembersList({
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  /** Athletes matching every filter EXCEPT the status tab (drives CM9 counts). */
+  /** Members matching every filter EXCEPT the status tab (drives the counts). */
   const baseAthletes = useMemo(() => {
     const q = query.trim().toLowerCase();
     let out = list;
-    if (typeFilter === "teams") return [] as Athlete[];
+    if (typeFilter === "groups") return [] as Athlete[];
     if (q) {
       out = out.filter(
         (a) =>
@@ -176,7 +199,6 @@ export function MembersList({
           coachOf(a.id, "management").toLowerCase().includes(q),
       );
     }
-    // M2 — each dropdown filters its own coach role
     if (progFilter !== "all") {
       const staffId = progFilter === "mine" ? viewerStaffId : progFilter;
       out = out.filter((a) => roleStaffId(a.id, "programming") === staffId);
@@ -194,9 +216,9 @@ export function MembersList({
     return out;
   }, [list, typeFilter, query, progFilter, mgmtFilter, sportChecks, bucketChecks, viewerStaffId]);
 
-  /** Teams matching the filters — they live under the Active tab (C13/M1). */
-  const baseTeams = useMemo(() => {
-    if (typeFilter === "athletes") return [] as TrainingGroup[];
+  /** Groups matching the filters — they live under the Active tab. */
+  const baseGroups = useMemo(() => {
+    if (typeFilter === "individual") return [] as TrainingGroup[];
     const q = query.trim().toLowerCase();
     let out = trainingGroups;
     if (q) {
@@ -207,10 +229,15 @@ export function MembersList({
           g.program.toLowerCase().includes(q) ||
           g.programmingCoach.toLowerCase().includes(q) ||
           g.managementCoach.toLowerCase().includes(q) ||
-          g.coachNames.join(" ").toLowerCase().includes(q),
+          g.coachNames.join(" ").toLowerCase().includes(q) ||
+          // C9 — searching a nested member keeps their group visible
+          list.some(
+            (a) =>
+              g.memberAthleteIds.includes(a.id) &&
+              a.name.toLowerCase().includes(q),
+          ),
       );
     }
-    // M2 — teams match by their Program / Manage coach names
     if (progFilter !== "all") {
       const name = filterStaffName(progFilter, viewerStaffId);
       out = out.filter((g) => g.programmingCoach === name);
@@ -226,30 +253,54 @@ export function MembersList({
         ),
       );
     }
-    // M1 — teams carry a membership Type now, so the bucket filter applies
     if (bucketChecks.size > 0) {
       out = out.filter((g) => bucketChecks.has(g.bucket));
     }
     return out;
-  }, [typeFilter, bucketChecks, query, progFilter, mgmtFilter, sportChecks, viewerStaffId]);
+  }, [typeFilter, bucketChecks, query, progFilter, mgmtFilter, sportChecks, viewerStaffId, list]);
 
-  /** CM9 — bracketed tab counts that react to search + filters. */
+  /** C9 — ids of members nesting under a VISIBLE group; a filtered-out group
+   *  releases its members back to the top level so they never vanish. */
+  const nestedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of baseGroups) for (const id of g.memberAthleteIds) s.add(id);
+    return s;
+  }, [baseGroups]);
+
+  /** Linked members per group — always alphabetical (C9). */
+  const nestedByGroup = useMemo(() => {
+    const map = new Map<string, Athlete[]>();
+    for (const g of baseGroups) {
+      map.set(
+        g.id,
+        list
+          .filter((a) => g.memberAthleteIds.includes(a.id))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+    }
+    return map;
+  }, [baseGroups, list]);
+
+  /** Bracketed tab counts — a group counts as ONE; nested members don't (C9). */
   const counts = useMemo(() => {
     const c: Record<AthleteStatus, number> = {
-      active: baseTeams.length,
+      active: baseGroups.length,
       paused: 0,
       inactive: 0,
     };
-    for (const a of baseAthletes) c[a.status] += 1;
+    for (const a of baseAthletes) {
+      if (!nestedIds.has(a.id)) c[a.status] += 1;
+    }
     return c;
-  }, [baseAthletes, baseTeams]);
+  }, [baseAthletes, baseGroups, nestedIds]);
 
+  /** Top-level rows only — sorting never reorders nested members (C9). */
   const rows = useMemo(() => {
     const out: Row[] = baseAthletes
-      .filter((a) => a.status === tab)
+      .filter((a) => a.status === tab && !nestedIds.has(a.id))
       .map((a) => ({ kind: "athlete", a }) as Row);
     if (tab === "active") {
-      for (const g of baseTeams) out.push({ kind: "team", g });
+      for (const g of baseGroups) out.push({ kind: "group", g });
     }
     const dir = sortDir === "asc" ? 1 : -1;
     out.sort((x, y) => {
@@ -275,7 +326,15 @@ export function MembersList({
       }
     });
     return out;
-  }, [baseAthletes, baseTeams, tab, sortKey, sortDir]);
+  }, [baseAthletes, baseGroups, nestedIds, tab, sortKey, sortDir]);
+
+  /** C8 — tab changes write a unique, shareable URL. */
+  function selectTab(next: AthleteStatus) {
+    setTab(next);
+    router.replace(`/staff/athletes?status=${next}` as Route, {
+      scroll: false,
+    });
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -293,59 +352,25 @@ export function MembersList({
     apply(next);
   }
 
+  function toggleExpand(groupId: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
   /** Inactive members can be removed entirely (client: "completely removes"). */
   function deleteAthlete(id: string) {
     setList((prev) => prev.filter((a) => a.id !== id));
-  }
-
-  function addAthlete(name: string, sport: string, yob: number) {
-    const id = `ath-new-${Date.now()}`;
-    const initials = name
-      .split(/\s+/)
-      .map((p) => p[0] ?? "")
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-    const member: Athlete = {
-      id,
-      slug: id,
-      name,
-      initials: initials || "??",
-      hue: (name.length * 47) % 360,
-      sport: sport || "General",
-      age: Math.max(0, new Date().getFullYear() - yob),
-      isMinor: new Date().getFullYear() - yob < 18,
-      yearOfBirth: yob,
-      gender: "M",
-      bucket: "in-gym",
-      status: "active",
-      programDueInDays: 14,
-      nutrition: "none",
-      coach: "Unassigned",
-      planName: "Onboarding",
-      frequency: "—",
-      frequencyPerWeek: 0,
-      bookedThisWeek: 0,
-      billing: { state: "pending", amountDueCents: 0, nextInvoice: new Date().toISOString() },
-      program: { name: "Onboarding", day: 0, totalDays: 0, phase: "Assessment", block: "—", compliancePct: 0 },
-      attendancePct: 0,
-      injuryFlags: [],
-      season: "off-season",
-      reminders: ["New client — run the onboarding checklist"],
-      guardians: [],
-      lastActive: new Date().toISOString(),
-      notes: [],
-      prs: [],
-    };
-    setList((prev) => [member, ...prev]);
-    setAdding(false);
   }
 
   const filterCount = sportChecks.size + bucketChecks.size;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Status tabs — shared line style (CM2) with reactive counts (CM9) */}
+      {/* Status tabs — URL-backed (C8); add buttons admin-only (C4/C10) */}
       <TabBar
         tabs={STATUS_TABS.map((s) => ({
           value: s,
@@ -353,12 +378,24 @@ export function MembersList({
           count: counts[s],
         }))}
         active={tab}
-        onSelect={setTab}
+        onSelect={selectTab}
         right={
-          <Button variant="brand" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="h-4 w-4" />
-            Add Member
-          </Button>
+          admin ? (
+            <div className="flex items-center gap-1.5">
+              <Button asChild variant="brand" size="sm">
+                <Link href={"/staff/athletes/new" as Route}>
+                  <Plus className="h-4 w-4" />
+                  Add Member
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={"/staff/athletes/new-group" as Route}>
+                  <Users className="h-4 w-4" />
+                  Add Group
+                </Link>
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -373,26 +410,27 @@ export function MembersList({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        {/* C6 — All / Individual / Groups */}
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-          aria-label="Filter by client type"
+          aria-label="Filter by member type"
           className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
         >
-          <option value="all">All clients</option>
-          <option value="athletes">Athletes</option>
-          <option value="teams">Teams</option>
+          <option value="all">All</option>
+          <option value="individual">Individual</option>
+          <option value="groups">Groups</option>
         </select>
-        {/* M2 — one dropdown per coach role: Programming + Management */}
+        {/* C3 — the coach-role dropdowns are labeled Program / Manage */}
         {(
           [
             {
-              label: "Programming Coach",
+              label: "Program",
               value: progFilter,
               set: setProgFilter,
             },
             {
-              label: "Management Coach",
+              label: "Manage",
               value: mgmtFilter,
               set: setMgmtFilter,
             },
@@ -405,11 +443,11 @@ export function MembersList({
             <select
               value={value}
               onChange={(e) => set(e.target.value)}
-              aria-label={`Filter by ${label.toLowerCase()}`}
+              aria-label={`Filter by ${label.toLowerCase()} coach`}
               className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
             >
               <option value="all">All Coaches</option>
-              <option value="mine">My Clients</option>
+              <option value="mine">My Members</option>
               {coaches.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -445,9 +483,10 @@ export function MembersList({
                 aria-hidden
                 onClick={() => setFiltersOpen(false)}
               />
-              <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-3 shadow-raised">
+              {/* C11 — wide panel: Focus in 3 columns, Membership in 2 */}
+              <div className="absolute left-0 top-full z-50 mt-1.5 w-[28rem] max-w-[calc(100vw-3rem)] rounded-xl border border-border bg-popover p-4 shadow-raised">
                 <p className="eyebrow mb-1.5">Focus</p>
-                <div className="grid grid-cols-2 gap-x-2">
+                <div className="grid grid-cols-2 gap-x-2 sm:grid-cols-3">
                   {focusOptions.map((s) => (
                     <label
                       key={s}
@@ -461,12 +500,12 @@ export function MembersList({
                         }
                         className="h-3.5 w-3.5 accent-[hsl(var(--brand))]"
                       />
-                      {s}
+                      {focusDisplay(s)}
                     </label>
                   ))}
                 </div>
                 <p className="eyebrow mb-1.5 mt-3">Membership</p>
-                <div className="flex flex-col">
+                <div className="grid grid-cols-2 gap-x-2">
                   {(Object.keys(bucketLabel) as MemberBucket[]).map((b) => (
                     <label
                       key={b}
@@ -496,28 +535,22 @@ export function MembersList({
                     Clear filters
                   </button>
                 ) : null}
+                {/* C11 — option lists are curated by admins */}
+                <p className="mt-3 border-t border-border/60 pt-2 text-[0.7rem] text-muted-foreground">
+                  Filters are managed by admins.
+                </p>
               </div>
             </>
           ) : null}
         </div>
       </div>
 
-      {/* Add-client inline form */}
-      {adding ? (
-        <AddMemberForm
-          focusOptions={focusOptions}
-          onAdd={addAthlete}
-          onCancel={() => setAdding(false)}
-        />
-      ) : null}
-
-      {/* The list — every column sortable (CM3) */}
+      {/* The list — every column sortable; groups expand their members (C9) */}
       <div className="overflow-x-auto rounded-xl border border-border scrollbar-slim">
         <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
-              {/* M5/M6 — renamed + reordered: … Type, Program, Due, Manage, Last Comment */}
-              <SortHeader label="Client" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
+              <SortHeader label="Member" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
               <SortHeader label="Focus" active={sortKey === "focus"} dir={sortDir} onClick={() => toggleSort("focus")} />
               <SortHeader label="Age" active={sortKey === "age"} dir={sortDir} onClick={() => toggleSort("age")} />
               <SortHeader label="Sex" active={sortKey === "sex"} dir={sortDir} onClick={() => toggleSort("sex")} />
@@ -554,13 +587,31 @@ export function MembersList({
                   onDelete={() => deleteAthlete(row.a.id)}
                 />
               ) : (
-                <TeamRow
-                  key={row.g.id}
-                  group={row.g}
-                  onOpen={() =>
-                    router.push(`/staff/teams/${row.g.id}` as Route)
-                  }
-                />
+                <Fragment key={row.g.id}>
+                  <GroupRow
+                    group={row.g}
+                    expanded={expanded.has(row.g.id)}
+                    memberCount={nestedByGroup.get(row.g.id)?.length ?? 0}
+                    onToggle={() => toggleExpand(row.g.id)}
+                    onOpen={() =>
+                      router.push(`/staff/teams/${row.g.id}` as Route)
+                    }
+                  />
+                  {expanded.has(row.g.id)
+                    ? (nestedByGroup.get(row.g.id) ?? []).map((a) => (
+                        <MemberRow
+                          key={a.id}
+                          athlete={a}
+                          tab={tab}
+                          nested
+                          onOpen={() =>
+                            router.push(`/staff/athletes/${a.id}` as Route)
+                          }
+                          onDelete={() => deleteAthlete(a.id)}
+                        />
+                      ))
+                    : null}
+                </Fragment>
               ),
             )}
             {rows.length === 0 ? (
@@ -587,7 +638,7 @@ export function MembersList({
       {/* Status semantics helper line */}
       <p className="text-xs text-muted-foreground text-pretty">
         {tab === "active"
-          ? "Click a client to open their full profile — teams open the team profile with roster and contacts."
+          ? "Click a member to open their full profile — groups open the group profile with members and contacts."
           : tab === "paused"
             ? "Paused members keep their login — no programs run. The follow-up date is the retention call that brings them back."
             : "Inactive accounts are disabled (no login) but the record is kept. Delete only when it should be gone for good."}
@@ -637,11 +688,11 @@ function SortHeader({
 
 /** "Last Comment" cell — days since the last coach note. M3: >7 days amber,
  *  >14 days red, same urgency ramp as the due-now chip. */
-function LastNoteCell({ days, isTeam }: { days: number; isTeam?: boolean }) {
+function LastNoteCell({ days, isGroup }: { days: number; isGroup?: boolean }) {
   return (
     <td className="tnum px-3 py-2.5">
       {days >= 999 ? (
-        isTeam ? (
+        isGroup ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           // Never commented is worse than 14 days — same red as due-now (M3).
@@ -677,11 +728,14 @@ function LastNoteCell({ days, isTeam }: { days: number; isTeam?: boolean }) {
 function MemberRow({
   athlete,
   tab,
+  nested = false,
   onOpen,
   onDelete,
 }: {
   athlete: Athlete;
   tab: AthleteStatus;
+  /** C9 — indented row under its group. */
+  nested?: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -690,10 +744,19 @@ function MemberRow({
   return (
     <tr
       onClick={onOpen}
-      className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
+      className={cn(
+        "cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40",
+        nested && "bg-muted/20",
+      )}
     >
       <td className="px-3 py-2.5">
-        <span className="flex items-center gap-2.5">
+        <span className={cn("flex items-center gap-2.5", nested && "pl-8")}>
+          {nested ? (
+            <CornerDownRight
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+              aria-hidden
+            />
+          ) : null}
           <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
@@ -755,13 +818,19 @@ function MemberRow({
   );
 }
 
-/** A team-as-client row (M1) — the SAME columns as an athlete row: name shows
- *  "Team: {name}", plus Type, Program/Manage coaches and the Due chip. */
-function TeamRow({
+/** A group row (C5/C9) — same columns as a member row: "Group: {name}", plus
+ *  Type, Program/Manage coaches, the Due chip, and the +/− member expander. */
+function GroupRow({
   group,
+  expanded,
+  memberCount,
+  onToggle,
   onOpen,
 }: {
   group: TrainingGroup;
+  expanded: boolean;
+  memberCount: number;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   const due = programDueMeta(group.programDueInDays);
@@ -773,10 +842,37 @@ function TeamRow({
     >
       <td className="px-3 py-2.5">
         <span className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            aria-expanded={expanded}
+            aria-label={
+              expanded
+                ? `Collapse ${group.name} members`
+                : `Expand ${group.name} members`
+            }
+            title={expanded ? "Collapse members" : "Expand members"}
+            disabled={memberCount === 0}
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-surface text-muted-foreground transition-colors",
+              memberCount > 0
+                ? "hover:border-brand/50 hover:text-foreground"
+                : "opacity-40",
+            )}
+          >
+            {expanded && memberCount > 0 ? (
+              <Minus className="h-3 w-3" />
+            ) : (
+              <Plus className="h-3 w-3" />
+            )}
+          </button>
           <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
-              Team: {group.name}
+              Group: {group.name}
             </span>
             <span className="block text-xs text-muted-foreground">
               {group.planName}
@@ -807,100 +903,5 @@ function TeamRow({
         <span className="text-xs text-muted-foreground">—</span>
       </td>
     </tr>
-  );
-}
-
-const ADD_NEW = "__add-new__";
-
-function AddMemberForm({
-  focusOptions,
-  onAdd,
-  onCancel,
-}: {
-  focusOptions: string[];
-  onAdd: (name: string, sport: string, yob: number) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [focus, setFocus] = useState("");
-  const [customFocus, setCustomFocus] = useState("");
-  const [yob, setYob] = useState("");
-  const canAdd = name.trim().length > 1;
-  const resolvedFocus = focus === ADD_NEW ? customFocus.trim() : focus;
-
-  return (
-    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-brand/30 bg-brand/[0.03] p-3">
-      <div className="grid gap-1">
-        <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-          Full name
-        </span>
-        <Input
-          autoFocus
-          value={name}
-          className="h-9 w-52"
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-      <div className="grid gap-1">
-        <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-          Focus
-        </span>
-        {/* C5: pick from existing values — no free-text typos */}
-        <select
-          value={focus}
-          aria-label="Focus"
-          onChange={(e) => setFocus(e.target.value)}
-          className="h-9 w-40 rounded-md border border-input bg-surface px-2 text-sm"
-        >
-          <option value="">Select focus…</option>
-          {focusOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-          <option value={ADD_NEW}>+ Add new…</option>
-        </select>
-      </div>
-      {focus === ADD_NEW ? (
-        <div className="grid gap-1">
-          <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-            New focus
-          </span>
-          <Input
-            value={customFocus}
-            placeholder="e.g. Weight loss"
-            className="h-9 w-36"
-            onChange={(e) => setCustomFocus(e.target.value)}
-          />
-        </div>
-      ) : null}
-      <div className="grid gap-1">
-        <span className="text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
-          Year of birth
-        </span>
-        <Input
-          value={yob}
-          inputMode="numeric"
-          className="h-9 w-24"
-          onChange={(e) => setYob(e.target.value)}
-        />
-      </div>
-      <Button
-        variant="brand"
-        size="sm"
-        disabled={!canAdd}
-        onClick={() =>
-          onAdd(name.trim(), resolvedFocus, Number(yob) || new Date().getFullYear() - 16)
-        }
-      >
-        Add Member
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onCancel}>
-        Cancel
-      </Button>
-      <span className="ml-auto text-xs text-muted-foreground">
-        New members land in Active, ready for onboarding.
-      </span>
-    </div>
   );
 }

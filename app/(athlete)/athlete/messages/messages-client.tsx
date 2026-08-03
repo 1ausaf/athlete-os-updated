@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Check,
+  CheckCheck,
   Download,
   Film,
   ImageIcon,
@@ -18,6 +20,7 @@ import {
   renderChatBody,
   VoiceNoteBubble,
 } from "@/components/app/chat-composer";
+import { ANNOUNCEMENT_READ_KEY } from "@/components/nav/athlete-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
@@ -25,6 +28,26 @@ import type { ThreadParticipant } from "@/lib/demo/data";
 import { relTime } from "@/lib/demo/data";
 import type { Announcement } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
+
+/**
+ * Round 8 (M31): bubble timestamps — a bare time for today's messages,
+ * "August 2, 2026 at 3:43 PM" for anything older.
+ */
+function stampFor(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  if (d.toDateString() === now.toDateString()) return time;
+  const day = d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${day} at ${time}`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Demo-local message model lives in lib/demo/chat.ts (shared with the  */
@@ -73,25 +96,23 @@ export function MessagesClient({
   initialMessages: ChatMessage[];
   announcements: Announcement[];
 }) {
+  // Round 8 (M32): chat 2/3 LEFT, announcements 1/3 RIGHT on lg — the same
+  // split as the coach member profile.
   return (
-    <div className="flex flex-col gap-6">
-      <CoachChat
-        athleteId={athleteId}
-        athleteName={athleteName}
-        isMinor={isMinor}
-        isParentView={isParentView}
-        parentName={parentName}
-        participants={participants}
-        initialMessages={initialMessages}
-      />
-
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-muted-foreground" aria-hidden />
-          <h2 className="text-base">Announcements</h2>
-        </div>
-        <AnnouncementsFeed announcements={announcements} />
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+      <div className="min-w-0 lg:col-span-2">
+        <CoachChat
+          athleteId={athleteId}
+          athleteName={athleteName}
+          isMinor={isMinor}
+          isParentView={isParentView}
+          parentName={parentName}
+          participants={participants}
+          initialMessages={initialMessages}
+        />
       </div>
+
+      <AnnouncementsFeed announcements={announcements} />
     </div>
   );
 }
@@ -251,8 +272,9 @@ function CoachChat({
                       <AttachmentCard attachment={a} />
                     </div>
                   ))}
+                  {/* Round 8 (M31): today = time only; older = full date */}
                   <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    {relTime(m.at)}
+                    {stampFor(m.at)}
                   </div>
                 </div>
               </div>
@@ -363,6 +385,42 @@ function VideoAttachmentCard({
   );
 }
 
+/**
+ * Round 8 (M29): image attachments read as photo thumbnails — a gradient
+ * placeholder (the demo has no real uploads) with the filename overlaid and
+ * the download affordance kept in the corner.
+ */
+function ImageAttachmentCard({ name }: { name: string }) {
+  const h = hueFor(name);
+  return (
+    <span className="relative inline-block h-32 w-44 max-w-full overflow-hidden rounded-xl border border-border align-top">
+      <span
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background: `linear-gradient(135deg, hsl(${h} 62% 58%), hsl(${(h + 70) % 360} 55% 38%))`,
+        }}
+      />
+      <ImageIcon
+        className="absolute left-1/2 top-[42%] h-7 w-7 -translate-x-1/2 -translate-y-1/2 text-white/60"
+        aria-hidden
+      />
+      <a
+        href={DEMO_DOWNLOAD_URI}
+        download={name}
+        aria-label={`Download ${name}`}
+        title="Download photo (demo)"
+        className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65"
+      >
+        <Download className="h-3.5 w-3.5" />
+      </a>
+      <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-1.5 pt-4 text-left text-[0.68rem] font-medium text-white">
+        {name}
+      </span>
+    </span>
+  );
+}
+
 function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
   if (attachment.kind === "voice") {
     return <VoiceNoteBubble duration={attachment.duration} />;
@@ -376,30 +434,7 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
     );
   }
   if (attachment.kind === "image") {
-    return (
-      <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 text-left">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand-ink">
-          <ImageIcon className="h-4 w-4" />
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-xs font-semibold">
-            {attachment.name}
-          </span>
-          <span className="block text-[0.68rem] text-muted-foreground">
-            Photo
-          </span>
-        </span>
-        <a
-          href={DEMO_DOWNLOAD_URI}
-          download={attachment.name}
-          aria-label={`Download ${attachment.name}`}
-          title="Download photo (demo)"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-        >
-          <Download className="h-3.5 w-3.5" />
-        </a>
-      </span>
-    );
+    return <ImageAttachmentCard name={attachment.name} />;
   }
   if (attachment.kind === "file") {
     return (
@@ -441,41 +476,149 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Tab 2 — read-only news feed                                          */
+/* Right column — read-only news feed with read/unread state (M33)      */
 /* ------------------------------------------------------------------ */
 
 function AnnouncementsFeed({ announcements }: { announcements: Announcement[] }) {
+  // Round 8 (M33): read ids persist in localStorage; the nav Chat badge
+  // listens for the change event and recounts.
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem(ANNOUNCEMENT_READ_KEY) ?? "[]",
+      ) as string[];
+      setReadIds(new Set(stored));
+    } catch {
+      // Corrupt storage — treat everything as unread.
+    }
+  }, []);
+
+  function persist(next: Set<string>) {
+    setReadIds(next);
+    try {
+      window.localStorage.setItem(
+        ANNOUNCEMENT_READ_KEY,
+        JSON.stringify([...next]),
+      );
+    } catch {
+      // Storage unavailable — read state stays session-local.
+    }
+    window.dispatchEvent(new Event("aos-ann-read-changed"));
+  }
+
+  function markRead(id: string) {
+    if (readIds.has(id)) return;
+    persist(new Set([...readIds, id]));
+  }
+
+  function markAllRead() {
+    persist(new Set(announcements.map((a) => a.id)));
+  }
+
+  const unreadCount = announcements.filter((a) => !readIds.has(a.id)).length;
+
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Megaphone className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <h2 className="text-base">Announcements</h2>
+        {unreadCount > 0 ? (
+          <Pill tone="brand" dot>
+            <span className="tnum">{unreadCount} unread</span>
+          </Pill>
+        ) : null}
+        {unreadCount > 0 ? (
+          <button
+            type="button"
+            onClick={markAllRead}
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+            Mark all read
+          </button>
+        ) : null}
+      </div>
+
       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <Megaphone className="h-4 w-4 shrink-0" />
         Read-only — announcements can&apos;t be replied to. The staff posts
         facility news here for every athlete.
       </div>
 
-      {announcements.map((a) => (
-        <Card key={a.id}>
-          <CardContent className="flex gap-4 p-4">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
-              <Megaphone className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="font-semibold text-pretty">{a.title}</span>
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {relTime(a.at)}
-                </span>
+      {announcements.map((a) => {
+        const unread = !readIds.has(a.id);
+        return (
+          <Card
+            key={a.id}
+            role="button"
+            tabIndex={0}
+            aria-label={
+              unread ? `${a.title} — unread, tap to mark read` : a.title
+            }
+            onClick={() => markRead(a.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                markRead(a.id);
+              }
+            }}
+            className={cn(
+              "cursor-pointer transition-colors",
+              unread ? "border-brand/40" : "hover:bg-accent/30",
+            )}
+          >
+            <CardContent className="flex gap-3 p-4">
+              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
+                <Megaphone className="h-4 w-4" />
+                {unread ? (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-brand"
+                    title="Unread"
+                  />
+                ) : null}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span
+                    className={cn(
+                      "text-sm text-pretty",
+                      unread ? "font-bold" : "font-semibold",
+                    )}
+                  >
+                    {a.title}
+                  </span>
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    {relTime(a.at)}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-pretty text-muted-foreground">
+                  {a.body}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-medium text-foreground/70">
+                    {a.author} · LPS staff
+                  </p>
+                  {unread ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markRead(a.id);
+                      }}
+                      className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand-ink transition-opacity hover:opacity-80"
+                    >
+                      <Check className="h-3.5 w-3.5" aria-hidden />
+                      Mark as read
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <p className="mt-1 text-sm text-pretty text-muted-foreground">
-                {a.body}
-              </p>
-              <p className="mt-2 text-xs font-medium text-foreground/70">
-                {a.author} · LPS staff
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

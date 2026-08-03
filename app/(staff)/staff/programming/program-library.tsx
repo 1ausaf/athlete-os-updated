@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pill, type PillTone } from "@/components/ui/pill";
+import { Pill } from "@/components/ui/pill";
 import {
   Select,
   SelectContent,
@@ -46,12 +46,6 @@ import { cn } from "@/lib/utils";
 
 import { ManageCategoriesMenu } from "./manage-categories";
 
-const levelTone: Record<ProgramTemplate["level"], PillTone> = {
-  Beginner: "info",
-  Intermediate: "neutral",
-  Advanced: "brand",
-};
-
 const LEVEL_ORDER: Record<ProgramTemplate["level"], number> = {
   Beginner: 0,
   Intermediate: 1,
@@ -60,7 +54,7 @@ const LEVEL_ORDER: Record<ProgramTemplate["level"], number> = {
 
 /* ---- column sorting (G3 — sortable headers like Members) ---- */
 
-type ColumnKey = "name" | "category" | "level" | "weeks" | "edited";
+type ColumnKey = "name" | "category" | "level" | "cadence" | "edited";
 
 interface ColumnSort {
   key: ColumnKey;
@@ -83,8 +77,9 @@ function compareByColumn(
       return a.category.localeCompare(b.category);
     case "level":
       return LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level];
-    case "weeks":
-      return a.weeks - b.weeks;
+    case "cadence":
+      // R8 (G3) — sessions per week, weeks as the tiebreak.
+      return a.daysPerWeek - b.daysPerWeek || a.weeks - b.weeks;
     case "edited":
       // Ascending = most recently edited first.
       return lastEdited(b).localeCompare(lastEdited(a));
@@ -133,7 +128,12 @@ const APPLY_TARGETS: ApplyTarget[] = [
  * keeps its "Apply to client…" + Edit actions and links to the template
  * editor at its own URL.
  */
-export function ProgramLibrary() {
+export function ProgramLibrary({
+  canManageCategories = false,
+}: {
+  /** R8 (G2) — Level-3+ coaches, coach managers and admins only. */
+  canManageCategories?: boolean;
+}) {
   const router = useRouter();
   const [templates, setTemplates] = useState<ProgramTemplate[]>(programTemplates);
   const [categories, setCategories] = useState<string[]>(() =>
@@ -257,15 +257,18 @@ export function ProgramLibrary() {
               aria-label="Search Program Library"
             />
           </span>
-          <ManageCategoriesMenu
-            categories={categories}
-            usageCount={(cat) =>
-              templates.filter((t) => t.category === cat).length
-            }
-            onAdd={addCategory}
-            onRename={renameCategory}
-            onDelete={deleteCategory}
-          />
+          {/* R8 (G2) — category management is Level-3+ / manager / admin only */}
+          {canManageCategories ? (
+            <ManageCategoriesMenu
+              categories={categories}
+              usageCount={(cat) =>
+                templates.filter((t) => t.category === cat).length
+              }
+              onAdd={addCategory}
+              onRename={renameCategory}
+              onDelete={deleteCategory}
+            />
+          ) : null}
           <Button variant="brand" size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
             New program
@@ -304,8 +307,8 @@ export function ProgramLibrary() {
                   onSort={toggleSort}
                 />
                 <SortableHead
-                  label="Weeks"
-                  columnKey="weeks"
+                  label="Cadence"
+                  columnKey="cadence"
                   sort={sort}
                   onSort={toggleSort}
                 />
@@ -332,17 +335,18 @@ export function ProgramLibrary() {
                           <span className="truncate">{tpl.name}</span>
                           <PencilLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                         </span>
+                        {/* R8 (G1) — all label pills stay neutral grey */}
                         <span className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                           {tpl.remoteDays ? (
                             <Pill
-                              tone="info"
+                              tone="neutral"
                               icon={<Globe className="h-3 w-3" />}
                             >
                               {tpl.remoteDays}× remote/wk
                             </Pill>
                           ) : null}
                           {(tpl.labels ?? []).map((label) => (
-                            <Pill key={label} tone="brand">
+                            <Pill key={label} tone="neutral">
                               {label}
                             </Pill>
                           ))}
@@ -353,10 +357,12 @@ export function ProgramLibrary() {
                       {tpl.category}
                     </TableCell>
                     <TableCell>
-                      <Pill tone={levelTone[tpl.level]}>{tpl.level}</Pill>
+                      {/* R8 (G1) — level chips all match the Intermediate grey */}
+                      <Pill tone="neutral">{tpl.level}</Pill>
                     </TableCell>
+                    {/* R8 (G3) — cadence: sessions per week */}
                     <TableCell className="tnum text-xs text-muted-foreground">
-                      {tpl.weeks} wk × {tpl.daysPerWeek}d
+                      {tpl.daysPerWeek}/wk
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {fmtDate(lastEdited(tpl))}

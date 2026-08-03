@@ -11,7 +11,6 @@ import {
   Lock,
   Milk,
   NotebookPen,
-  Target,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
@@ -114,37 +113,18 @@ export default async function NutritionPage() {
   /* ---------------------------------------------------------------- */
   return (
     <div className="flex flex-col gap-6">
+      {/* Round 8: no Pro pill (M34), no Goal section (M35 — the Protocol
+          Summary covers it), no authored-by line (M37). */}
       <PageHeader
         eyebrow="Member Portal · Nutrition"
         title={protocol.title}
         description={
           <>
-            Written for you by {protocol.coach} · last updated{" "}
-            {fmtDay(protocol.updatedAt)}. Follow it like your program — it
-            changes when your block does.
+            Last updated {fmtDay(protocol.updatedAt)}. Follow it like your
+            program — it changes when your block does.
           </>
         }
-        actions={
-          <Pill tone="brand" dot>
-            Pro
-          </Pill>
-        }
       />
-
-      {/* Goal */}
-      <Card className="overflow-hidden">
-        <CardContent className="flex items-start gap-4 bg-brand-sheen p-6">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
-            <Target className="h-5 w-5" aria-hidden />
-          </span>
-          <div className="flex flex-col gap-1">
-            <span className="eyebrow">The goal</span>
-            <p className="max-w-2xl text-sm font-medium leading-relaxed text-pretty sm:text-base">
-              {protocol.goal}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Weekly check-in — weight / body fat / lean mass, trend + history */}
       <WeeklyCheckIn initialCheckIns={protocol.checkIns} />
@@ -173,10 +153,7 @@ export default async function NutritionPage() {
         <CardContent className="flex flex-col gap-6 p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <FileText className="h-5 w-5 text-muted-foreground" aria-hidden />
-            <h3 className="text-base">The protocol</h3>
-            <Pill tone="neutral" className="ml-auto">
-              As written by {protocol.coach}
-            </Pill>
+            <h3 className="text-base">The Protocol</h3>
           </div>
 
           {/* Summary */}

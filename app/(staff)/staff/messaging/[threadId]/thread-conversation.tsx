@@ -191,7 +191,7 @@ export function ThreadConversation({
           {joined ? (
             <p className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
               <BellRing className="h-3.5 w-3.5" />
-              You joined this chat — you&apos;ll be notified of new messages.
+              Subscribed — you&apos;ll be notified of new messages in this chat.
             </p>
           ) : null}
           <ChatComposer
@@ -206,8 +206,9 @@ export function ThreadConversation({
         <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-2">
             <Eye className="h-4 w-4 shrink-0" />
-            View only — you&rsquo;re not assigned to this client.
+            View only — you&rsquo;re not subscribed to this chat.
           </span>
+          {/* R8 (H5): the unsubscribed coach's way in — clear "Subscribe". */}
           {canJoin ? (
             <Button
               variant="brand"
@@ -216,7 +217,7 @@ export function ThreadConversation({
               onClick={() => setJoined(true)}
             >
               <BellRing className="h-3.5 w-3.5" />
-              Join chat &amp; get notified
+              Subscribe
             </Button>
           ) : null}
         </div>

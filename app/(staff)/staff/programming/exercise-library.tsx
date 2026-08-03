@@ -115,13 +115,22 @@ const EMPTY_DRAFT: Draft = {
  * Vimeo links (C30), compact single-line rows (C31). All edits are local
  * state — demo only.
  */
-export function ExerciseLibrary() {
+export function ExerciseLibrary({
+  isAdmin = false,
+}: {
+  /** R8 (G5) — deleting exercises/tags is admin-only. */
+  isAdmin?: boolean;
+}) {
   const [list, setList] = useState<LibraryExercise[]>(exerciseLibrary);
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
-  const [sort, setSort] = useState<ColumnSort | null>(null);
+  // R8 (G5) — the library opens sorted by Name.
+  const [sort, setSort] = useState<ColumnSort | null>({ key: "name", dir: 1 });
   const [draft, setDraft] = useState<Draft | null>(null);
+  /** R8 (G5) — two-step deletes: the id/tag waiting on its confirm click. */
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteTag, setConfirmDeleteTag] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -204,7 +213,15 @@ export function ExerciseLibrary() {
       ),
     );
     setActiveTags((prev) => prev.filter((t) => t !== tag));
+    setConfirmDeleteTag(null);
     announce(`Tag "${tag}" deleted from every exercise.`);
+  }
+
+  /** R8 (G5) — admin-only delete, reached only through the two-step confirm. */
+  function deleteExercise(ex: LibraryExercise) {
+    setList((prev) => prev.filter((e) => e.id !== ex.id));
+    setConfirmDeleteId(null);
+    announce(`"${ex.name}" deleted from the library.`);
   }
 
   /** C27 — copy an AOS Global exercise into the gym's own library. */
@@ -324,7 +341,7 @@ export function ExerciseLibrary() {
             aria-expanded={tagMenuOpen}
             className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/50 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            Tags
+            Filter by Tags
             <ChevronDown
               className={cn("h-3 w-3 transition-transform", tagMenuOpen && "rotate-180")}
             />
@@ -354,15 +371,28 @@ export function ExerciseLibrary() {
                           {count}
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        aria-label={`Delete tag ${tag}`}
-                        title={`Delete "${tag}" from every exercise`}
-                        onClick={() => deleteTag(tag)}
-                        className="text-muted-foreground/70 transition-colors hover:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {/* R8 (G5) — tag delete: admin-only, two-step confirm */}
+                      {isAdmin ? (
+                        confirmDeleteTag === tag ? (
+                          <button
+                            type="button"
+                            onClick={() => deleteTag(tag)}
+                            className="shrink-0 rounded-md bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground transition-opacity hover:opacity-90"
+                          >
+                            Confirm delete
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={`Delete tag ${tag}`}
+                            title={`Delete "${tag}" from every exercise — asks to confirm`}
+                            onClick={() => setConfirmDeleteTag(tag)}
+                            className="text-muted-foreground/70 transition-colors hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )
+                      ) : null}
                     </span>
                   );
                 })}
@@ -373,7 +403,9 @@ export function ExerciseLibrary() {
                 ) : null}
               </div>
               <p className="px-1.5 pb-1 pt-1.5 text-[0.65rem] text-muted-foreground">
-                Click to filter · trash deletes a tag everywhere.
+                {isAdmin
+                  ? "Click to filter · trash deletes a tag everywhere (asks first)."
+                  : "Click to filter."}
               </p>
             </div>
           ) : null}
@@ -419,7 +451,7 @@ export function ExerciseLibrary() {
                   onSort={toggleSort}
                   className="w-32"
                 />
-                <TableHead className="w-12">
+                <TableHead className="w-24">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
@@ -446,6 +478,8 @@ export function ExerciseLibrary() {
                       ) : null}
                     </span>
                   </TableCell>
+                  {/* R8 (G5) — icon only when a video exists; blank otherwise
+                      so the sortable column surfaces the gaps */}
                   <TableCell className="py-2 text-center">
                     {ex.videoUrl ? (
                       <a
@@ -458,9 +492,7 @@ export function ExerciseLibrary() {
                       >
                         <Video className="h-4 w-4" />
                       </a>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    ) : null}
                   </TableCell>
                   <TableCell className="whitespace-nowrap py-2 text-sm">
                     {ex.referenceMax ?? (
@@ -478,20 +510,50 @@ export function ExerciseLibrary() {
                     {ex.createdBy}
                   </TableCell>
                   <TableCell className="py-2 text-right">
-                    {ex.createdBy === GLOBAL_COMPANY ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateToMine(ex);
-                        }}
-                        title="Duplicate to my library"
-                        aria-label={`Duplicate ${ex.name} to the ${MY_COMPANY} library`}
-                        className="inline-flex text-muted-foreground transition-colors hover:text-brand-ink"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    ) : null}
+                    <span className="inline-flex items-center justify-end gap-2">
+                      {ex.createdBy === GLOBAL_COMPANY ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateToMine(ex);
+                          }}
+                          title="Duplicate to my library"
+                          aria-label={`Duplicate ${ex.name} to the ${MY_COMPANY} library`}
+                          className="inline-flex text-muted-foreground transition-colors hover:text-brand-ink"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                      {/* R8 (G5) — delete: admins only, two-step confirm */}
+                      {isAdmin ? (
+                        confirmDeleteId === ex.id ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteExercise(ex);
+                            }}
+                            className="shrink-0 rounded-md bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground transition-opacity hover:opacity-90"
+                          >
+                            Confirm delete
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(ex.id);
+                            }}
+                            title="Delete this exercise — asks to confirm"
+                            aria-label={`Delete ${ex.name} from the library`}
+                            className="inline-flex text-muted-foreground transition-colors hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )
+                      ) : null}
+                    </span>
                   </TableCell>
                 </TableRow>
               ))}

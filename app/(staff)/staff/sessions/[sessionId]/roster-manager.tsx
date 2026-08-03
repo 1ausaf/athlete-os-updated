@@ -89,10 +89,10 @@ export function RosterManager({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg">Roster</h2>
+        <h2 className="text-lg">Attendees</h2>
         <span className="h-px flex-1 bg-border" />
         <span className="text-xs text-muted-foreground">
-          {rows.length} client{rows.length === 1 ? "" : "s"}
+          {rows.length} member{rows.length === 1 ? "" : "s"}
         </span>
 
         {/* S5: searchable add — type to filter, click a result to book */}
@@ -114,8 +114,8 @@ export function RosterManager({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setSearchOpen(false);
               }}
-              placeholder="Add client — type to search"
-              aria-label="Search clients to add to this session"
+              placeholder="Add member — type to search"
+              aria-label="Search members to add to this session"
               className="w-48 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground"
             />
           </label>
@@ -125,7 +125,7 @@ export function RosterManager({
                 <p className="px-2.5 py-2 text-xs text-muted-foreground">
                   {available.length === 0
                     ? "Everyone is already on this session."
-                    : `No clients match “${query}”`}
+                    : `No members match “${query}”`}
                 </p>
               ) : (
                 matches.map((a) => (
@@ -165,7 +165,7 @@ export function RosterManager({
 
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
-          No clients booked on this session yet — add one above.
+          No members booked on this session yet — add one above.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -185,7 +185,7 @@ export function RosterManager({
         </div>
       )}
       <p className="text-[0.7rem] text-muted-foreground">
-        Added clients land as pending — approve to confirm the spot. Saves
+        Added members land as pending — approve to confirm the spot. Saves
         locally in this demo.
       </p>
     </section>

@@ -282,24 +282,25 @@ export function ProfileForm({
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-muted-foreground" aria-hidden />
-            <h3 className="text-base">Socials & links</h3>
+            <h3 className="text-base">Social Media Links</h3>
             <span className="ml-auto text-xs text-muted-foreground">
               So the staff can find and share your highlights
             </span>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
+            {/* Round 8 (M42): the app supplies the @ — typed ones strip */}
             <Field label="Instagram" icon={Instagram}>
-              <Input
-                placeholder="@handle"
+              <HandleInput
+                ariaLabel="Instagram handle"
                 value={p.instagram ?? ""}
-                onChange={(e) => set("instagram", e.target.value || undefined)}
+                onChange={(v) => set("instagram", v || undefined)}
               />
             </Field>
             <Field label="X / Twitter" icon={AtSign}>
-              <Input
-                placeholder="@handle"
+              <HandleInput
+                ariaLabel="X / Twitter handle"
                 value={p.twitter ?? ""}
-                onChange={(e) => set("twitter", e.target.value || undefined)}
+                onChange={(v) => set("twitter", v || undefined)}
               />
             </Field>
             <Field label="HUDL profile" icon={Link2}>
@@ -413,6 +414,39 @@ export function ProfileForm({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Round 8 (M42): social handle input — a fixed @ adornment inside the field,
+ * and any @ the user types is stripped so the stored handle stays bare.
+ */
+function HandleInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (bare: string) => void;
+  ariaLabel: string;
+}) {
+  const bare = value.replace(/^@+/, "");
+  return (
+    <div className="relative">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+      >
+        @
+      </span>
+      <Input
+        aria-label={ariaLabel}
+        placeholder="handle"
+        className="pl-7"
+        value={bare}
+        onChange={(e) => onChange(e.target.value.replace(/^@+/, ""))}
+      />
     </div>
   );
 }

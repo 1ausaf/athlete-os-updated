@@ -41,9 +41,12 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
   const confirmed = session.roster.filter((r) => r.state === "confirmed").length;
   const pending = session.roster.filter((r) => r.state === "pending").length;
   const fillPct = Math.round((session.roster.length / session.capacity) * 100);
+  const coachNames = session.coaches?.length
+    ? session.coaches
+    : [session.coach];
 
-  // Every athlete the add-client picker can offer (C33) — active clients
-  // plus anyone already rostered, serialized down to what the row shows.
+  // Every athlete the add-member picker can offer (C33) — active members
+  // plus anyone already booked, serialized down to what the row shows.
   const rosterIds = new Set(session.roster.map((r) => r.athleteId));
   const pool: RosterAthlete[] = athletes
     .filter((a) => a.status === "active" || rosterIds.has(a.id))
@@ -69,7 +72,7 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Session"
+        eyebrow="Team Workspace · Booking"
         title={session.title}
         description={fmtDay(session.startsAt)}
         actions={
@@ -81,23 +84,59 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
                 }
               >
                 <Clipboard className="h-4 w-4" />
-                Huddle brief
+                Briefings
               </Link>
             </Button>
             <Button asChild variant="ghost" size="sm">
               <Link href={"/staff/sessions" as Route}>
                 <ArrowLeft className="h-4 w-4" />
-                All sessions
+                All bookings
               </Link>
             </Button>
           </>
         }
       />
 
-      {/* Header card */}
-      <Card className="overflow-hidden bg-brand-sheen">
-        <CardContent className="flex flex-col gap-5 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+      {/* B3 — two columns on lg: attendees + waitlist LEFT, summary RIGHT */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <div className="flex flex-col gap-6">
+          {/* Attendees — add / remove / approve (C33) */}
+          <RosterManager initialRoster={session.roster} pool={pool} />
+
+          {/* Waitlist */}
+          {waitlist.length > 0 ? (
+            <section className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg">Waitlist</h2>
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">
+                  {waitlist.length} waiting
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {waitlist.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                  >
+                    <AthleteAvatar initials={a.initials} hue={a.hue} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold">{a.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {a.sport} · {a.frequency}
+                      </div>
+                    </div>
+                    <Pill tone="info">Waitlisted</Pill>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        {/* Summary — capacity, timing, location, coach, description */}
+        <Card className="overflow-hidden bg-brand-sheen">
+          <CardContent className="flex flex-col gap-5 p-6">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="brand" dot>
@@ -107,7 +146,7 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
                   capacity {session.capacity}
                 </span>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-4 w-4" />
                   {fmtTime(session.startsAt)}–{fmtTime(session.endsAt)}
@@ -118,65 +157,41 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <UserCog className="h-4 w-4" />
-                  {session.coach}
+                  {coachNames.join(", ")}
                 </span>
               </div>
             </div>
-          </div>
-          <div className="max-w-md">
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Capacity</span>
-              <span className="tnum font-semibold">
-                {session.roster.length}
-                <span className="text-muted-foreground">
-                  /{session.capacity}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Capacity</span>
+                <span className="tnum font-semibold">
+                  {session.roster.length}
+                  <span className="text-muted-foreground">
+                    /{session.capacity}
+                  </span>
                 </span>
-              </span>
-            </div>
-            <Progress value={fillPct} tone={fillPct >= 100 ? "warning" : "brand"} />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Pill tone="success">{confirmed} confirmed</Pill>
-              {pending > 0 ? <Pill tone="warning">{pending} pending</Pill> : null}
-              {session.waitlist.length > 0 ? (
-                <Pill tone="info">{session.waitlist.length} waitlisted</Pill>
-              ) : null}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Roster — add / remove / approve (C33) */}
-      <RosterManager initialRoster={session.roster} pool={pool} />
-
-      {/* Waitlist */}
-      {waitlist.length > 0 ? (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg">Waitlist</h2>
-            <span className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">
-              {waitlist.length} waiting
-            </span>
-          </div>
-          <div className="flex flex-col gap-2">
-            {waitlist.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
-              >
-                <AthleteAvatar initials={a.initials} hue={a.hue} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">{a.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {a.sport} · {a.frequency}
-                  </div>
-                </div>
-                <Pill tone="info">Waitlisted</Pill>
               </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+              <Progress
+                value={fillPct}
+                tone={fillPct >= 100 ? "warning" : "brand"}
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Pill tone="success">{confirmed} confirmed</Pill>
+                {pending > 0 ? (
+                  <Pill tone="warning">{pending} pending</Pill>
+                ) : null}
+                {session.waitlist.length > 0 ? (
+                  <Pill tone="info">{session.waitlist.length} waitlisted</Pill>
+                ) : null}
+              </div>
+            </div>
+            <p className="border-t border-border/60 pt-4 text-sm text-muted-foreground">
+              {session.type} block — programmed work with on-floor coaching from{" "}
+              {coachNames.join(" and ")}.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

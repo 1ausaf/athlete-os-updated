@@ -1,17 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { ClipboardCheck, PenLine } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, ClipboardCheck } from "lucide-react";
 
 import { AssessmentForm } from "@/components/assessment/assessment-form";
 import { Button } from "@/components/ui/button";
+import { Pill } from "@/components/ui/pill";
 import type { Assessment } from "@/lib/demo/assessment";
 import type { Athlete } from "@/lib/demo/data";
+import { cn } from "@/lib/utils";
 
 /**
- * Coach-side wrapper: an existing assessment opens read-only with an Edit
- * switch; a blank one starts behind a "Start assessment" call-to-action and
- * goes straight into edit mode (check-on/check-off during testing).
+ * Round 8 (C14): the Remapping editor is ALWAYS editable — every field change
+ * auto-saves (the "Auto-saved ✓" chip flashes on each patch) and the one
+ * button at the very bottom completes the assessment ("Update Assessment" on
+ * later visits). The form's internal Save bar is hidden — this wrapper's
+ * sticky bar replaces it.
  */
 export function AssessmentEditor({
   initial,
@@ -22,10 +26,34 @@ export function AssessmentEditor({
   athlete: Athlete;
   hasExisting: boolean;
 }) {
-  const [mode, setMode] = useState<"view" | "edit">(
-    hasExisting ? "view" : "edit",
-  );
   const [started, setStarted] = useState(hasExisting);
+  const [completed, setCompleted] = useState(hasExisting);
+  const [autoFlash, setAutoFlash] = useState(false);
+  const [doneFlash, setDoneFlash] = useState(false);
+  const autoTimer = useRef<number | null>(null);
+  const doneTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (autoTimer.current) window.clearTimeout(autoTimer.current);
+      if (doneTimer.current) window.clearTimeout(doneTimer.current);
+    },
+    [],
+  );
+
+  /** C14 — each field change flashes the always-on auto-save indicator. */
+  function bumpAutosave() {
+    setAutoFlash(true);
+    if (autoTimer.current) window.clearTimeout(autoTimer.current);
+    autoTimer.current = window.setTimeout(() => setAutoFlash(false), 1400);
+  }
+
+  function handleComplete() {
+    setCompleted(true);
+    setDoneFlash(true);
+    if (doneTimer.current) window.clearTimeout(doneTimer.current);
+    doneTimer.current = window.setTimeout(() => setDoneFlash(false), 3000);
+  }
 
   if (!started) {
     return (
@@ -37,7 +65,8 @@ export function AssessmentEditor({
           </p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground text-pretty">
             Run the Remapping Assessment on the floor and check things off as
-            you test — the strength ladders compute themselves.
+            you test — every entry auto-saves and the strength ladders compute
+            themselves.
           </p>
         </div>
         <Button variant="brand" onClick={() => setStarted(true)}>
@@ -50,25 +79,48 @@ export function AssessmentEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      {hasExisting ? (
-        <div className="flex items-center justify-end">
-          <Button
-            variant={mode === "edit" ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => setMode((m) => (m === "edit" ? "view" : "edit"))}
+      {/* Always editable (C14). The wrapper captures every keystroke and
+          toggle to flash "Auto-saved"; completion happens in the bar below,
+          so the form's own save bar stays off via hideSaveBar. */}
+      <div
+        onInputCapture={bumpAutosave}
+        onClickCapture={(e) => {
+          if ((e.target as HTMLElement).closest("button")) bumpAutosave();
+        }}
+      >
+        <AssessmentForm
+          initial={initial}
+          athlete={athlete}
+          mode="edit"
+          hideSaveBar
+        />
+      </div>
+
+      {/* C14 — the ONE action, pinned at the very bottom */}
+      <div className="sticky bottom-4 z-30 flex items-center gap-3 self-center rounded-xl border border-border bg-card/95 px-4 py-2.5 shadow-raised backdrop-blur">
+        {doneFlash ? (
+          <Pill tone="success" icon={<CheckCircle2 className="h-3.5 w-3.5" />}>
+            Assessment saved to {athlete.name.split(" ")[0]}&apos;s record
+          </Pill>
+        ) : (
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-xs transition-colors",
+              autoFlash
+                ? "font-semibold text-success"
+                : "text-muted-foreground",
+            )}
+            aria-live="polite"
           >
-            <PenLine className="h-4 w-4" />
-            {mode === "edit" ? "Done editing" : "Edit assessment"}
-          </Button>
-        </div>
-      ) : null}
-      <AssessmentForm
-        key={mode}
-        initial={initial}
-        athlete={athlete}
-        mode={mode}
-        onSaved={() => setMode("view")}
-      />
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+            Auto-saved ✓
+          </span>
+        )}
+        <Button variant="brand" size="sm" onClick={handleComplete}>
+          <ClipboardCheck className="h-4 w-4" />
+          {completed ? "Update Assessment" : "Complete Assessment"}
+        </Button>
+      </div>
     </div>
   );
 }

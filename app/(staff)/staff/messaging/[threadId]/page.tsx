@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Megaphone } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
-import { RuleOfTwoBanner } from "@/components/app/rule-of-two";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -64,7 +63,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
     // stretches, scrolls internally, and the composer pins at the bottom.
     <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-9rem)]">
       <PageHeader
-        eyebrow="Team Workspace · Messaging"
+        eyebrow="Team Workspace · Chats"
         title={thread.subject}
         description={`Started ${fmtDay(thread.messages[0]?.at ?? thread.updatedAt)} · ${thread.participants
           .map((p) => p.name)
@@ -73,22 +72,20 @@ export default async function StaffThreadPage({ params }: PageProps) {
           <Button asChild variant="ghost" size="sm">
             <Link href={"/staff/messaging" as Route}>
               <ArrowLeft className="h-4 w-4" />
-              Inbox
+              Chats
             </Link>
           </Button>
         }
       />
 
+      {/* R8 (H3): the Rule-of-Two banner is gone — the admin auto-adds
+          parents on every minor's chat, so there's nothing to police here. */}
       {isBroadcast ? (
         <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/[0.06] px-3 py-2 text-xs text-info">
           <Megaphone className="h-4 w-4 shrink-0" />
           Broadcast announcement — sent to all members. Replies route privately
           to staff.
         </div>
-      ) : thread.involvesMinor ? (
-        // X6 — only the minor Rule-of-Two banner remains; the adult
-        // "direct 1:1 permitted" notice is gone.
-        <RuleOfTwoBanner participants={thread.participants} />
       ) : null}
 
       <Card className="flex min-h-0 flex-1 flex-col">

@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Undo2,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 
@@ -127,8 +128,12 @@ export function SessionBooking({
   frequencyPerWeek,
   bookedThisWeek,
   frequencyLabel,
+  planName,
   overdue,
   lockedTypes = [],
+  isParentView = false,
+  bookKids = [],
+  activeKidId,
 }: {
   /** 12 weeks of bookable times from the real weekly schedule. */
   slots: BookableSlot[];
@@ -140,13 +145,35 @@ export function SessionBooking({
   bookedThisWeek: number;
   /** e.g. "3×/week" */
   frequencyLabel: string;
+  /** Round 8 (M23): the plan line lives in the cadence card now. */
+  planName?: string;
   /** Billing past due — booking paused (FR-11). */
   overdue: boolean;
   /** Session types THIS athlete can't book until staff grant access (A12). */
   lockedTypes?: string[];
+  /** Round 8 (P4): a parent is booking — multi-kid checkboxes appear. */
+  isParentView?: boolean;
+  /** The parent's kids — pick which ones a booking applies to (P4). */
+  bookKids?: { id: string; name: string }[];
+  /** The currently managed child — ticked by default (P4). */
+  activeKidId?: string;
 }) {
   const thisWeekKey = weekStartMs(new Date());
   const lockedSet = useMemo(() => new Set(lockedTypes), [lockedTypes]);
+  /** Round 8 (P4): parents with 2+ kids choose who each booking is for. */
+  const multiKid = isParentView && bookKids.length >= 2;
+  const [bookFor, setBookFor] = useState<ReadonlySet<string>>(
+    () => new Set(activeKidId ? [activeKidId] : []),
+  );
+
+  function toggleKid(id: string) {
+    setBookFor((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const groups = useMemo<WeekGroup[]>(() => {
     const map = new Map<number, BookableSlot[]>();
@@ -335,6 +362,15 @@ export function SessionBooking({
 
   function bookSelected() {
     if (overdue || selectedSlots.length === 0) return;
+    // P4: a parent must tick at least one kid to book for.
+    if (multiKid && bookFor.size === 0) return;
+    const tickedKids = multiKid
+      ? bookKids.filter((k) => bookFor.has(k.id))
+      : [];
+    const forNames =
+      tickedKids.length > 0
+        ? ` for ${tickedKids.map((k) => k.name.split(" ")[0]).join(" + ")}`
+        : "";
     const releasing = rescheduling;
     const newBookings: MyBooking[] = [];
     const takenStarts = new Set(bookedStarts);
@@ -352,11 +388,15 @@ export function SessionBooking({
         });
       }
     }
-    setBookings((prev) =>
-      [...prev.filter((b) => b.id !== releasing?.id), ...newBookings].sort(
-        byStart,
-      ),
-    );
+    // P4: the visible list is the managed child's calendar — update it only
+    // when that child is among the ticked kids.
+    if (!multiKid || (activeKidId && bookFor.has(activeKidId))) {
+      setBookings((prev) =>
+        [...prev.filter((b) => b.id !== releasing?.id), ...newBookings].sort(
+          byStart,
+        ),
+      );
+    }
     const patternSize = selectedSlots.length;
     const weeks = Math.max(1, repeatWeeks);
     setSelected(new Set());
@@ -366,10 +406,10 @@ export function SessionBooking({
     showFlash({
       tone: "success",
       text: releasing
-        ? `Rescheduled — ${n} new ${n === 1 ? "time" : "times"} booked and ${fmtDay(releasing.startsAt)} · ${fmtTime(releasing.startsAt)} released.`
+        ? `Rescheduled — ${n} new ${n === 1 ? "time" : "times"} booked${forNames} and ${fmtDay(releasing.startsAt)} · ${fmtTime(releasing.startsAt)} released.`
         : weeks > 1
-          ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total) — see them in the Booked tab.`
-          : `${n} ${n === 1 ? "session" : "sessions"} booked — see them in the Booked tab.`,
+          ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total)${forNames} — see them in My Bookings.`
+          : `Booked ${n} ${n === 1 ? "session" : "sessions"}${forNames} — see them in My Bookings.`,
     });
   }
 
@@ -470,12 +510,17 @@ export function SessionBooking({
         </Card>
       ) : null}
 
-      {/* Three tabs: Book / Booked / Past — Title Case + URL-backed (R7) */}
+      {/* Three tabs — round 8 (M21): Booked → My Bookings, Past Sessions →
+          Booking History. URL ?tab= values stay book/booked/past. */}
       <TabBar<SessionsTab>
         tabs={[
           { value: "book", label: "Book Sessions" },
-          { value: "booked", label: "Booked", count: bookings.length },
-          { value: "past", label: "Past Sessions", count: pastSessions.length },
+          { value: "booked", label: "My Bookings", count: bookings.length },
+          {
+            value: "past",
+            label: "Booking History",
+            count: pastSessions.length,
+          },
         ]}
         active={tab}
         onSelect={selectTab}
@@ -483,7 +528,9 @@ export function SessionBooking({
 
       {tab === "book" ? (
       <>
-      {/* Weekly cadence meter (FR-10) */}
+      {/* Weekly cadence meter (FR-10) — round 8 (M22/M23): no red pill, the
+          count sits plain at the right end of the meter line and the plan
+          line lives here instead of the page header. */}
       <Card className="bg-brand-sheen">
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -491,13 +538,19 @@ export function SessionBooking({
               <CalendarClock className="h-5 w-5 text-brand-ink" aria-hidden />
               <span className="eyebrow">Weekly cadence</span>
             </div>
-            <Pill tone={weekFull ? "success" : "brand"} dot>
-              <span className="tnum">
-                {effectiveThisWeek} of {frequencyPerWeek} this week
-              </span>
-            </Pill>
+            {planName ? (
+              <span className="text-xs text-muted-foreground">{planName}</span>
+            ) : null}
           </div>
-          <Progress value={freqPct} tone={weekFull ? "success" : "brand"} />
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Booked this week</span>
+              <span className="tnum font-semibold text-foreground">
+                {effectiveThisWeek} of {frequencyPerWeek}
+              </span>
+            </div>
+            <Progress value={freqPct} tone={weekFull ? "success" : "brand"} />
+          </div>
           <p className="text-xs text-muted-foreground text-pretty">
             {overdue
               ? "Booking is paused while your balance is past due — clear it from Billing to resume."
@@ -511,16 +564,16 @@ export function SessionBooking({
       </>
       ) : null}
 
-      {/* Your booked sessions — cancel / reschedule (Booked tab) */}
+      {/* My Booked Sessions — cancel / reschedule (My Bookings tab) */}
       {tab === "booked" ? (
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg">Your booked sessions</h2>
+          <h2 className="text-lg">My Booked Sessions</h2>
           <Pill tone="neutral">{bookings.length}</Pill>
         </div>
         {bookings.length === 0 ? (
           <Empty>
-            Nothing booked yet — flip to the Book sessions tab, check the
+            Nothing booked yet — flip to the Book Sessions tab, check the
             times you want and book them all at once.
           </Empty>
         ) : (
@@ -590,11 +643,11 @@ export function SessionBooking({
       </section>
       ) : null}
 
-      {/* Past Sessions — attendance history w/ range filter (R7-10) */}
+      {/* Booking History — attendance history w/ range filter (R7-10) */}
       {tab === "past" ? (
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg">Past Sessions</h2>
+          <h2 className="text-lg">My Booking History</h2>
           {/* Like analytics: 30 days default, longer ranges a tap away */}
           <div className="ml-auto flex items-center rounded-lg border border-border bg-surface p-0.5">
             {PAST_RANGES.map((r) => (
@@ -622,6 +675,11 @@ export function SessionBooking({
           {visiblePast.some((p) => !p.attended)
             ? ` · ${visiblePast.filter((p) => !p.attended).length} no-show`
             : ""}
+        </p>
+        {/* M27: attendance defaults to Attended — no-shows are the exception */}
+        <p className="text-xs text-muted-foreground text-pretty">
+          Every session counts as attended unless your coach marks it a
+          no-show — attendance is marked by your coach.
         </p>
         {visiblePast.length === 0 ? (
           <Empty>
@@ -819,13 +877,58 @@ export function SessionBooking({
               >
                 Clear
               </Button>
-              <Button type="button" variant="brand" size="sm" onClick={bookSelected}>
+              <Button
+                type="button"
+                variant="brand"
+                size="sm"
+                disabled={multiKid && bookFor.size === 0}
+                onClick={bookSelected}
+              >
                 <CheckCheck className="h-4 w-4" aria-hidden />
                 Book {selected.size} selected{" "}
                 {selected.size === 1 ? "session" : "sessions"}
                 {repeatWeeks > 1 ? ` × ${repeatWeeks} wks` : ""}
               </Button>
             </div>
+            {/* Round 8 (P4): parents pick WHICH KIDS the booking is for */}
+            {multiKid ? (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+                <Users
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Book for:
+                </span>
+                {bookKids.map((k) => {
+                  const ticked = bookFor.has(k.id);
+                  return (
+                    <label
+                      key={k.id}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                        ticked
+                          ? "border-brand/40 bg-brand/10 text-foreground"
+                          : "border-border bg-surface/60 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 shrink-0 accent-[hsl(var(--brand))]"
+                        checked={ticked}
+                        onChange={() => toggleKid(k.id)}
+                      />
+                      {k.name.split(" ")[0]}
+                    </label>
+                  );
+                })}
+                {bookFor.size === 0 ? (
+                  <span className="text-[0.7rem] text-warning">
+                    Tick at least one athlete
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {/* Repeat the ticked weekday/time pattern for N weeks (A10) */}
             <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
               <Repeat2

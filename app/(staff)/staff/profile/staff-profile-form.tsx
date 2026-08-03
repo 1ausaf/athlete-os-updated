@@ -6,9 +6,11 @@ import {
   Bell,
   Camera,
   CheckCircle2,
+  HeartPulse,
   Paperclip,
   Phone,
   Plus,
+  RefreshCw,
   Save,
   ShieldCheck,
 } from "lucide-react";
@@ -38,13 +40,18 @@ function certStatusFor(expiresIso: string): StaffCertification["status"] {
 }
 
 /**
- * The coach's own profile ("we're missing the Profile tab" on the coaching
- * side): contact details + address, bio + photo, notification preferences,
- * and their certification / vulnerable-sector records — self-service.
- * Round 6: full-width two-column layout (F1), Address fields (F3) and a
- * self-serve certification upload (F4).
+ * The coach's own profile — self-service contact, bio, notifications and
+ * records. Round 8: editable first/last/title/designations with a live
+ * "Coach First Last" preview (S2), a 7-row bio (S3), an emergency-contact
+ * section (S4) and the reordered Certifications & Records card with
+ * expired-cert renewal (S5).
  */
 export function StaffProfileForm({ member }: { member: StaffMember }) {
+  // S2 — identity fields, seeded from the staff record.
+  const [firstName, setFirstName] = useState(member.firstName);
+  const [lastName, setLastName] = useState(member.lastName);
+  const [title, setTitle] = useState(member.title);
+  const [designations, setDesignations] = useState(member.designations ?? "");
   const [phone, setPhone] = useState(member.phone);
   const [email, setEmail] = useState(member.email);
   const [bio, setBio] = useState(member.bio);
@@ -54,10 +61,16 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const [province, setProvince] = useState("ON");
   const [postal, setPostal] = useState("M6R 1X3");
   const [country, setCountry] = useState("Canada");
+  // S4 — emergency contact, seeded when the record has one.
+  const [ecName, setEcName] = useState(member.emergencyContact?.name ?? "");
+  const [ecRelation, setEcRelation] = useState(
+    member.emergencyContact?.relation ?? "",
+  );
+  const [ecPhone, setEcPhone] = useState(member.emergencyContact?.phone ?? "");
   const [push, setPush] = useState(member.notifications.push);
   const [emailNotif, setEmailNotif] = useState(member.notifications.email);
   const [saved, setSaved] = useState(false);
-  // F4 — self-serve certification upload.
+  // F4/S5 — self-serve certification upload + expired-cert renewal.
   const [certs, setCerts] = useState<StaffCertification[]>(
     member.certifications,
   );
@@ -65,26 +78,47 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const [certFile, setCertFile] = useState<string | null>(null);
   const [certExpiry, setCertExpiry] = useState("");
   const certFileRef = useRef<HTMLInputElement>(null);
+  const uploadPanelRef = useRef<HTMLDivElement>(null);
+
+  // S2 — the display name flips to "Coach First Last" once both names exist.
+  const displayName =
+    firstName.trim() && lastName.trim()
+      ? `Coach ${firstName.trim()} ${lastName.trim()}`
+      : member.name;
 
   function handleSave() {
     setSaved(true);
     window.setTimeout(() => setSaved(false), 3500);
   }
 
+  /** S5 — a new doc + expiry for an existing title replaces its status. */
   function addCertification() {
     const name = certTitle.trim();
     if (!name || !certExpiry) return;
-    setCerts((prev) => [
-      ...prev,
-      {
-        name,
-        expires: new Date(`${certExpiry}T12:00:00`).toISOString(),
-        status: certStatusFor(certExpiry),
-      },
-    ]);
+    const next: StaffCertification = {
+      name,
+      expires: new Date(`${certExpiry}T12:00:00`).toISOString(),
+      status: certStatusFor(certExpiry),
+    };
+    setCerts((prev) =>
+      prev.some((c) => c.name === name)
+        ? prev.map((c) => (c.name === name ? next : c))
+        : [...prev, next],
+    );
     setCertTitle("");
     setCertFile(null);
     setCertExpiry("");
+  }
+
+  /** S5 — "Update" on an expired row prefills the upload panel. */
+  function startRenewal(cert: StaffCertification) {
+    setCertTitle(cert.name);
+    setCertFile(null);
+    setCertExpiry("");
+    uploadPanelRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   }
 
   return (
@@ -93,31 +127,78 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
           right, so the page reads as wide as the member profile. */}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
-          {/* Identity + photo */}
+          {/* Identity + photo — editable names/title/designations (S2) */}
           <Card>
-            <CardContent className="flex flex-wrap items-center gap-4 p-5 sm:p-6">
-              <div className="relative">
-                <AthleteAvatar
-                  initials={member.initials}
-                  hue={member.hue}
-                  size="xl"
-                />
-                <button
-                  type="button"
-                  title="Upload photo (demo)"
-                  aria-label="Upload profile photo"
-                  className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
+            <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="relative">
+                  <AthleteAvatar
+                    initials={member.initials}
+                    hue={member.hue}
+                    size="xl"
+                  />
+                  <button
+                    type="button"
+                    title="Upload photo (demo)"
+                    aria-label="Upload profile photo"
+                    className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold">{displayName}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {title.trim()}
+                    {designations.trim() ? ` · ${designations.trim()}` : ""}
+                  </p>
+                  <Pill tone="neutral" className="mt-1.5 capitalize">
+                    {member.role}
+                  </Pill>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h3 className="text-lg font-bold">{member.name}</h3>
-                <p className="text-sm text-muted-foreground">{member.title}</p>
-                <Pill tone="neutral" className="mt-1.5 capitalize">
-                  {member.role}
-                </Pill>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    First name
+                  </Label>
+                  <Input
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Last name
+                  </Label>
+                  <Input
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Title</Label>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Designations
+                  </Label>
+                  <Input
+                    value={designations}
+                    placeholder="e.g. PhD, AASc, CSCS, R.Kin"
+                    onChange={(e) => setDesignations(e.target.value)}
+                  />
+                </div>
               </div>
+              <p className="text-[0.7rem] text-muted-foreground">
+                With both names filled in, you show up as &ldquo;Coach{" "}
+                {firstName.trim() || "First"} {lastName.trim() || "Last"}&rdquo;
+                across the app.
+              </p>
             </CardContent>
           </Card>
 
@@ -147,8 +228,9 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Bio</Label>
+                {/* S3 — roughly twice the writing room */}
                 <Textarea
-                  rows={2}
+                  rows={7}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   className="text-sm"
@@ -199,6 +281,50 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
               </div>
             </CardContent>
           </Card>
+
+          {/* S4 — emergency contact */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+              <div className="flex items-center gap-2">
+                <HeartPulse
+                  className="h-5 w-5 text-muted-foreground"
+                  aria-hidden
+                />
+                <h3 className="text-base">Emergency Contact</h3>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Name</Label>
+                  <Input
+                    value={ecName}
+                    placeholder="Full name"
+                    onChange={(e) => setEcName(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Relation
+                  </Label>
+                  <Input
+                    value={ecRelation}
+                    placeholder="e.g. Spouse, Parent"
+                    onChange={(e) => setEcRelation(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label className="text-xs text-muted-foreground">Phone</Label>
+                  <Input
+                    value={ecPhone}
+                    placeholder="+1 (416) 555-0000"
+                    onChange={(e) => setEcPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-[0.7rem] text-muted-foreground">
+                Who the office calls if something happens to you on the floor.
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -211,7 +337,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
               </div>
               {(
                 [
-                  ["Push notifications", push, setPush, "Session changes, new notes, PRs — straight to your phone."],
+                  // S1 — the push hint names what actually notifies you.
+                  ["Push notifications", push, setPush, "Chats you're subscribed to or actively involved in — straight to your phone."],
                   ["Email", emailNotif, setEmailNotif, "Daily digest + anything that needs a reply."],
                 ] as const
               ).map(([label, value, set, hint]) => (
@@ -237,7 +364,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
             </CardContent>
           </Card>
 
-          {/* Records + self-serve upload (F4) */}
+          {/* S5 — Certifications & Records: vulnerable-sector first, the cert
+              list next, the upload panel at the bottom. */}
           <Card>
             <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
               <div className="flex items-center gap-2">
@@ -245,36 +373,71 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   className="h-5 w-5 text-muted-foreground"
                   aria-hidden
                 />
-                <h3 className="text-base">Certifications &amp; records</h3>
+                <h3 className="text-base">Certifications &amp; Records</h3>
               </div>
+
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface/50 p-3 text-sm">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  Vulnerable-sector check
+                </span>
+                {member.vulnerableSector.status === "on-file" ? (
+                  <Pill tone="success">
+                    On file
+                    {member.vulnerableSector.uploadedAt
+                      ? ` · ${fmtDay(member.vulnerableSector.uploadedAt)}`
+                      : ""}
+                  </Pill>
+                ) : (
+                  <Pill tone="danger">Due — see the office</Pill>
+                )}
+              </div>
+
               <ul className="flex flex-col gap-2">
                 {certs.map((c, i) => (
                   <li
                     key={`${c.name}-${i}`}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface/50 p-3 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface/50 p-3 text-sm"
                   >
                     <span className="font-medium">{c.name}</span>
-                    <Pill
-                      tone={
-                        c.status === "valid"
-                          ? "success"
+                    <span className="flex items-center gap-1.5">
+                      <Pill
+                        tone={
+                          c.status === "valid"
+                            ? "success"
+                            : c.status === "expiring"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {c.status === "valid"
+                          ? `Valid · ${fmtDay(c.expires)}`
                           : c.status === "expiring"
-                            ? "warning"
-                            : "danger"
-                      }
-                    >
-                      {c.status === "valid"
-                        ? `Valid · ${fmtDay(c.expires)}`
-                        : c.status === "expiring"
-                          ? `Expiring · ${fmtDay(c.expires)}`
-                          : "Expired"}
-                    </Pill>
+                            ? `Expiring · ${fmtDay(c.expires)}`
+                            : "Expired"}
+                      </Pill>
+                      {/* S5 — renew an expired doc in place */}
+                      {c.status === "expired" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startRenewal(c)}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Update
+                        </Button>
+                      ) : null}
+                    </span>
                   </li>
                 ))}
               </ul>
 
-              {/* F4 — upload a new certification (title + file + expiry) */}
-              <div className="flex flex-col gap-2.5 rounded-lg border border-dashed border-border p-3">
+              {/* F4/S5 — upload panel, at the bottom; a matching title
+                  replaces the existing record's doc + status. */}
+              <div
+                ref={uploadPanelRef}
+                className="flex flex-col gap-2.5 rounded-lg border border-dashed border-border p-3"
+              >
                 <span className="text-xs font-semibold">
                   Upload certification
                 </span>
@@ -330,27 +493,19 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                     onClick={addCertification}
                   >
                     <Plus className="h-4 w-4" />
-                    Add
+                    {certs.some((c) => c.name === certTitle.trim())
+                      ? "Replace"
+                      : "Add"}
                   </Button>
                 </div>
+                {certs.some((c) => c.name === certTitle.trim()) ? (
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    A new doc + expiry for &ldquo;{certTitle.trim()}&rdquo;
+                    replaces its current status.
+                  </p>
+                ) : null}
               </div>
 
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface/50 p-3 text-sm">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                  Vulnerable-sector check
-                </span>
-                {member.vulnerableSector.status === "on-file" ? (
-                  <Pill tone="success">
-                    On file
-                    {member.vulnerableSector.uploadedAt
-                      ? ` · ${fmtDay(member.vulnerableSector.uploadedAt)}`
-                      : ""}
-                  </Pill>
-                ) : (
-                  <Pill tone="danger">Due — see the office</Pill>
-                )}
-              </div>
               <p className="text-[0.7rem] text-muted-foreground">
                 Uploads are reviewed by the owner on the Team page — renewals
                 are managed there.

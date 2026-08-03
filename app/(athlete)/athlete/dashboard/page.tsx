@@ -192,7 +192,7 @@ export default async function AthleteDashboardPage() {
             <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
               <Dumbbell className="h-5 w-5" />
             </span>
-            <span className="eyebrow">Your next sessions</span>
+            <span className="eyebrow">Your Next Training Sessions</span>
             <span className="ml-auto tnum text-xs text-muted-foreground">
               Day {athlete.program.day} of {athlete.program.totalDays} ·{" "}
               {athlete.program.phase}
@@ -264,7 +264,7 @@ export default async function AthleteDashboardPage() {
             <div className="ml-auto flex flex-wrap gap-2">
               <Button asChild variant="brand">
                 <Link href={"/athlete/training" as Route}>
-                  Start session
+                  Start Workout
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -280,7 +280,7 @@ export default async function AthleteDashboardPage() {
           <CardContent className="flex flex-col gap-4 p-5">
             <TileHeader
               icon={CalendarDays}
-              title="Upcoming sessions"
+              title="Upcoming Bookings"
               href={"/athlete/sessions" as Route}
               cta="Manage"
             />
@@ -367,7 +367,7 @@ export default async function AthleteDashboardPage() {
               icon={CreditCard}
               title="Billing"
               href={"/athlete/billing" as Route}
-              cta="Details"
+              cta="Manage"
             />
             <div className="flex items-center justify-between rounded-lg border border-border bg-surface/50 p-4">
               <div>

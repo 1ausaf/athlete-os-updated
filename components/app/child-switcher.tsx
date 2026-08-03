@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Users } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
@@ -69,6 +70,11 @@ function CountBadge({
  * Parent accounts manage multiple kids — this top-bar switcher flips the
  * whole athlete portal between them (A1). Round 5: "Managing" wording (P1)
  * and per-child red attention badges (P2 — unread messages + open invoices).
+ *
+ * Round 8 (P2 bug fix): the header wraps this control in an overflow-x-auto
+ * container, which CLIPS absolutely-positioned children — the dropdown
+ * "opened" but was invisible, so it read as broken. The menu now portals to
+ * <body> and positions off the trigger's rect, escaping the clip entirely.
  */
 export function ChildSwitcher({
   childrenOptions,
@@ -78,9 +84,43 @@ export function ChildSwitcher({
   activeId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [isPending, startTransition] = useTransition();
   const active =
     childrenOptions.find((c) => c.id === activeId) ?? childrenOptions[0];
+
+  function toggleOpen() {
+    if (!open) {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect) {
+        setMenuPos({
+          top: rect.bottom + 6,
+          right: Math.max(8, window.innerWidth - rect.right),
+        });
+      }
+    }
+    setOpen((v) => !v);
+  }
+
+  // Escape closes; any resize/scroll would drift the fixed menu — just close.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onMove = () => setOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
+  }, [open]);
 
   const attention = useMemo(() => {
     const map = new Map<string, ReturnType<typeof attentionFor>>();
@@ -97,8 +137,9 @@ export function ChildSwitcher({
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={`Managing ${active.name} — switch child`}
@@ -122,7 +163,8 @@ export function ChildSwitcher({
         />
       </button>
 
-      {open ? (
+      {open && menuPos
+        ? createPortal(
         <>
           <div
             className="fixed inset-0 z-40"
@@ -132,7 +174,8 @@ export function ChildSwitcher({
           <ul
             role="listbox"
             aria-label="Your athletes"
-            className="absolute right-0 top-full z-50 mt-1.5 w-60 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-raised"
+            style={{ top: menuPos.top, right: menuPos.right }}
+            className="fixed z-50 w-60 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-raised"
           >
             {childrenOptions.map((c) => {
               const a = attention.get(c.id);
@@ -170,8 +213,10 @@ export function ChildSwitcher({
               );
             })}
           </ul>
-        </>
-      ) : null}
+        </>,
+        document.body,
+      )
+        : null}
     </div>
   );
 }

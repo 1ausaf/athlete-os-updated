@@ -25,18 +25,18 @@ export default async function ParentProfilePage() {
         title="My Profile"
         description="Your own contact card — separate from your kids' profiles. What you save here auto-fills each child's parent section for the coaching staff."
       />
-      <div className="max-w-2xl">
-        <ParentProfileForm
-          account={account}
-          kids={ctx.children.map((c) => ({
-            id: c.id,
-            name: c.name,
-            initials: c.initials,
-            hue: c.hue,
-            sport: c.sport,
-          }))}
-        />
-      </div>
+      {/* Round 8 (P5): full width, like every other profile page — the form
+          lays its cards out in a two-column grid on large screens. */}
+      <ParentProfileForm
+        account={account}
+        kids={ctx.children.map((c) => ({
+          id: c.id,
+          name: c.name,
+          initials: c.initials,
+          hue: c.hue,
+          sport: c.sport,
+        }))}
+      />
     </div>
   );
 }
