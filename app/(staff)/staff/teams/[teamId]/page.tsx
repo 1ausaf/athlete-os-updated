@@ -58,7 +58,7 @@ export default async function StaffTeamProfilePage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Team"
+        eyebrow="Team Workspace · Team"
         title={
           <span className="flex items-center gap-3">
             <AthleteAvatar initials={group.initials} hue={group.hue} size="xl" />

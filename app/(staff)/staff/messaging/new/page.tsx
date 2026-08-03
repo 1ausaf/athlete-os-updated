@@ -22,7 +22,7 @@ export default async function StaffNewMessagingPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Staff Workspace · Messaging"
+          eyebrow="Team Workspace · Messaging"
           title="New thread"
           actions={
             <Button asChild variant="ghost" size="sm">
@@ -63,7 +63,7 @@ export default async function StaffNewMessagingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Messaging"
+        eyebrow="Team Workspace · Messaging"
         title="New thread"
         description="Start a conversation with an athlete. If the athlete is a minor, Safe-Sport Rule of Two requires a second adult before the thread can open — no admin override is permitted."
         actions={

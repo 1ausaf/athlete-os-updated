@@ -8,7 +8,6 @@ import { BrandLockup, WolfMark } from "@/components/brand/logo";
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PersonaSwitcher } from "@/components/app/persona-switcher";
 import { SidebarContext } from "@/components/shell/sidebar-context";
-import { AccentToggle } from "@/components/theme/accent-toggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -80,6 +79,15 @@ export function AppShell({
     label: p.label,
     blurb: p.blurb,
   }));
+
+  // Round 8 (M2): clicking the header identity opens the right profile.
+  const profileHref = (
+    role === "parent"
+      ? "/athlete/parent"
+      : role === "athlete"
+        ? "/athlete/profile"
+        : "/staff/profile"
+  ) as Parameters<typeof Link>[0]["href"];
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -186,9 +194,13 @@ export function AppShell({
           <div className="ml-auto flex min-w-0 items-center gap-2 overflow-x-auto">
             {headerExtra}
             <PersonaSwitcher current={role} options={personaOptions} />
-            <AccentToggle />
             <ThemeToggle />
-            <div className="hidden items-center gap-2.5 border-l border-border pl-3 sm:flex">
+            {/* Round 8 (M2): the name + avatar go to the profile. */}
+            <Link
+              href={profileHref}
+              className="hidden items-center gap-2.5 rounded-lg border-l border-border py-1 pl-3 pr-1 transition-colors hover:bg-accent/50 sm:flex"
+              title="Open your profile"
+            >
               <div className="flex min-w-0 flex-col text-right">
                 <span className="truncate text-sm font-semibold leading-tight">
                   {user.fullName}
@@ -202,7 +214,7 @@ export function AppShell({
                 hue={roleHue[user.role] ?? 220}
                 size="md"
               />
-            </div>
+            </Link>
           </div>
         </header>
 

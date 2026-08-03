@@ -20,7 +20,7 @@ export default async function AthleteSessionsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal · Schedule"
+        eyebrow="Member Portal · Schedule"
         title="Sessions"
         description="Book times across the next 12 weeks, keep an eye on what's booked, and count your past sessions — all in one place."
         actions={

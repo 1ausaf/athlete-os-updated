@@ -32,10 +32,10 @@ export function StaffNav({ user }: { user: AppUser }) {
       badge: programsDue || undefined,
     },
     { href: "/staff/programming", label: "Programming", icon: ClipboardList },
-    { href: "/staff/sessions", label: "Sessions", icon: CalendarRange },
+    { href: "/staff/sessions", label: "Bookings", icon: CalendarRange },
     {
       href: "/staff/messaging",
-      label: "Messaging",
+      label: "Chats",
       icon: MessagesSquare,
       badge: unread || undefined,
     },
@@ -64,7 +64,7 @@ export function StaffNav({ user }: { user: AppUser }) {
 
   return (
     <ShellNav
-      title="Staff Workspace"
+      title="Team Workspace"
       subtitle={`${user.fullName} · ${user.role}`}
       items={items}
     />

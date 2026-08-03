@@ -49,8 +49,11 @@ export function ChatComposer({
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [recording, setRecording] = useState(false);
+  /** Round 8 (M28): elapsed seconds shown while recording. */
+  const [recordSecs, setRecordSecs] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
   const recordStart = useRef<number>(0);
+  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -134,8 +137,19 @@ export function ChatComposer({
   function toggleRecord() {
     if (!recording) {
       recordStart.current = Date.now();
+      setRecordSecs(0);
       setRecording(true);
+      // Round 8 (M28): the button shows a live count-up while recording.
+      recordTimer.current = setInterval(() => {
+        setRecordSecs(
+          Math.round((Date.now() - recordStart.current) / 1000),
+        );
+      }, 500);
       return;
+    }
+    if (recordTimer.current) {
+      clearInterval(recordTimer.current);
+      recordTimer.current = null;
     }
     const secs = Math.max(
       1,
@@ -149,6 +163,8 @@ export function ChatComposer({
     ]);
     setRecording(false);
   }
+
+  const recordLabel = `${Math.floor(recordSecs / 60)}:${String(recordSecs % 60).padStart(2, "0")}`;
 
   return (
     <div
@@ -285,7 +301,7 @@ export function ChatComposer({
           {recording ? (
             <>
               <Square className="h-3.5 w-3.5 animate-pulse" />
-              Recording…
+              <span className="tnum">Recording {recordLabel}</span>
             </>
           ) : (
             <>

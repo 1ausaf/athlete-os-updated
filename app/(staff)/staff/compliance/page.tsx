@@ -49,7 +49,7 @@ export default async function StaffCompliancePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Safe-Sport"
+        eyebrow="Team Workspace · Safe-Sport"
         title="Compliance"
         description="Rule-of-Two coverage across every thread that includes a minor athlete. This is the flagship guardrail — enforced, logged, and impossible to override."
         actions={

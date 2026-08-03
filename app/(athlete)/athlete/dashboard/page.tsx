@@ -94,7 +94,7 @@ export default async function AthleteDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal"
+        eyebrow="Member Portal"
         title={`Good to see you, ${firstName}.`}
         description="Facility news and your chat up top — then training, sessions, wins and billing."
       />

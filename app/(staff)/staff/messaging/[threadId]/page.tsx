@@ -64,7 +64,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
     // stretches, scrolls internally, and the composer pins at the bottom.
     <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-9rem)]">
       <PageHeader
-        eyebrow="Staff Workspace · Messaging"
+        eyebrow="Team Workspace · Messaging"
         title={thread.subject}
         description={`Started ${fmtDay(thread.messages[0]?.at ?? thread.updatedAt)} · ${thread.participants
           .map((p) => p.name)

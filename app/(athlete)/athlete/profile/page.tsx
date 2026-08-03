@@ -28,7 +28,7 @@ export default async function AthleteProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal · Profile"
+        eyebrow="Member Portal · Profile"
         title={isParentView ? `${athlete.name} — profile` : "Your profile"}
         description="Keep your contact details, address and links current — the coaching staff works from what you save here."
       />

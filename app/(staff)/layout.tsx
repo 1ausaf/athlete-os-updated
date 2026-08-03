@@ -21,7 +21,7 @@ export default async function StaffWorkspaceLayout({
     <AppShell
       user={user}
       role={getDemoRole()}
-      workspaceLabel="Staff Workspace"
+      workspaceLabel="Team Workspace"
       nav={<StaffNav user={user} />}
       fullWidth
     >

@@ -18,7 +18,7 @@ export default async function AthletePortalLayout({
       user={ctx.user}
       role={getDemoRole()}
       workspaceLabel={
-        ctx.isParentView ? `Athlete Portal · ${ctx.athlete.name}` : "Athlete Portal"
+        ctx.isParentView ? `Member Portal · ${ctx.athlete.name}` : "Member Portal"
       }
       nav={<AthleteNav user={ctx.user} athlete={ctx.athlete} />}
       headerExtra={

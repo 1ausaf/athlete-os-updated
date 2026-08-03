@@ -17,7 +17,7 @@ export default async function StaffTeamPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Team"
+        eyebrow="Team Workspace · Team"
         title="Team & access"
         description="Who's on staff, what they can do, and whether their records are current. Access levels apply immediately; certifications and vulnerable-sector checks are tracked per coach."
       />

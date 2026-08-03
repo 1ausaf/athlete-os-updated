@@ -1775,7 +1775,7 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Golf Power — Phase 2",
     compliance: { filled: 3, total: 7 },
     lastSession: at(-2, 10),
-    focus: "Golf — rotational power",
+    focus: "Golf",
     coachNames: ["Coach Ellis", "Coach Nadia"],
     contacts: [
       { name: "Grant Whitfield", role: "Group organizer", phone: "+1 (416) 555-0139", email: "grant.w@example.com", active: true },
@@ -1796,7 +1796,7 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Sprint Development — Block A",
     compliance: { filled: 9, total: 14 },
     lastSession: at(-1, 17),
-    focus: "Track — sprint development",
+    focus: "Track",
     coachNames: ["Coach Clance", "Coach Ellis", "Coach Nadia"],
     contacts: [
       { name: "Angela Reyes", role: "Club manager", phone: "+1 (647) 555-0186", email: "angela@questtrack.ca", active: true },
@@ -1819,7 +1819,7 @@ export const trainingGroups: TrainingGroup[] = [
     program: "Off-season Baseball — Phase 1",
     compliance: { filled: 8, total: 12 },
     lastSession: at(-3, 16),
-    focus: "Baseball — off-season",
+    focus: "Baseball",
     coachNames: ["Coach Clance", "Coach Nadia"],
     contacts: [
       { name: "Rick Alvarez", role: "Program director", phone: "+1 (905) 555-0175", email: "rick@tigershpp.com", active: true },

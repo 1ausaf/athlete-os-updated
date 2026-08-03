@@ -38,7 +38,7 @@ export default async function StaffSessionsPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Sessions"
+        eyebrow="Team Workspace · Sessions"
         title="Sessions"
         description="Every block on the schedule — date, time, who has it, plus the bookings and briefing behind each one."
         actions={

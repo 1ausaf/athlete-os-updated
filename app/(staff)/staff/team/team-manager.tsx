@@ -183,9 +183,12 @@ export function TeamManager() {
   function addStaff() {
     const name = form.name.trim();
     if (!name) return;
+    const [first = "", ...rest] = name.split(/\s+/);
     const member: LocalStaff = {
       id: `staff-local-${Date.now()}`,
       name,
+      firstName: first,
+      lastName: rest.join(" "),
       initials: initialsFrom(name),
       hue: hueFrom(name),
       role: form.role,

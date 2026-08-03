@@ -76,7 +76,7 @@ export default async function StaffAthleteProfilePage({
     <div className="flex flex-col gap-6">
       {/* P1/P3 — avatar + name only; P4 — Assessment · Program · Nutrition · Chat */}
       <PageHeader
-        eyebrow="Staff Workspace · Member"
+        eyebrow="Team Workspace · Member"
         title={
           <span className="flex items-center gap-3">
             <AvatarUpload

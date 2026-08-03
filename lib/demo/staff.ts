@@ -78,28 +78,52 @@ export interface StaffCertification {
 export interface StaffMember {
   id: string;
   name: string;
+  /** Round 8 (S2): editable first/last — display becomes "Coach First Last". */
+  firstName: string;
+  lastName: string;
   initials: string;
   hue: number;
   role: StaffRole;
   accessLevel: StaffAccessLevel;
   title: string;
+  /** Round 8 (S2): typed-in designations — "PhD, AASc, CSCS, R.Kin…". */
+  designations?: string;
+  /**
+   * Round 8 (G2): the client's 5 coach levels — 1 intern, 2 access/no
+   * programming, 3 programming, 4–5 designations. Category/library management
+   * needs level 3+.
+   */
+  coachLevel?: 1 | 2 | 3 | 4 | 5;
   email: string;
   phone: string;
   bio: string;
+  /** Round 8 (S4): emergency contact for staff. */
+  emergencyContact?: { name: string; relation: string; phone: string };
   certifications: StaffCertification[];
   vulnerableSector: { status: "on-file" | "due"; uploadedAt?: string };
   notifications: { push: boolean; email: boolean };
+}
+
+/** Level-3+ coaches, coach managers, admins and owners manage programming
+ *  categories/libraries (round 8, G2). */
+export function canManageProgramLibraries(m: StaffMember): boolean {
+  if (m.role === "owner" || m.role === "admin" || m.role === "coach-manager")
+    return true;
+  return (m.coachLevel ?? 0) >= 3;
 }
 
 export const staffMembers: StaffMember[] = [
   {
     id: "owner-jeremy",
     name: "Jeremy Choi",
+    firstName: "Jeremy",
+    lastName: "Choi",
     initials: "JC",
     hue: 264,
     role: "owner",
     accessLevel: "full",
     title: "Founder / COO",
+    designations: "MBA",
     email: "jeremy@lpsathletic.com",
     phone: "+1 (416) 555-0100",
     bio: "Runs the business side of The Pro Maker™ — programs, people, growth.",
@@ -112,6 +136,8 @@ export const staffMembers: StaffMember[] = [
   {
     id: "admin-victoria",
     name: "Victoria Flores",
+    firstName: "Victoria",
+    lastName: "Flores",
     initials: "VF",
     hue: 330,
     role: "admin",
@@ -129,11 +155,15 @@ export const staffMembers: StaffMember[] = [
   {
     id: "coach-clance",
     name: "Coach Clance",
+    firstName: "Clance",
+    lastName: "Laylor",
     initials: "CL",
     hue: 20,
     role: "coach-manager",
     accessLevel: "coaching",
     title: "Head of Programming",
+    designations: "CSCS",
+    coachLevel: 4,
     email: "clance@lpsathletic.com",
     phone: "+1 (416) 555-0103",
     bio: "Writes the master programs and the nutrition protocols.",
@@ -147,11 +177,16 @@ export const staffMembers: StaffMember[] = [
   {
     id: "coach-ellis",
     name: "Coach Ellis",
+    firstName: "Ellis",
+    lastName: "Grant",
     initials: "CE",
     hue: 150,
     role: "coach",
     accessLevel: "management",
     title: "Head Coach",
+    designations: "CSCS, R.Kin",
+    coachLevel: 3,
+    emergencyContact: { name: "Priya Grant", relation: "Spouse", phone: "+1 (416) 555-0244" },
     email: "ellis@lpsathletic.com",
     phone: "+1 (416) 555-0104",
     bio: "Floor lead — semi-private blocks, athlete management, huddles.",
@@ -165,11 +200,15 @@ export const staffMembers: StaffMember[] = [
   {
     id: "coach-nadia",
     name: "Coach Nadia",
+    firstName: "Nadia",
+    lastName: "Reyes",
     initials: "CN",
     hue: 200,
     role: "coach",
     accessLevel: "coaching",
     title: "Speed & Development Coach",
+    coachLevel: 3,
+    emergencyContact: { name: "Louis Reyes", relation: "Father", phone: "+1 (416) 555-0251" },
     email: "nadia@lpsathletic.com",
     phone: "+1 (416) 555-0105",
     bio: "Sprint mechanics, youth development, return-to-play progressions.",
@@ -183,11 +222,14 @@ export const staffMembers: StaffMember[] = [
   {
     id: "coach-mason",
     name: "Coach Mason",
+    firstName: "Mason",
+    lastName: "Hart",
     initials: "CM",
     hue: 45,
     role: "coach",
     accessLevel: "coaching",
     title: "Assistant Coach",
+    coachLevel: 2,
     email: "mason@lpsathletic.com",
     phone: "+1 (416) 555-0106",
     bio: "Assists on the floor across all semi-private blocks.",
@@ -201,11 +243,14 @@ export const staffMembers: StaffMember[] = [
     // Round 5: the intern tier — messages + notes only, masked client details.
     id: "intern-sam",
     name: "Sam Whitaker",
+    firstName: "Sam",
+    lastName: "Whitaker",
     initials: "SW",
     hue: 280,
     role: "intern",
     accessLevel: "coaching",
     title: "Coaching Intern",
+    coachLevel: 1,
     email: "sam.intern@lpsathletic.com",
     phone: "+1 (416) 555-0107",
     bio: "Kinesiology co-op — shadows the floor, logs notes, drafts warm-ups.",

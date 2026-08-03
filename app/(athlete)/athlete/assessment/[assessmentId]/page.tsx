@@ -55,7 +55,7 @@ export default async function AthleteAssessmentDetailPage({
             </Link>
           </Button>
           <PageHeader
-            eyebrow={`Athlete Portal · ${ASSESSMENT_TYPE_LABEL.combine}`}
+            eyebrow={`Member Portal · ${ASSESSMENT_TYPE_LABEL.combine}`}
             title={summary.name}
             description={`Performed by ${summary.performedBy} · ${fmtFullDay(summary.date)}.`}
             actions={
@@ -167,7 +167,7 @@ export default async function AthleteAssessmentDetailPage({
           </Link>
         </Button>
         <PageHeader
-          eyebrow="Athlete Portal · Assessment"
+          eyebrow="Member Portal · Assessment"
           title={summary.name}
           description={`Performed by ${summary.performedBy} · ${fmtFullDay(summary.date)}. Your coaches use this to write every block of your program.`}
           actions={

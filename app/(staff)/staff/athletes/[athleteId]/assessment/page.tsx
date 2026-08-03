@@ -64,7 +64,7 @@ export default async function StaffAssessmentPage({
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Staff Workspace · Assessment"
+          eyebrow="Team Workspace · Assessment"
           title={`${athlete.name} — Remapping Assessment™`}
           description={
             existing
@@ -103,7 +103,7 @@ export default async function StaffAssessmentPage({
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Staff Workspace · Assessment"
+          eyebrow="Team Workspace · Assessment"
           title={`${athlete.name} — Combine Testing`}
           description={
             record
@@ -131,7 +131,7 @@ export default async function StaffAssessmentPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Assessment"
+        eyebrow="Team Workspace · Assessment"
         title={`${athlete.name} — Assessments`}
         description="Every assessment on file — yearly Remapping plus combine testing days. Start a new one when it's time to retest."
         actions={

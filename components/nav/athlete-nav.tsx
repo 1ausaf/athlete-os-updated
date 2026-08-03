@@ -1,6 +1,7 @@
 "use client";
 
 import type { Route } from "next";
+import { useEffect, useState } from "react";
 import {
   Apple,
   CalendarDays,
@@ -15,10 +16,14 @@ import {
 
 import type { Athlete } from "@/lib/demo/data";
 import { threads } from "@/lib/demo/data";
+import { announcements } from "@/lib/demo/training";
 import { canViewBilling } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
 
 import { ShellNav, type ShellNavItem } from "./shell-nav";
+
+/** Round 8 (M33): announcement read-state — the Chat badge counts unread. */
+export const ANNOUNCEMENT_READ_KEY = "aos-ann-read";
 
 export function AthleteNav({
   user,
@@ -32,18 +37,36 @@ export function AthleteNav({
     .filter((t) => t.participants.some((p) => p.id === athlete.id))
     .reduce((n, t) => n + t.unread, 0);
 
+  // Unread announcements (post-mount so SSR and client agree).
+  const [annUnread, setAnnUnread] = useState(0);
+  useEffect(() => {
+    const readCount = () => {
+      try {
+        const read = JSON.parse(
+          window.localStorage.getItem(ANNOUNCEMENT_READ_KEY) ?? "[]",
+        ) as string[];
+        setAnnUnread(announcements.filter((a) => !read.includes(a.id)).length);
+      } catch {
+        setAnnUnread(announcements.length);
+      }
+    };
+    readCount();
+    window.addEventListener("aos-ann-read-changed", readCount);
+    return () => window.removeEventListener("aos-ann-read-changed", readCount);
+  }, []);
+
   const hasNutrition = athlete.nutrition === "pro";
   const isParent = user.role === "parent";
 
   const items: ShellNavItem[] = [
     { href: "/athlete/dashboard", label: "Today", icon: LayoutDashboard },
     { href: "/athlete/training", label: "Training", icon: Dumbbell },
-    { href: "/athlete/sessions", label: "Sessions", icon: CalendarDays },
+    { href: "/athlete/sessions", label: "Bookings", icon: CalendarDays },
     {
       href: "/athlete/messages",
-      label: "Messages",
+      label: "Chat",
       icon: MessagesSquare,
-      badge: unread || undefined,
+      badge: unread + annUnread || undefined,
     },
     {
       href: "/athlete/nutrition",
@@ -72,7 +95,7 @@ export function AthleteNav({
 
   return (
     <ShellNav
-      title="Athlete Portal"
+      title="Member Portal"
       subtitle={
         isParent ? `${user.fullName} · managing ${athlete.name}` : user.fullName
       }

@@ -30,7 +30,7 @@ export default async function AthleteMessagesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal · Messages"
+        eyebrow="Member Portal · Messages"
         title="Messages"
         description={
           athlete.isMinor

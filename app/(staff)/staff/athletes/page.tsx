@@ -27,7 +27,7 @@ export default async function StaffAthletesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        eyebrow="Staff Workspace · Members"
+        eyebrow="Team Workspace · Members"
         title="Members"
         description="Every client by status — click a member to open their full profile: notes, program, billing, the lot."
         actions={

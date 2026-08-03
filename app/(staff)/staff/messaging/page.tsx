@@ -76,7 +76,7 @@ export default async function StaffMessagingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace · Messaging"
+        eyebrow="Team Workspace · Messaging"
         title="Messaging"
         description="Threads open automatically from coach assignments — every conversation is visible to staff, and Safe-Sport Rule of Two is enforced on every thread that includes a minor."
         actions={

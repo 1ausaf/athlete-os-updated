@@ -42,7 +42,7 @@ export default async function ProgrammingPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Staff Workspace"
+        eyebrow="Team Workspace"
         title="Programming"
         description="Build and maintain the Program, Circuit and Exercise Libraries — master templates and reusable blocks live here. Client due-tracking lives in Members."
       />

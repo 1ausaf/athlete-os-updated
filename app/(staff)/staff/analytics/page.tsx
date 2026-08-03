@@ -84,7 +84,7 @@ export default async function AnalyticsPage() {
         .analytics-report button { display: none !important; }
       }`}</style>
       <PageHeader
-        eyebrow="Staff Workspace · Performance"
+        eyebrow="Team Workspace · Performance"
         title="Analytics"
         description="Estimated 1RMs, rep-max PRs, session-by-session training summaries and per-client compliance — over any date range. Who's progressing, who's logging, and who's gone quiet."
         actions={

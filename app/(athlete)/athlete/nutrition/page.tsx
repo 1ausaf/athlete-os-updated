@@ -55,7 +55,7 @@ export default async function NutritionPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Athlete Portal · Nutrition"
+          eyebrow="Member Portal · Nutrition"
           title="Nutrition"
           description="Fueling guidance written by your coach, tailored to your program and season."
         />
@@ -115,7 +115,7 @@ export default async function NutritionPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal · Nutrition"
+        eyebrow="Member Portal · Nutrition"
         title={protocol.title}
         description={
           <>

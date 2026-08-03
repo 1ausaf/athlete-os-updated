@@ -24,7 +24,7 @@ export default async function AthleteAssessmentPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Athlete Portal · Assessment"
+        eyebrow="Member Portal · Assessment"
         title="Assessments"
         description="Every assessment on file — the yearly Remapping and combine testing days. Open one to see the full record your coaches program from."
         actions={
