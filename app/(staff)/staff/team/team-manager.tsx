@@ -26,6 +26,7 @@ import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Pill, type PillTone } from "@/components/ui/pill";
 import { cn } from "@/lib/utils";
 import { fmtFullDay } from "@/lib/demo/data";
@@ -101,9 +102,12 @@ export function TeamManager() {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    email: "",
     title: "",
     role: "coach" as StaffRole,
   });
+  // R51 — sortable list like Members; alphabetical by default.
+  const [sortKey, setSortKey] = useState<"name" | "role">("name");
 
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,7 +186,8 @@ export function TeamManager() {
 
   function addStaff() {
     const name = form.name.trim();
-    if (!name) return;
+    const email = form.email.trim();
+    if (!name || !email.includes("@")) return;
     const [first = "", ...rest] = name.split(/\s+/);
     const member: LocalStaff = {
       id: `staff-local-${Date.now()}`,
@@ -194,7 +199,7 @@ export function TeamManager() {
       role: form.role,
       accessLevel: "coaching",
       title: form.title.trim() || STAFF_ROLE_LABEL[form.role],
-      email: "",
+      email,
       phone: "",
       bio: "New staff member — profile pending.",
       certifications: [],
@@ -203,10 +208,29 @@ export function TeamManager() {
       isLocal: true,
     };
     setStaff((prev) => [...prev, member]);
-    setForm({ name: "", title: "", role: "coach" });
+    setForm({ name: "", email: "", title: "", role: "coach" });
     setAdding(false);
     setExpandedId(member.id);
-    showFlash(`${name} added to the team`);
+    // R51 — new staff get their credentials by email.
+    showFlash(`${name} added — invite sent to ${email} with login credentials.`);
+  }
+
+  /** R51 — admins fix a coach's first/last; the display name follows. */
+  function setNameParts(id: string, first: string, last: string) {
+    patchStaff(id, (s) => {
+      const f = first.trim();
+      const l = last.trim();
+      const base = `${f} ${l}`.trim();
+      const coachRole =
+        s.role === "coach" || s.role === "coach-manager" || s.role === "intern";
+      return {
+        ...s,
+        firstName: first,
+        lastName: last,
+        name: f && l ? (coachRole ? `Coach ${f} ${l}` : base) : s.name,
+        initials: base ? initialsFrom(base) : s.initials,
+      };
+    });
   }
 
   const kpis = useMemo(() => {
@@ -218,6 +242,18 @@ export function TeamManager() {
       vsDue: staff.filter((s) => s.vulnerableSector.status === "due").length,
     };
   }, [staff]);
+
+  // R51 — alphabetical by default; Role sorts down the ladder, then name.
+  const sorted = useMemo(() => {
+    const byName = (a: LocalStaff, b: LocalStaff) =>
+      a.name.localeCompare(b.name);
+    if (sortKey === "name") return [...staff].sort(byName);
+    return [...staff].sort(
+      (a, b) =>
+        STAFF_ROLE_ORDER.indexOf(a.role) - STAFF_ROLE_ORDER.indexOf(b.role) ||
+        byName(a, b),
+    );
+  }, [staff, sortKey]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -242,7 +278,7 @@ export function TeamManager() {
         />
       </div>
 
-      {/* List header + add */}
+      {/* List header + sort + add */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg">Staff</h2>
@@ -250,14 +286,38 @@ export function TeamManager() {
             Set what each person can do — changes apply immediately.
           </p>
         </div>
-        <Button
-          variant={adding ? "outline" : "brand"}
-          size="sm"
-          onClick={() => setAdding((v) => !v)}
-        >
-          {adding ? <X className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-          {adding ? "Cancel" : "Add staff member"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* R51 — sortable like the Members list */}
+          <span className="text-xs text-muted-foreground">Sort by</span>
+          {(["name", "role"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSortKey(key)}
+              aria-pressed={sortKey === key}
+              className={cn(
+                "h-8 rounded-full border px-3 text-xs font-semibold capitalize transition-colors",
+                sortKey === key
+                  ? "border-brand/40 bg-brand/10 text-brand-ink"
+                  : "border-border bg-surface text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {key}
+            </button>
+          ))}
+          <Button
+            variant={adding ? "outline" : "brand"}
+            size="sm"
+            onClick={() => setAdding((v) => !v)}
+          >
+            {adding ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <UserPlus className="h-4 w-4" />
+            )}
+            {adding ? "Cancel" : "Add staff member"}
+          </Button>
+        </div>
       </div>
 
       {/* Inline add form */}
@@ -265,7 +325,7 @@ export function TeamManager() {
         <Card className="border-brand/30">
           <CardContent className="flex flex-col gap-3 p-5">
             <span className="eyebrow">New staff member</span>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto]">
               <Input
                 value={form.name}
                 onChange={(e) =>
@@ -274,6 +334,16 @@ export function TeamManager() {
                 placeholder="Full name"
                 aria-label="Full name"
                 autoFocus
+              />
+              {/* R51 — the invite (with login credentials) goes here */}
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, email: e.target.value }))
+                }
+                placeholder="Email — invite goes here"
+                aria-label="Email"
               />
               <Input
                 value={form.title}
@@ -305,24 +375,24 @@ export function TeamManager() {
                 size="sm"
                 className="h-9"
                 onClick={addStaff}
-                disabled={!form.name.trim()}
+                disabled={!form.name.trim() || !form.email.trim().includes("@")}
               >
                 Add
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               The role sets what they can do — see the permission matrix below.
-              They appear in assignments and messaging once an admin assigns
-              them to clients.
+              An invite email with their login credentials goes out as soon as
+              they&apos;re added.
             </p>
           </CardContent>
         </Card>
       ) : null}
 
-      {/* Staff list */}
+      {/* Staff list — sorted (R51) */}
       <Card>
         <div className="divide-y divide-border">
-          {staff.map((member) => (
+          {sorted.map((member) => (
             <StaffRow
               key={member.id}
               member={member}
@@ -331,6 +401,9 @@ export function TeamManager() {
                 setExpandedId((cur) => (cur === member.id ? null : member.id))
               }
               onRoleChange={(role) => setRole(member, role)}
+              onNameChange={(first, last) =>
+                setNameParts(member.id, first, last)
+              }
               onToggleNotification={(channel) =>
                 toggleNotification(member.id, channel)
               }
@@ -410,6 +483,7 @@ function StaffRow({
   expanded,
   onToggle,
   onRoleChange,
+  onNameChange,
   onToggleNotification,
   onUploadVs,
   onAddCert,
@@ -418,6 +492,8 @@ function StaffRow({
   expanded: boolean;
   onToggle: () => void;
   onRoleChange: (role: StaffRole) => void;
+  /** R51 — admins edit first/last; the display name updates live. */
+  onNameChange: (first: string, last: string) => void;
   onToggleNotification: (channel: "push" | "email") => void;
   onUploadVs: () => void;
   onAddCert: (cert: { name: string; expires: string }) => void;
@@ -518,6 +594,38 @@ function StaffRow({
               </div>
               <div className="min-w-0 flex-1">
                 <span className="eyebrow">Profile</span>
+                {/* R51 — first/last editable here; the list name follows */}
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      First name
+                    </Label>
+                    <Input
+                      value={member.firstName}
+                      aria-label={`First name for ${member.name}`}
+                      onChange={(e) =>
+                        onNameChange(e.target.value, member.lastName)
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs text-muted-foreground">
+                      Last name
+                    </Label>
+                    <Input
+                      value={member.lastName}
+                      aria-label={`Last name for ${member.name}`}
+                      onChange={(e) =>
+                        onNameChange(member.firstName, e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
+                  Keeps names consistent — coaches display as &ldquo;Coach{" "}
+                  {member.firstName.trim() || "First"}{" "}
+                  {member.lastName.trim() || "Last"}&rdquo; everywhere.
+                </p>
                 <div className="mt-2 flex flex-col gap-1.5 text-sm">
                   <span className="inline-flex items-center gap-2">
                     <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

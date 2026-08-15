@@ -61,7 +61,9 @@ export default async function StaffThreadPage({ params }: PageProps) {
   return (
     // C35: the thread fills the screen to the bottom — the message pane
     // stretches, scrolls internally, and the composer pins at the bottom.
-    <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-9rem)]">
+    // R34: iPhone got a too-short window — dvh sizing (with a vh fallback)
+    // plus a 70dvh floor keeps the message area usably tall on mobile.
+    <div className="flex min-h-[70dvh] h-[calc(100vh-7rem)] supports-[height:100dvh]:h-[calc(100dvh-7rem)] flex-col gap-4 md:h-[calc(100vh-9rem)] md:supports-[height:100dvh]:h-[calc(100dvh-9rem)]">
       <PageHeader
         eyebrow="Team Workspace · Chats"
         title={thread.subject}
@@ -90,7 +92,9 @@ export default async function StaffThreadPage({ params }: PageProps) {
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
-          <div className="flex flex-wrap items-center gap-1.5">
+          {/* R34 — hidden on phones: the header already lists everyone and
+              every pixel goes to the message area. */}
+          <div className="hidden flex-wrap items-center gap-1.5 md:flex">
             <span className="eyebrow">Participants</span>
             {thread.participants.map((p) => (
               <Pill

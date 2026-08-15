@@ -140,7 +140,9 @@ export default async function StaffAssessmentPage({
         }
       />
 
-      {/* Start a new assessment — one button per type (C37) */}
+      {/* Start a new assessment — one button per type (C37). R22: two types
+          stay as two buttons; once a THIRD assessment type exists this row
+          becomes a single "Start assessment…" dropdown. */}
       <div className="flex flex-wrap gap-3">
         <Button asChild variant="brand" size="sm">
           <Link href={`${base}?open=remapping` as Route}>

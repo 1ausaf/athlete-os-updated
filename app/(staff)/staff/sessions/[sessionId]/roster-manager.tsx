@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Check, Plus, UserPlus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Check, Plus, UserPlus, UserX, X } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Pill } from "@/components/ui/pill";
 import type { BookingState } from "@/lib/demo/data";
+
+import { readRosterDelta, writeRosterDelta } from "../roster-delta";
 
 /** Serializable roster row prepared server-side. */
 export interface RosterAthlete {
@@ -38,18 +40,77 @@ type RemovalStage = { id: string; step: 1 | 2 };
  * additions land as pending until approved. Round 6 (S5): the add control is
  * a type-to-search picker, and removing someone takes two distinct
  * confirmations before the booking is actually dropped.
+ * Round 10 (R29): each row gets a No-show toggle — past sessions included.
+ * Round 10 (R32/R33): every change persists as a localStorage delta and
+ * broadcasts, so the capacity count and the Briefing stay in sync.
  */
 export function RosterManager({
+  sessionId,
   initialRoster,
   pool,
 }: {
+  sessionId: string;
   initialRoster: Entry[];
   pool: RosterAthlete[];
 }) {
   const [roster, setRoster] = useState<Entry[]>(initialRoster);
+  const [noShow, setNoShow] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [removal, setRemoval] = useState<RemovalStage | null>(null);
+  // Skip persisting until the stored delta has been replayed on mount.
+  const hydrated = useRef(false);
+
+  // R32/R33 — replay the persisted delta over the seeded roster on mount,
+  // so edits survive navigating to the Briefing and back.
+  useEffect(() => {
+    const delta = readRosterDelta(sessionId);
+    const approved = new Set(delta.approved ?? []);
+    setRoster(() => {
+      const kept = initialRoster
+        .filter((e) => !delta.removed.includes(e.athleteId))
+        .map((e) =>
+          e.state === "pending" && approved.has(e.athleteId)
+            ? { ...e, state: "confirmed" as BookingState }
+            : e,
+        );
+      const added: Entry[] = delta.added
+        .filter((id) => !kept.some((e) => e.athleteId === id))
+        .map((id) => ({
+          athleteId: id,
+          state: (approved.has(id) ? "confirmed" : "pending") as BookingState,
+        }));
+      return [...kept, ...added];
+    });
+    setNoShow(new Set(delta.noShow));
+    hydrated.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Recompute the delta vs the seed roster and persist + broadcast it.
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const seedIds = new Set(initialRoster.map((e) => e.athleteId));
+    const seedPending = new Set(
+      initialRoster.filter((e) => e.state === "pending").map((e) => e.athleteId),
+    );
+    const currentIds = new Set(roster.map((e) => e.athleteId));
+    writeRosterDelta(sessionId, {
+      added: roster
+        .filter((e) => !seedIds.has(e.athleteId))
+        .map((e) => e.athleteId),
+      removed: [...seedIds].filter((id) => !currentIds.has(id)),
+      noShow: [...noShow].filter((id) => currentIds.has(id)),
+      approved: roster
+        .filter(
+          (e) =>
+            e.state === "confirmed" &&
+            (seedPending.has(e.athleteId) || !seedIds.has(e.athleteId)),
+        )
+        .map((e) => e.athleteId),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roster, noShow, sessionId]);
 
   const byId = new Map(pool.map((a) => [a.id, a]));
   const rows = roster
@@ -75,6 +136,12 @@ export function RosterManager({
 
   function removeAthlete(id: string) {
     setRoster((prev) => prev.filter((e) => e.athleteId !== id));
+    setNoShow((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     setRemoval(null);
   }
 
@@ -86,6 +153,16 @@ export function RosterManager({
     );
   }
 
+  /** R29 — flip an athlete's no-show flag (works on past sessions too). */
+  function toggleNoShow(id: string) {
+    setNoShow((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -95,9 +172,10 @@ export function RosterManager({
           {rows.length} member{rows.length === 1 ? "" : "s"}
         </span>
 
-        {/* S5: searchable add — type to filter, click a result to book */}
-        <div className="relative">
-          <label className="flex h-8 items-center gap-1.5 rounded-md border border-input bg-surface px-2 focus-within:border-brand/50">
+        {/* S5: searchable add — type to filter, click a result to book.
+            min-w-0 + basis-full below sm keeps it inside a 375px viewport. */}
+        <div className="relative min-w-0 max-sm:basis-full">
+          <label className="flex h-8 min-w-0 items-center gap-1.5 rounded-md border border-input bg-surface px-2 focus-within:border-brand/50">
             <UserPlus
               className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               aria-hidden
@@ -116,7 +194,7 @@ export function RosterManager({
               }}
               placeholder="Add member — type to search"
               aria-label="Search members to add to this session"
-              className="w-48 bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground"
+              className="w-48 min-w-0 max-w-full bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground max-sm:w-full"
             />
           </label>
           {searchOpen ? (
@@ -174,8 +252,10 @@ export function RosterManager({
               key={athlete.id}
               athlete={athlete}
               state={entry.state}
+              noShow={noShow.has(athlete.id)}
               removalStep={removal?.id === athlete.id ? removal.step : 0}
               onApprove={() => approve(athlete.id)}
+              onToggleNoShow={() => toggleNoShow(athlete.id)}
               onRemoveStart={() => setRemoval({ id: athlete.id, step: 1 })}
               onRemoveAdvance={() => setRemoval({ id: athlete.id, step: 2 })}
               onRemoveConfirm={() => removeAthlete(athlete.id)}
@@ -185,8 +265,9 @@ export function RosterManager({
         </div>
       )}
       <p className="text-[0.7rem] text-muted-foreground">
-        Added members land as pending — approve to confirm the spot. Saves
-        locally in this demo.
+        Added members land as pending — approve to confirm the spot. Changes
+        update the capacity count and the Briefing. Saves locally in this
+        demo.
       </p>
     </section>
   );
@@ -195,8 +276,10 @@ export function RosterManager({
 function RosterRow({
   athlete,
   state,
+  noShow,
   removalStep,
   onApprove,
+  onToggleNoShow,
   onRemoveStart,
   onRemoveAdvance,
   onRemoveConfirm,
@@ -204,16 +287,21 @@ function RosterRow({
 }: {
   athlete: RosterAthlete;
   state: BookingState;
+  /** R29 — flagged as a no-show for this session. */
+  noShow: boolean;
   /** 0 = not removing, 1 = first confirm, 2 = final confirm. */
   removalStep: 0 | 1 | 2;
   onApprove: () => void;
+  onToggleNoShow: () => void;
   onRemoveStart: () => void;
   onRemoveAdvance: () => void;
   onRemoveConfirm: () => void;
   onRemoveCancel: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-soft">
+    // flex-wrap: the action cluster drops below the identity on phones so a
+    // row's min-content never exceeds a 375px viewport (R10 mobile pass).
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-soft">
       <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="md" />
       <div className="min-w-0 flex-1">
         {/* Line 1 — name + the flags that matter on the floor */}
@@ -265,8 +353,13 @@ function RosterRow({
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center gap-1.5">
-          {state === "pending" ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {noShow ? (
+            // R29 — the no-show flag outranks the booking state on the row.
+            <Pill tone="danger" dot>
+              No-show
+            </Pill>
+          ) : state === "pending" ? (
             <>
               <Pill tone="warning" dot>
                 Pending
@@ -287,6 +380,25 @@ function RosterRow({
               Confirmed
             </Pill>
           )}
+          {/* R29 — toggle a no-show; matters most on past sessions. */}
+          <button
+            type="button"
+            onClick={onToggleNoShow}
+            aria-pressed={noShow}
+            title={
+              noShow
+                ? `Clear ${athlete.name}'s no-show`
+                : `Mark ${athlete.name} as a no-show`
+            }
+            className={
+              noShow
+                ? "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface"
+                : "flex h-7 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20"
+            }
+          >
+            <UserX className="h-3.5 w-3.5" />
+            {noShow ? "Clear no-show" : "No-show"}
+          </button>
           <button
             type="button"
             onClick={onRemoveStart}

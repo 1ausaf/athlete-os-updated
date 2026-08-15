@@ -101,6 +101,8 @@ export default async function ProgramBuilderPage({
         program={jordanProgram}
         library={exerciseLibrary}
         maxes={athleteMaxes[athlete.id] ?? athleteMaxes["ath-jordan"] ?? {}}
+        // R26 — calendar days before today's program day show as Completed
+        currentProgramDay={athlete.program.day}
         // G9 — ?week=2&day=… deep links open that week/day
         initialWeek={Number(searchParams?.week) || undefined}
         initialDay={searchParams?.day}

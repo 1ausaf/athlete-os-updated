@@ -9,6 +9,8 @@ import {
   MapPin,
   Pencil,
   Plus,
+  Settings2,
+  Trash2,
   Users,
   Video,
   X,
@@ -78,13 +80,16 @@ const REPEAT_LABEL: Record<RepeatKey, string> = {
   none: "Doesn't repeat",
 };
 
-const SESSION_TYPES = [
+/** R42 — the defaults; the list itself is manageable + persisted. */
+const DEFAULT_SESSION_TYPES = [
   "Semi-Private",
   "Team",
   "Weightlifting Team",
   "1:1",
   "Online",
 ];
+
+const SESSION_TYPES_KEY = "aos-session-types";
 
 interface BookingDraft {
   name: string;
@@ -267,6 +272,15 @@ export function SessionsList({
     setEditScope(null);
   }
 
+  /** R43 — remove ONE occurrence (holiday); the series stays intact. */
+  function deleteOccurrence() {
+    if (!editTarget) return;
+    setCreated((prev) => prev.filter((s) => s.id !== editTarget.id));
+    setEditTarget(null);
+    setEditScope(null);
+    showFlash("Occurrence deleted — the rest of the series is unchanged.");
+  }
+
   /** Prefill an edit draft from the clicked occurrence + its series meta. */
   function draftFor(session: TrainingSession): BookingDraft {
     const meta = seriesMeta[seriesIdOf(session.id)];
@@ -426,7 +440,7 @@ export function SessionsList({
       <Card className="overflow-hidden">
         <div
           className={cn(
-            "hidden border-b border-border bg-surface/50 px-4 py-2 text-[0.66rem] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:items-center md:gap-x-3",
+            "hidden border-b border-border bg-surface/50 px-4 py-2 text-[0.66rem] font-semibold uppercase tracking-wider text-muted-foreground xl:grid xl:items-center xl:gap-x-3",
             gridCols,
           )}
         >
@@ -546,6 +560,8 @@ export function SessionsList({
           }
           subtitle={fmtDay(editTarget.startsAt)}
           initial={draftFor(editTarget)}
+          occurrence={editScope === "one"}
+          onDelete={editScope === "one" ? deleteOccurrence : undefined}
           onCancel={() => {
             setEditTarget(null);
             setEditScope(null);
@@ -568,14 +584,16 @@ export function SessionsList({
 }
 
 /* ------------------------------------------------------------------ */
-/* Row grid templates — Location + Coach pulled left (B2): the Session  */
-/* and Location columns cap out, the Actions column absorbs the slack.  */
+/* Row grid templates. R10 (R31): the table collapses to the stacked    */
+/* mobile layout below xl (was md — rows squished at ~1024–1280px next  */
+/* to the sidebar), and Session/Location flex + truncate while Actions  */
+/* sizes to its buttons so nothing overlaps at any width.               */
 /* ------------------------------------------------------------------ */
 
 const GRID_UPCOMING =
-  "md:grid-cols-[1.25rem_6.25rem_8.25rem_minmax(0,14rem)_minmax(0,12rem)_5.5rem_4rem_minmax(0,1fr)]";
+  "xl:grid-cols-[1.25rem_6.25rem_8.25rem_minmax(0,1.2fr)_minmax(0,1fr)_5.5rem_4rem_auto]";
 const GRID_PAST =
-  "md:grid-cols-[6.25rem_8.25rem_minmax(0,14rem)_minmax(0,12rem)_5.5rem_4rem_minmax(0,1fr)]";
+  "xl:grid-cols-[6.25rem_8.25rem_minmax(0,1.2fr)_minmax(0,1fr)_5.5rem_4rem_auto]";
 
 /**
  * One session as a table row. Desktop lays the cells on the shared grid;
@@ -610,13 +628,13 @@ function SessionRow({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 px-4 py-3.5 transition-colors hover:bg-surface/40 md:grid md:items-center md:gap-x-3 md:gap-y-0 md:py-2.5",
+        "flex flex-col gap-1.5 px-4 py-3.5 transition-colors hover:bg-surface/40 xl:grid xl:items-center xl:gap-x-3 xl:gap-y-0 xl:py-2.5",
         gridCols,
         selected && "bg-brand/[0.04]",
       )}
     >
-      {/* Mobile line 1: [checkbox] date · time — dissolves into cells on md */}
-      <div className="flex items-center gap-2.5 md:contents">
+      {/* Mobile line 1: [checkbox] date · time — dissolves into cells on xl */}
+      <div className="flex items-center gap-2.5 xl:contents">
         {mode === "upcoming" ? (
           <input
             type="checkbox"
@@ -626,19 +644,19 @@ function SessionRow({
             className="h-4 w-4 shrink-0 accent-[hsl(var(--brand))]"
           />
         ) : null}
-        <span className="tnum text-xs font-medium text-muted-foreground md:text-sm md:font-semibold md:text-foreground">
+        <span className="tnum text-xs font-medium text-muted-foreground xl:text-sm xl:font-semibold xl:text-foreground">
           {fmtDay(session.startsAt)}
         </span>
-        <span className="tnum text-xs text-muted-foreground md:text-sm md:text-foreground">
+        <span className="tnum text-xs text-muted-foreground xl:text-sm xl:text-foreground">
           {fmtTimeRange(session.startsAt, session.endsAt)}
         </span>
       </div>
 
-      <span className="min-w-0 text-[0.95rem] font-bold leading-snug md:truncate md:text-sm md:font-semibold">
+      <span className="min-w-0 text-[0.95rem] font-bold leading-snug xl:truncate xl:text-sm xl:font-semibold">
         {session.title}
       </span>
 
-      <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground md:text-[0.8rem]">
+      <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground xl:text-[0.8rem]">
         {isOnline ? (
           <Video className="h-3.5 w-3.5 shrink-0" />
         ) : (
@@ -648,9 +666,9 @@ function SessionRow({
       </span>
 
       {/* Mobile line 4: coach + count + actions */}
-      <div className="mt-1 flex items-center gap-2 md:contents">
+      <div className="mt-1 flex items-center gap-2 xl:contents">
         <span
-          className="flex shrink-0 items-center gap-2 md:justify-self-center"
+          className="flex shrink-0 items-center gap-2 xl:justify-self-center"
           title={coachNames.join(" · ")}
         >
           <span className="flex -space-x-1.5">
@@ -664,7 +682,7 @@ function SessionRow({
               />
             ))}
           </span>
-          <span className="text-xs font-medium md:hidden">
+          <span className="text-xs font-medium xl:hidden">
             {coachNames.join(", ")}
           </span>
         </span>
@@ -672,20 +690,20 @@ function SessionRow({
         {mode === "upcoming" ? (
           <Pill
             tone={isFull ? "warning" : "neutral"}
-            className="tnum md:justify-self-center"
+            className="tnum xl:justify-self-center"
           >
             {booked}/{session.capacity}
           </Pill>
         ) : (
           <Pill
             tone={attended < booked ? "warning" : "success"}
-            className="tnum md:justify-self-center"
+            className="tnum xl:justify-self-center"
           >
             {attended}/{booked}
           </Pill>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0 md:justify-self-end">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 xl:ml-0 xl:justify-self-end">
           {onEdit ? (
             <Button
               variant="outline"
@@ -782,16 +800,24 @@ function BookingDialog({
   title,
   subtitle,
   initial,
+  occurrence = false,
+  onDelete,
   onCancel,
   onSave,
 }: {
   title: string;
   subtitle?: string;
   initial: BookingDraft;
+  /** R43 — editing a single occurrence: rename hint + delete-this-one. */
+  occurrence?: boolean;
+  /** R43 — removes just this occurrence; the series stays. */
+  onDelete?: () => void;
   onCancel: () => void;
   onSave: (draft: BookingDraft) => void;
 }) {
   const [draft, setDraft] = useState<BookingDraft>(initial);
+  // R43 — two-step confirm before a single occurrence is deleted.
+  const [deleteArmed, setDeleteArmed] = useState(false);
 
   function patch(next: Partial<BookingDraft>) {
     setDraft((prev) => ({ ...prev, ...next }));
@@ -823,22 +849,18 @@ function BookingDialog({
             placeholder="e.g. Semi-Private — Power"
             onChange={(e) => patch({ name: e.target.value })}
           />
+          {occurrence ? (
+            <p className="text-[0.7rem] text-muted-foreground">
+              Renaming applies to this occurrence only — e.g. &ldquo;Labour Day
+              — Holiday Schedule&rdquo;.
+            </p>
+          ) : null}
         </div>
-        <div className="grid gap-1.5">
-          <Label className="text-xs text-muted-foreground">Session type</Label>
-          <select
-            value={draft.type}
-            onChange={(e) => patch({ type: e.target.value })}
-            aria-label="Session type"
-            className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm"
-          >
-            {SESSION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* R42 — session types are a managed list (add / rename / delete) */}
+        <ManagedTypeSelect
+          value={draft.type}
+          onChange={(type) => patch({ type })}
+        />
         <div className="grid gap-1.5">
           <Label className="text-xs text-muted-foreground">Date</Label>
           <Input
@@ -988,6 +1010,50 @@ function BookingDialog({
         ) : null}
       </div>
 
+      {/* R43 — drop a single occurrence (holiday) without killing the series */}
+      {onDelete ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/[0.04] px-3 py-2">
+          {deleteArmed ? (
+            <>
+              <span className="text-xs font-medium text-destructive">
+                Delete this session? The rest of the series stays.
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onDelete}
+                >
+                  Yes, delete
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteArmed(false)}
+                >
+                  Keep
+                </Button>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-muted-foreground">
+                Holiday or one-off cancellation? Remove just this date.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setDeleteArmed(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete just this session
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-end gap-2">
         <span className="mr-auto text-[0.7rem] text-muted-foreground">
           Saves locally in this demo.
@@ -1000,5 +1066,188 @@ function BookingDialog({
         </Button>
       </div>
     </LocalDialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* R42 — Session-type select whose OPTIONS are manageable (add /        */
+/* rename / delete) from a gear popover; the list persists in           */
+/* localStorage. Mirrors the profile ManagedSelect pattern.             */
+/* ------------------------------------------------------------------ */
+
+function ManagedTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [options, setOptions] = useState<string[]>(DEFAULT_SESSION_TYPES);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [addDraft, setAddDraft] = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_TYPES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed) && parsed.length > 0) setOptions(parsed);
+      }
+    } catch {
+      /* corrupted storage — keep defaults */
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(SESSION_TYPES_KEY, JSON.stringify(options));
+    } catch {
+      /* storage full/blocked — options still work in-memory */
+    }
+  }, [options, loaded]);
+
+  // The current value always renders, even if its option was deleted.
+  const shown = options.includes(value) ? options : [value, ...options];
+
+  function addOption() {
+    const v = addDraft.trim();
+    setAddDraft("");
+    if (!v || options.includes(v)) return;
+    setOptions((prev) => [...prev, v]);
+  }
+
+  function commitRename(i: number) {
+    const next = editDraft.trim();
+    setEditIdx(null);
+    if (!next || next === options[i] || options.includes(next)) return;
+    const prevName = options[i];
+    setOptions((prev) => prev.map((o, j) => (j === i ? next : o)));
+    if (value === prevName) onChange(next);
+  }
+
+  return (
+    <div className="grid gap-1.5">
+      <Label className="flex items-center justify-between text-xs text-muted-foreground">
+        Session type
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label="Manage session-type options"
+          title="Manage session types — add, rename or delete"
+          className="rounded p-0.5 transition-colors hover:text-foreground"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </Label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label="Session type"
+          className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm"
+        >
+          {shown.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        {open ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              aria-hidden
+              onClick={() => setOpen(false)}
+            />
+            <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-2 shadow-raised">
+              <p className="eyebrow px-1.5 pb-1.5">Session types</p>
+              <ul className="flex flex-col gap-0.5">
+                {options.map((o, i) => (
+                  <li
+                    key={`${o}-${i}`}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/40"
+                  >
+                    {editIdx === i ? (
+                      <input
+                        autoFocus
+                        value={editDraft}
+                        aria-label={`Rename ${o}`}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onBlur={() => commitRename(i)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter")
+                            (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditIdx(null);
+                        }}
+                        className="h-7 min-w-0 flex-1 rounded border border-input bg-surface px-1.5 text-sm focus:outline-none"
+                      />
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{o}</span>
+                        <button
+                          type="button"
+                          aria-label={`Rename ${o}`}
+                          title="Rename"
+                          onClick={() => {
+                            setEditIdx(i);
+                            setEditDraft(o);
+                          }}
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${o}`}
+                          title="Delete"
+                          onClick={() =>
+                            setOptions((prev) =>
+                              prev.filter((_, j) => j !== i),
+                            )
+                          }
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/60 pt-1.5">
+                <Input
+                  value={addDraft}
+                  placeholder="Add type…"
+                  className="h-7 flex-1 text-xs"
+                  onChange={(e) => setAddDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addOption();
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2"
+                  disabled={!addDraft.trim()}
+                  aria-label="Add session type"
+                  onClick={addOption}
+                >
+                  Add
+                </Button>
+              </div>
+              <p className="px-1.5 pt-1.5 text-[0.65rem] text-muted-foreground">
+                Saves locally in this demo.
+              </p>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }

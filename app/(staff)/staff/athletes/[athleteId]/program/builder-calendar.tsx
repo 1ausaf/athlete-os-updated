@@ -9,6 +9,7 @@ import {
   Dumbbell,
   GripVertical,
   Home,
+  Plus,
   Repeat2,
 } from "lucide-react";
 
@@ -16,14 +17,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
-/* Builder calendar (C17/C18/G5) — Mon–Sun columns × week rows. A cell */
-/* can hold MULTIPLE sessions (Day 1A/1B); every chip lists its        */
-/* movements TeamBuildR-style ("A Hip Snatch 3×6"), has a drag handle  */
-/* to move it to another cell, and up/down arrows to reorder sessions  */
-/* WITHIN the same day.                                                */
+/* Builder calendar (C17/C18/G5, R27/R28) — Day 1..N slot columns ×    */
+/* week rows (no weekday grid, no Rest cells). A slot can hold         */
+/* MULTIPLE sessions (Day 1A/1B); every chip lists its movements       */
+/* TeamBuildR-style ("A Hip Snatch 3×6"), has a drag handle to move    */
+/* it to another slot, and up/down arrows to reorder sessions WITHIN   */
+/* the same day. Empty slots read "[+] Add Workout" and create a day.  */
 /* ------------------------------------------------------------------ */
 
-export type CalendarPublishState = "published" | "scheduled" | "draft";
+export type CalendarPublishState =
+  | "completed"
+  | "published"
+  | "scheduled"
+  | "draft";
 
 /** G5 — one compact movement line: slot letter + name + sets×reps. */
 export interface BuilderCalendarMove {
@@ -34,7 +40,7 @@ export interface BuilderCalendarMove {
 
 export interface BuilderCalendarDay {
   id: string;
-  /** 1..7 → Monday..Sunday (weekly sequence restarts Monday). */
+  /** Day slot within the week (Day 1..N) — sequence order, not a weekday. */
   dayNumber: number;
   /** "1" for single sessions, "1A"/"1B" for multi-session days. */
   label: string;
@@ -51,18 +57,15 @@ export interface BuilderCalendarWeek {
   days: BuilderCalendarDay[];
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const STATE_DOT: Record<CalendarPublishState, string> = {
-  published: "bg-success",
-  scheduled: "bg-info",
-  draft: "bg-warning",
-};
-
-const STATE_LABEL: Record<CalendarPublishState, string> = {
-  published: "Published",
-  scheduled: "Auto-publish queued",
-  draft: "Draft",
+/** R26 — one glyph + label + tone per state, shared by chips and legend. */
+const STATE_META: Record<
+  CalendarPublishState,
+  { glyph: string; label: string; cls: string }
+> = {
+  completed: { glyph: "✓", label: "Completed", cls: "text-success" },
+  published: { glyph: "●", label: "Published", cls: "text-success" },
+  scheduled: { glyph: "◐", label: "Publishes soon", cls: "text-info" },
+  draft: { glyph: "○", label: "Draft", cls: "text-warning" },
 };
 
 interface DragPayload {
@@ -81,18 +84,22 @@ interface DayMenu {
 
 export function BuilderCalendar({
   weeks,
+  mode = "athlete",
   activeDayId,
   onSelectDay,
   onMoveDay,
   onReorderSession,
+  onAddDay,
   onCopyDay,
   onDuplicateDay,
   onRepeatWeek,
 }: {
   weeks: BuilderCalendarWeek[];
+  /** R26 — template mode never shows the Completed state or legend entry. */
+  mode?: "athlete" | "template";
   activeDayId?: string;
   onSelectDay: (weekNumber: number, dayId: string) => void;
-  /** C18 — a chip was dragged onto another cell. */
+  /** C18 — a chip was dragged onto another slot. */
   onMoveDay: (
     fromWeekNumber: number,
     dayId: string,
@@ -101,6 +108,8 @@ export function BuilderCalendar({
   ) => void;
   /** G5 — move a session up/down within its own day cell. */
   onReorderSession: (weekNumber: number, dayId: string, dir: -1 | 1) => void;
+  /** R28 — an empty "[+] Add Workout" slot was clicked. */
+  onAddDay: (weekNumber: number, dayNumber: number) => void;
   /** G8 — right-click actions on a day chip. */
   onCopyDay: (weekNumber: number, dayId: string) => void;
   onDuplicateDay: (weekNumber: number, dayId: string) => void;
@@ -128,20 +137,37 @@ export function BuilderCalendar({
     setOver(null);
   }
 
+  // R27 — columns are Day 1..N, N = the program's days per week (the widest
+  // week drives it so every session always has a column).
+  const slotCount = Math.max(
+    1,
+    ...weeks.map((w) => w.days.reduce((m, d) => Math.max(m, d.dayNumber), 0)),
+  );
+  // R25 — slots keep a real minimum width so "3 × 5" never gets cut.
+  const gridTemplate = {
+    gridTemplateColumns: `3.5rem repeat(${slotCount}, minmax(10rem, 1fr))`,
+  };
+
+  // R26 — legend: Completed (athlete programs only) + the publish states.
+  const legendStates: CalendarPublishState[] =
+    mode === "template"
+      ? ["published", "scheduled", "draft"]
+      : ["completed", "published", "scheduled", "draft"];
+
   return (
     <div className="flex flex-col gap-3">
       <Card>
         <CardContent className="overflow-x-auto scrollbar-slim p-3">
-          <div className="min-w-[860px]">
-            {/* Weekday header */}
-            <div className="grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))] gap-1.5">
+          <div className="min-w-fit">
+            {/* Day-slot header — Day 1..N, no weekdays (R27) */}
+            <div className="grid gap-1.5" style={gridTemplate}>
               <span aria-hidden />
-              {WEEKDAYS.map((wd) => (
+              {Array.from({ length: slotCount }, (_, i) => (
                 <span
-                  key={wd}
+                  key={i}
                   className="px-1 text-center text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground"
                 >
-                  {wd}
+                  Day {i + 1}
                 </span>
               ))}
             </div>
@@ -150,7 +176,8 @@ export function BuilderCalendar({
             {weeks.map((week) => (
               <div
                 key={week.weekNumber}
-                className="mt-1.5 grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))] gap-1.5"
+                className="mt-1.5 grid gap-1.5"
+                style={gridTemplate}
               >
                 <span
                   className="flex items-center justify-center rounded-lg bg-muted px-1 text-center text-xs font-bold text-muted-foreground"
@@ -158,8 +185,8 @@ export function BuilderCalendar({
                 >
                   {week.label ? week.label : `Wk ${week.weekNumber}`}
                 </span>
-                {WEEKDAYS.map((wd, wdIdx) => {
-                  const dayNumber = wdIdx + 1;
+                {Array.from({ length: slotCount }, (_, slotIdx) => {
+                  const dayNumber = slotIdx + 1;
                   const sessions = week.days.filter(
                     (d) => d.dayNumber === dayNumber,
                   );
@@ -169,7 +196,7 @@ export function BuilderCalendar({
                     over.dayNumber === dayNumber;
                   return (
                     <div
-                      key={wd}
+                      key={dayNumber}
                       onDragOver={(ev) => {
                         if (!drag) return;
                         ev.preventDefault();
@@ -190,20 +217,26 @@ export function BuilderCalendar({
                       }}
                       className={cn(
                         "flex min-h-[5.5rem] flex-col gap-1.5 rounded-lg",
-                        sessions.length === 0 &&
-                          "items-center justify-center border border-dashed border-border/70",
                         isOver &&
                           "ring-2 ring-brand ring-offset-2 ring-offset-background",
                       )}
                     >
                       {sessions.length === 0 ? (
-                        <span className="text-[0.65rem] text-muted-foreground/50">
-                          Rest
-                        </span>
+                        /* R28 — empty slot: no "Rest", add a workout instead */
+                        <button
+                          type="button"
+                          onClick={() => onAddDay(week.weekNumber, dayNumber)}
+                          title={`Add a workout — Day ${dayNumber}, Week ${week.weekNumber}`}
+                          className="flex min-h-[5.5rem] flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/70 text-[0.7rem] font-semibold text-muted-foreground/70 transition-colors hover:border-border hover:bg-accent hover:text-foreground"
+                        >
+                          <Plus className="h-3.5 w-3.5" aria-hidden />
+                          Add Workout
+                        </button>
                       ) : (
                         sessions.map((day, sessionIdx) => {
                           const isActive = day.id === activeDayId;
                           const isDragging = drag?.dayId === day.id;
+                          const stateMeta = STATE_META[day.state];
                           return (
                             <div
                               key={day.id}
@@ -231,8 +264,8 @@ export function BuilderCalendar({
                               <span
                                 draggable
                                 role="button"
-                                aria-label={`Drag Day ${day.label} to another weekday`}
-                                title="Drag to move this session to another day"
+                                aria-label={`Drag Day ${day.label} to another day slot`}
+                                title="Drag to move this session to another day slot"
                                 onDragStart={(ev) => {
                                   ev.dataTransfer.effectAllowed = "move";
                                   ev.dataTransfer.setData("text/plain", day.id);
@@ -264,31 +297,38 @@ export function BuilderCalendar({
                                     <Dumbbell className="h-3 w-3" />
                                   )}
                                   Day {day.label}
+                                  {/* R26 — state glyph: ✓/●/◐/○ */}
                                   <span
                                     className={cn(
-                                      "ml-auto h-1.5 w-1.5 shrink-0 rounded-full",
-                                      STATE_DOT[day.state],
+                                      "ml-auto shrink-0 text-[0.7rem] leading-none",
+                                      stateMeta.cls,
                                     )}
-                                    title={STATE_LABEL[day.state]}
-                                  />
+                                    title={stateMeta.label}
+                                  >
+                                    {stateMeta.glyph}
+                                  </span>
                                 </span>
                                 <span className="line-clamp-1 text-xs font-semibold leading-tight">
                                   {day.title}
                                 </span>
-                                {/* G5/G7 — EVERY movement listed; cells grow */}
+                                {/* G5/G7 — EVERY movement listed; lines wrap
+                                    instead of truncating so sets×reps always
+                                    show in full (R25) */}
                                 {day.moves.length > 0 ? (
                                   <span className="flex flex-col">
                                     {day.moves.map((m, i) => (
                                       <span
                                         key={`${day.id}-m${i}`}
-                                        className="truncate text-[0.65rem] leading-[1.35] text-muted-foreground"
+                                        className="break-words text-[0.65rem] leading-[1.35] text-muted-foreground"
                                         title={`${m.slot} ${m.name} ${m.sets}`}
                                       >
                                         <span className="font-bold text-foreground/80">
                                           {m.slot}
                                         </span>{" "}
                                         {m.name}{" "}
-                                        <span className="tnum">{m.sets}</span>
+                                        <span className="tnum whitespace-nowrap">
+                                          {m.sets}
+                                        </span>
                                       </span>
                                     ))}
                                   </span>
@@ -344,17 +384,22 @@ export function BuilderCalendar({
         </CardContent>
       </Card>
 
-      {/* Legend */}
+      {/* R26 — legend: ✓ Completed · ● Published · ◐ Publishes soon · ○ Draft */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-        {(Object.keys(STATE_DOT) as CalendarPublishState[]).map((state) => (
+        {legendStates.map((state) => (
           <span key={state} className="flex items-center gap-1.5">
-            <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[state])} />
-            {STATE_LABEL[state]}
+            <span
+              className={cn("text-sm leading-none", STATE_META[state].cls)}
+              aria-hidden
+            >
+              {STATE_META[state].glyph}
+            </span>
+            {STATE_META[state].label}
           </span>
         ))}
         <span className="ml-auto">
           Click a day to open it · right-click for actions · drag the handle to
-          another cell · arrows reorder sessions within a day.
+          another slot · arrows reorder sessions within a day.
         </span>
       </div>
 
@@ -395,7 +440,7 @@ export function BuilderCalendar({
             <ContextMenuItem
               icon={CopyPlus}
               label="Duplicate day"
-              hint="Adds a second session on this weekday"
+              hint="Adds a second session in this day slot"
               onClick={() => {
                 onDuplicateDay(menu.weekNumber, menu.dayId);
                 setMenu(null);

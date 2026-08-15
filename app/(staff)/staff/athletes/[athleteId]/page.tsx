@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
 import {
+  CalendarCheck2,
   CalendarDays,
   ChevronRight,
   ClipboardCheck,
@@ -22,13 +23,16 @@ import {
   athleteById,
   athleteGoals,
   athleteProfileById,
+  fmtDay,
   fmtFullDay,
   fmtRange,
+  pastSessions,
   sessions,
 } from "@/lib/demo/data";
 import { isAdmin, isStaff } from "@/lib/rbac";
 
 import { NotesPanel } from "./notes-panel";
+import { RemindersCard } from "./reminders-card";
 import {
   AvatarUpload,
   ContactLinksCard,
@@ -44,8 +48,8 @@ import {
  * Round-8 member profile. The header is avatar + name with four MATCHING
  * outline actions (C12); notes live RIGHT under the two 30-day tiles; the
  * left column stacks Details → Goals & Medical History → Latest Personal
- * Records → Contact & Links → Team Management → Upcoming Bookings →
- * Financial (C17/C19/C20).
+ * Records → Contact & Links → Team Management → Attendance (R18) → Upcoming
+ * Bookings → Financial → Alerts & Reminders (R15).
  */
 export default async function StaffAthleteProfilePage({
   params,
@@ -71,6 +75,41 @@ export default async function StaffAthleteProfilePage({
   const latestPrs = [...athlete.prs]
     .sort((a, b) => (a.date > b.date ? -1 : 1))
     .slice(0, 5);
+
+  // R18 — exact attendance days from bookings: past roster state completed =
+  // attended, pending in the past = no-show; upcoming confirmed listed on top.
+  const attendance = [
+    ...sessions
+      .filter((s) =>
+        s.roster.some(
+          (r) => r.athleteId === athlete.id && r.state === "confirmed",
+        ),
+      )
+      .map((s) => ({
+        id: s.id,
+        date: s.startsAt,
+        title: s.title,
+        state: "upcoming" as const,
+      })),
+    ...pastSessions
+      .filter((s) =>
+        s.roster.some(
+          (r) =>
+            r.athleteId === athlete.id &&
+            (r.state === "completed" || r.state === "pending"),
+        ),
+      )
+      .map((s) => ({
+        id: s.id,
+        date: s.startsAt,
+        title: s.title,
+        state:
+          s.roster.find((r) => r.athleteId === athlete.id)?.state ===
+          "completed"
+            ? ("attended" as const)
+            : ("noshow" as const),
+      })),
+  ].sort((a, b) => (a.date > b.date ? -1 : 1));
 
   return (
     <div className="flex flex-col gap-6">
@@ -176,6 +215,46 @@ export default async function StaffAthleteProfilePage({
           {/* C20 — Team Management */}
           <TeamManagementCard athlete={athlete} />
 
+          {/* R18 — Attendance: the exact booking days, attended vs no-show */}
+          <Section icon={CalendarCheck2} title="Attendance">
+            {attendance.length === 0 ? (
+              <Empty>No bookings on file yet.</Empty>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {attendance.map((row) => (
+                  <li
+                    key={row.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 px-3 py-2"
+                  >
+                    <span className="tnum w-24 shrink-0 text-xs font-semibold">
+                      {fmtDay(row.date)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {row.title}
+                    </span>
+                    {row.state === "attended" ? (
+                      <Pill tone="success" dot>
+                        Attended
+                      </Pill>
+                    ) : row.state === "noshow" ? (
+                      <Pill tone="danger" dot>
+                        No-show
+                      </Pill>
+                    ) : (
+                      <Pill tone="info" dot>
+                        Upcoming
+                      </Pill>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[0.7rem] text-muted-foreground text-pretty">
+              Attendance comes from bookings; the training summary logs when
+              the athlete logs.
+            </p>
+          </Section>
+
           {/* C19 — Upcoming Bookings: each row opens the staff session page */}
           <Section icon={CalendarDays} title="Upcoming Bookings">
             {upcoming.length === 0 ? (
@@ -217,8 +296,14 @@ export default async function StaffAthleteProfilePage({
             )}
           </Section>
 
-          {/* C18 — Financial last; coaches see the status pill only */}
+          {/* C18 — Financial; coaches see the status pill only */}
           <FinancialCard athlete={athlete} admin={admin} />
+
+          {/* R15 — Alerts & Reminders close the left column */}
+          <RemindersCard
+            athleteId={athlete.id}
+            seedReminders={athlete.reminders}
+          />
         </div>
 
         <div className="flex flex-col gap-6">

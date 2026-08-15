@@ -7,6 +7,7 @@ import {
   Eye,
   Film,
   ImageIcon,
+  Info,
   Link2,
   Paperclip,
   Trash2,
@@ -21,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatAttachment } from "@/lib/demo/chat";
+import { relTime } from "@/lib/demo/data";
 import type { Message, MessageRole, ThreadParticipant } from "@/lib/demo/data";
 
 /** A message plus local moderation state (O3: admin delete → tombstone). */
@@ -73,6 +75,8 @@ export function ThreadConversation({
 }) {
   const [messages, setMessages] = useState<ConvoMessage[]>(initialMessages);
   const [joined, setJoined] = useState(false);
+  // R35 — which message's read-receipt popover is open.
+  const [receiptOpen, setReceiptOpen] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const posting = canPost || joined;
@@ -81,6 +85,41 @@ export function ThreadConversation({
     // Keep the newest message in view — the pane is a fixed-height scroller.
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length]);
+
+  // R35 — click anywhere else closes the receipt popover.
+  useEffect(() => {
+    if (!receiptOpen) return;
+    const close = () => setReceiptOpen(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [receiptOpen]);
+
+  // R35 — deterministic demo receipts: the LATEST staff message is read by
+  // the athlete participants; earlier staff messages are read by everyone
+  // else on the thread. Anything sent this session is delivered, not read.
+  const lastSeedStaffId =
+    [...initialMessages]
+      .reverse()
+      .find((m) => m.senderRole === "coach" || m.senderRole === "admin")?.id ??
+    null;
+
+  function receiptLabel(m: ConvoMessage): { read: boolean; text: string } {
+    if (m.id.startsWith("local-"))
+      return { read: false, text: "Delivered — not read yet" };
+    const readers =
+      m.id === lastSeedStaffId
+        ? participants.filter((p) => p.role === "athlete")
+        : participants.filter((p) => p.id !== m.senderId);
+    if (readers.length === 0)
+      return { read: false, text: "Delivered — not read yet" };
+    const readAt = new Date(
+      Math.min(Date.now(), new Date(m.at).getTime() + 25 * 60_000),
+    ).toISOString();
+    return {
+      read: true,
+      text: `Read by ${readers.map((r) => r.name).join(", ")} · ${relTime(readAt)}`,
+    };
+  }
 
   function send(body: string, attachments: ChatAttachment[]) {
     if (!body && attachments.length === 0) return;
@@ -111,11 +150,16 @@ export function ThreadConversation({
       {/* Message list — fills the pane, scrolls independently (C35) */}
       <div
         ref={listRef}
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1 scrollbar-slim"
+        // R34 — a floor on phones keeps the message area usably tall even
+        // with the composer + header chrome; desktop keeps the flex fill.
+        className="flex min-h-[14rem] flex-1 flex-col gap-4 overflow-y-auto pr-1 scrollbar-slim md:min-h-0"
       >
         {messages.map((m) => {
           const mine = m.senderId === me.id;
           const removed = Boolean(m.removedAt);
+          // R35 — staff-sent messages carry a subtle read-receipt affordance.
+          const staffSent =
+            m.senderRole === "coach" || m.senderRole === "admin";
           return (
             <div
               key={m.id}
@@ -163,8 +207,43 @@ export function ThreadConversation({
                         <AttachmentView key={i} attachment={a} />
                       ))}
                     </div>
-                    <span className="px-1 text-[0.7rem] text-muted-foreground">
+                    <span className="flex items-center gap-1 px-1 text-[0.7rem] text-muted-foreground">
                       {fmtTime(m.at)}
+                      {staffSent ? (
+                        <span
+                          className="relative inline-flex"
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReceiptOpen((cur) =>
+                                cur === m.id ? null : m.id,
+                              )
+                            }
+                            aria-expanded={receiptOpen === m.id}
+                            aria-label="Who has read this message"
+                            title="Who has read this message"
+                            className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                          {receiptOpen === m.id ? (
+                            <span
+                              role="status"
+                              className={cn(
+                                "absolute bottom-full z-30 mb-1 w-max max-w-[260px] rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[0.7rem] shadow-raised",
+                                mine ? "right-0" : "left-0",
+                                receiptLabel(m).read
+                                  ? "font-medium text-foreground/90"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              {receiptLabel(m).text}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
                     </span>
                   </>
                 )}

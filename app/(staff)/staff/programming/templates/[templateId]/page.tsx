@@ -76,7 +76,7 @@ export default async function TemplateBuilderPage({
           href={"/staff/programming" as Route}
           className="transition-colors hover:text-foreground"
         >
-          Programming
+          Programs
         </Link>
         <span aria-hidden>/</span>
         <Link

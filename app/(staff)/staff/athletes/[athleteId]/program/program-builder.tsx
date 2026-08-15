@@ -279,15 +279,6 @@ function relabelDays(days: EdDay[]): EdDay[] {
 type AutoPublishRule = AthleteProgram["autoPublish"];
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CAL_WEEKDAY = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
 
 function hourLabel(hour: number): string {
   const h12 = hour % 12 === 0 ? 12 : hour % 12;
@@ -433,6 +424,7 @@ export function ProgramBuilder({
   library,
   maxes,
   mode = "athlete",
+  currentProgramDay,
   initialWeek,
   initialDay,
 }: {
@@ -445,6 +437,11 @@ export function ProgramBuilder({
   maxes: Record<string, ReferenceMaxEntry>;
   /** "template" = editing a master template — no per-athlete publish controls. */
   mode?: "athlete" | "template";
+  /**
+   * R26 — the athlete's current program day (1-based). Calendar days that
+   * fall before it show as Completed — training history at a glance.
+   */
+  currentProgramDay?: number;
   /** G9 — deep link (?week=2&day=…): open this week/day on mount. */
   initialWeek?: number;
   initialDay?: string;
@@ -810,6 +807,32 @@ export function ProgramBuilder({
     say(`Day added to Week ${weekNo}.`);
   }
 
+  /** R28 — the calendar's "[+] Add Workout" cell creates a day in that slot. */
+  function addDayAt(weekNo: number, dayNumber: number) {
+    const newDay: EdDay = {
+      id: uid(),
+      dayNumber,
+      title: `Day ${dayNumber}`,
+      location: "gym",
+      focus: "New day — add movements",
+      published: false,
+      sections: blankSections(),
+    };
+    snapshot();
+    setWeeks((prev) =>
+      prev.map((w) =>
+        w.weekNumber === weekNo
+          ? { ...w, days: relabelDays([...w.days, newDay]) }
+          : w,
+      ),
+    );
+    setActiveWeekNo(weekNo);
+    setActiveDayId(newDay.id);
+    say(
+      `Workout added — Day ${dayNumber}, Week ${weekNo}. Click it to build the session.`,
+    );
+  }
+
   /** C17 — Day 1 becomes Day 1A/1B: weightlifters train up to 3×/day. */
   function addSession() {
     const siblings = activeWeek!.days.filter(
@@ -897,7 +920,7 @@ export function ProgramBuilder({
       }),
     );
     say(
-      `${moved.title} moved to ${CAL_WEEKDAY[toDayNumber - 1]}${
+      `${moved.title} moved to Day ${toDayNumber}${
         toWeekNo !== fromWeekNo ? `, Week ${toWeekNo}` : ""
       }.`,
     );
@@ -977,7 +1000,7 @@ export function ProgramBuilder({
       ),
     );
     say(
-      `Day ${src.dayLabel ?? src.dayNumber} duplicated — now ${src.dayNumber}A/${src.dayNumber}B on ${CAL_WEEKDAY[src.dayNumber - 1]}.`,
+      `Day ${src.dayLabel ?? src.dayNumber} duplicated — now ${src.dayNumber}A/${src.dayNumber}B in the Day ${src.dayNumber} slot.`,
     );
   }
 
@@ -1349,10 +1372,18 @@ export function ProgramBuilder({
       title: d.title,
       location: d.location,
       moves: dayMoves(d),
+      // R26 — athlete programs mark training history: week-1 days the
+      // athlete is already past show as Completed (simple deterministic
+      // demo rule off the athlete's current program day).
       state:
         mode === "template"
           ? ("draft" as const)
-          : publishState(w.weekNumber, d.dayNumber, d.published, autoPub).kind,
+          : currentProgramDay != null &&
+              w.weekNumber === 1 &&
+              d.dayNumber < currentProgramDay
+            ? ("completed" as const)
+            : publishState(w.weekNumber, d.dayNumber, d.published, autoPub)
+                .kind,
     })),
   }));
 
@@ -1500,6 +1531,7 @@ export function ProgramBuilder({
         <>
           <BuilderCalendar
             weeks={calendarWeeks}
+            mode={mode}
             activeDayId={active.id}
             onSelectDay={(weekNumber, dayId) => {
               setActiveWeekNo(weekNumber);
@@ -1508,6 +1540,8 @@ export function ProgramBuilder({
             }}
             onMoveDay={moveCalendarDay}
             onReorderSession={reorderSession}
+            // R28 — empty slots create a workout in place
+            onAddDay={addDayAt}
             // G8 — right-click day actions
             onCopyDay={copyDayById}
             onDuplicateDay={duplicateDay}
@@ -2189,7 +2223,7 @@ export function ProgramBuilder({
                                       aria-label={`Save ${def.name} to the Circuit Library`}
                                       onClick={() =>
                                         say(
-                                          `"${def.name}" saved to the Circuit Library — find it under Programming → Circuit Library.`,
+                                          `"${def.name}" saved to the Circuit Library — find it under Programs → Circuit Library.`,
                                         )
                                       }
                                     >
@@ -3016,7 +3050,7 @@ function ExercisePicker({
           {results.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
               Nothing matches — clear a filter or create a new exercise from the
-              Programming library.
+              Programs library.
             </p>
           ) : null}
         </div>

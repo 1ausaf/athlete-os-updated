@@ -1795,7 +1795,8 @@ export const trainingGroups: TrainingGroup[] = [
     id: "grp-track",
     name: "Quest Sports Track Club",
     athleteCount: 14,
-    memberAthleteIds: [],
+    // R10: linked AOS profiles so the group members / assessment tables demo.
+    memberAthleteIds: ["ath-sofia", "ath-priya"],
     program: "Sprint Development — Block A",
     compliance: { filled: 9, total: 14 },
     lastSession: at(-1, 17),

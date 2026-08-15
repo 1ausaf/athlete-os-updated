@@ -108,7 +108,7 @@ export default async function AthleteDashboardPage() {
             <TileHeader
               icon={Megaphone}
               title="Announcements"
-              href={"/athlete/messages" as Route}
+              href={"/athlete/messages?tab=announcements" as Route}
               cta="All news"
             />
             {topAnnouncements.length === 0 ? (
@@ -117,8 +117,12 @@ export default async function AthleteDashboardPage() {
               <ul className="flex flex-col gap-2">
                 {topAnnouncements.map((a) => (
                   <li key={a.id}>
+                    {/* Round 10 (R5): deep-link to THAT announcement — the
+                        Announcements tab scrolls to the anchored item. */}
                     <Link
-                      href={"/athlete/messages" as Route}
+                      href={
+                        `/athlete/messages?tab=announcements#ann-${a.id}` as Route
+                      }
                       className="flex items-center gap-2.5 rounded-lg border border-border bg-surface/50 px-3 py-2.5 transition-colors hover:bg-accent/50"
                     >
                       <Megaphone
@@ -200,10 +204,11 @@ export default async function AthleteDashboardPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
+            {/* Round 10 (R5): each card opens THAT workout, not the landing */}
             {nextDays.map((day, i) => (
               <Link
                 key={day.id}
-                href={"/athlete/training" as Route}
+                href={`/athlete/training?workout=${day.id}` as Route}
                 className={
                   i === 0
                     ? "group flex flex-col gap-2 rounded-xl border border-brand/30 bg-brand/5 p-4 transition-colors hover:bg-brand/10"
@@ -262,8 +267,15 @@ export default async function AthleteDashboardPage() {
             {/* Round 7: one CTA — "view schedule is not the schedule for
                 training… it's just start session". */}
             <div className="ml-auto flex flex-wrap gap-2">
+              {/* Round 10 (R5): straight into the next workout's logger */}
               <Button asChild variant="brand">
-                <Link href={"/athlete/training" as Route}>
+                <Link
+                  href={
+                    (nextDays[0]
+                      ? `/athlete/training?workout=${nextDays[0].id}`
+                      : "/athlete/training") as Route
+                  }
+                >
                   Start Workout
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -321,17 +333,20 @@ export default async function AthleteDashboardPage() {
 
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
+            {/* Round 10 (R7): "PR & Accolades" — capital A; History and the
+                rows land on the anchored #pr section of the training page. */}
             <TileHeader
               icon={Trophy}
-              title="PRs & accolades"
-              href={"/athlete/training" as Route}
+              title="PR & Accolades"
+              href={"/athlete/training#pr" as Route}
               cta="History"
             />
             <ul className="flex flex-col gap-2">
               {athlete.prs.slice(0, 3).map((pr) => (
-                <li
-                  key={pr.id}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
+                <li key={pr.id}>
+                <Link
+                  href={"/athlete/training#pr" as Route}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:bg-accent/50"
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand/10 text-brand-ink">
                     <Trophy className="h-4 w-4" />
@@ -354,6 +369,7 @@ export default async function AthleteDashboardPage() {
                     ) : null}
                   </span>
                   {pr.isNew ? <Pill tone="brand">New</Pill> : null}
+                </Link>
                 </li>
               ))}
             </ul>

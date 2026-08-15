@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import {
   athleteById,
+  athletes,
   fmtTime,
   nextSession,
   relTime,
@@ -25,6 +26,8 @@ import {
   type TrainingSession,
 } from "@/lib/demo/data";
 import { staffByName } from "@/lib/demo/staff";
+
+import { LiveBriefRoster, LiveOnDeckCount } from "./live-roster";
 
 export default function HuddleBriefPage({
   searchParams,
@@ -98,6 +101,13 @@ function SessionBrief({ session }: { session: TrainingSession }) {
     billing: roster.filter((r) => r.athlete.billing.state === "overdue").length,
   };
 
+  // R32 — server-render a card for everyone who could be on this session
+  // (seed roster + active members); the client merges roster edits in.
+  const rosterIds = new Set(session.roster.map((r) => r.athleteId));
+  const briefPool = athletes.filter(
+    (a) => a.status === "active" || rosterIds.has(a.id),
+  );
+
   return (
     <section className="flex flex-col gap-4">
       {/* Session context + open loops */}
@@ -128,7 +138,11 @@ function SessionBrief({ session }: { session: TrainingSession }) {
             <div>
               <div className="flex items-center gap-2">
                 <Pill tone="brand" dot>
-                  {roster.length} on deck
+                  <LiveOnDeckCount
+                    sessionId={session.id}
+                    seedCount={roster.length}
+                  />{" "}
+                  on deck
                 </Pill>
                 <span className="text-xs text-muted-foreground">
                   capacity {session.capacity}
@@ -176,12 +190,16 @@ function SessionBrief({ session }: { session: TrainingSession }) {
         </CardContent>
       </Card>
 
-      {/* Per-athlete briefs */}
-      <div className="flex flex-col gap-4">
-        {roster.map(({ athlete }) => (
-          <AthleteBrief key={athlete.id} athlete={athlete} />
-        ))}
-      </div>
+      {/* Per-athlete briefs — the client merges roster edits live (R32) */}
+      <LiveBriefRoster
+        sessionId={session.id}
+        seedIds={roster.map(({ athlete }) => athlete.id)}
+        entries={briefPool.map((a) => ({
+          id: a.id,
+          name: a.name,
+          card: <AthleteBrief athlete={a} />,
+        }))}
+      />
     </section>
   );
 }

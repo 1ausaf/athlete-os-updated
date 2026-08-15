@@ -2,32 +2,38 @@ import Link from "next/link";
 import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowRight,
+  ClipboardCheck,
   ClipboardList,
   Contact,
   Dumbbell,
   LinkIcon,
   MessagesSquare,
   Phone,
-  Plus,
   Users,
 } from "lucide-react";
 
-import { LinksEditor } from "@/app/(staff)/staff/athletes/[athleteId]/profile-panels";
-import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import {
+  AvatarUpload,
+  LinksEditor,
+} from "@/app/(staff)/staff/athletes/[athleteId]/profile-panels";
 import { PageHeader } from "@/components/app/page-header";
 import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
+import { threadIdForGroup } from "@/lib/demo/chat";
 import { athleteById, type Athlete } from "@/lib/demo/data";
-import { trainingGroupById } from "@/lib/demo/training";
+import {
+  templateForProgramName,
+  trainingGroupById,
+} from "@/lib/demo/training";
 import { isAdmin, isStaff } from "@/lib/rbac";
 
 import {
   GroupDetailsCard,
   GroupManagementCard,
+  GroupMembersCard,
   GroupNotesPanel,
 } from "./group-panels";
 
@@ -71,27 +77,46 @@ export default async function StaffGroupProfilePage({
     (group.compliance.filled / Math.max(1, group.compliance.total)) * 100,
   );
 
+  // R23 — Program opens the GROUP's own program template when it exists.
+  const template = templateForProgramName(group.program);
+  const programHref = template
+    ? (`/staff/programming/templates/${template.id}` as Route)
+    : ("/staff/programming" as Route);
+
   return (
     <div className="flex flex-col gap-6">
-      {/* C21 — avatar + "Group: {name}" only; actions match the member page */}
+      {/* C21 — avatar + "Group: {name}" only; actions match the member page.
+          R23: Assessment/Program/Chat deep-link to THIS group's pages, and
+          the avatar carries a logo-upload affordance. */}
       <PageHeader
         eyebrow="Team Workspace · Group"
         title={
           <span className="flex items-center gap-3">
-            <AthleteAvatar initials={group.initials} hue={group.hue} size="xl" />
+            <AvatarUpload
+              initials={group.initials}
+              hue={group.hue}
+              name={group.name}
+              uploadLabel="Upload logo (demo)"
+            />
             Group: {group.name}
           </span>
         }
         actions={
           <>
             <Button asChild variant="outline" size="sm">
-              <Link href={"/staff/programming" as Route}>
+              <Link href={`/staff/teams/${group.id}/assessment` as Route}>
+                <ClipboardCheck className="h-4 w-4" />
+                Assessment
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={programHref}>
                 <Dumbbell className="h-4 w-4" />
                 Program
               </Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={"/staff/messaging" as Route}>
+              <Link href={`/staff/messaging/${threadIdForGroup(group.id)}` as Route}>
                 <MessagesSquare className="h-4 w-4" />
                 Chat
               </Link>
@@ -106,66 +131,8 @@ export default async function StaffGroupProfilePage({
         <div className="flex flex-col gap-6">
           <GroupDetailsCard group={group} admin={admin} />
 
-          {/* Group Members (was Roster) */}
-          <Card>
-            <CardContent className="flex flex-col gap-4 p-5">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-muted-foreground" aria-hidden />
-                <h3 className="text-base">Group Members</h3>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {group.athleteCount} members — {members.length} with linked
-                  profiles
-                </span>
-              </div>
-              {members.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
-                  No linked profiles yet — all {group.athleteCount} members
-                  train under the shared group program.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {members.map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        href={`/staff/athletes/${a.id}` as Route}
-                        className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:border-brand/40"
-                      >
-                        <AthleteAvatar
-                          initials={a.initials}
-                          hue={a.hue}
-                          size="sm"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-semibold">
-                            {a.name}
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {a.sport} · {a.age} · {a.gender}
-                          </span>
-                        </span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {admin ? (
-                <Button asChild variant="outline" size="sm" className="self-start">
-                  <Link
-                    href={`/staff/athletes/new?group=${group.id}` as Route}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Group Member
-                  </Link>
-                </Button>
-              ) : null}
-              <p className="text-[0.7rem] text-muted-foreground">
-                The rest of the group trains under the shared program without
-                individual profiles — link a profile any time to track a member
-                individually.
-              </p>
-            </CardContent>
-          </Card>
+          {/* Group Members — R23: removable rows + add-existing select */}
+          <GroupMembersCard group={group} admin={admin} />
 
           {/* Contacts — current first, past under a muted group */}
           <Card>
@@ -201,7 +168,8 @@ export default async function StaffGroupProfilePage({
               </ul>
               {pastContacts.length > 0 ? (
                 <div>
-                  <span className="eyebrow">Past contacts</span>
+                  {/* R23 — the client calls this bucket "Past members" */}
+                  <span className="eyebrow">Past members</span>
                   <ul className="mt-2 flex flex-col gap-2">
                     {pastContacts.map((c) => (
                       <li

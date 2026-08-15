@@ -740,6 +740,9 @@ function MemberRow({
   onDelete: () => void;
 }) {
   const due = programDueMeta(athlete.programDueInDays);
+  // R17 — members with current limitations get an amber accent so coaches
+  // spot return-to-play state at a glance.
+  const limited = Boolean(athlete.currentLimitations);
 
   return (
     <tr
@@ -749,7 +752,12 @@ function MemberRow({
         nested && "bg-muted/20",
       )}
     >
-      <td className="px-3 py-2.5">
+      <td
+        className={cn(
+          "px-3 py-2.5",
+          limited && "border-l-2 border-l-warning",
+        )}
+      >
         <span className={cn("flex items-center gap-2.5", nested && "pl-8")}>
           {nested ? (
             <CornerDownRight
@@ -761,6 +769,13 @@ function MemberRow({
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
               {athlete.name}
+              {limited ? (
+                <span
+                  title="Limited — see return-to-play notes"
+                  aria-label="Limited — see return-to-play notes"
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                />
+              ) : null}
             </span>
             <span className="block text-xs text-muted-foreground">
               {athlete.planName}
@@ -840,35 +855,10 @@ function GroupRow({
       onClick={onOpen}
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
+      {/* R16 — no expander here; it lives at the RIGHT end of the row so the
+          group name lines up with member names instead of looking indented */}
       <td className="px-3 py-2.5">
         <span className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            aria-expanded={expanded}
-            aria-label={
-              expanded
-                ? `Collapse ${group.name} members`
-                : `Expand ${group.name} members`
-            }
-            title={expanded ? "Collapse members" : "Expand members"}
-            disabled={memberCount === 0}
-            className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-surface text-muted-foreground transition-colors",
-              memberCount > 0
-                ? "hover:border-brand/50 hover:text-foreground"
-                : "opacity-40",
-            )}
-          >
-            {expanded && memberCount > 0 ? (
-              <Minus className="h-3 w-3" />
-            ) : (
-              <Plus className="h-3 w-3" />
-            )}
-          </button>
           <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
@@ -899,8 +889,37 @@ function GroupRow({
       <td className="px-3 py-2.5 text-muted-foreground">
         {group.managementCoach}
       </td>
+      {/* R16 — the +/− member expander sits on the RIGHT side of the row */}
       <td className="px-3 py-2.5">
-        <span className="text-xs text-muted-foreground">—</span>
+        <span className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            aria-expanded={expanded}
+            aria-label={
+              expanded
+                ? `Collapse ${group.name} members`
+                : `Expand ${group.name} members`
+            }
+            title={expanded ? "Collapse members" : "Expand members"}
+            disabled={memberCount === 0}
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-surface text-muted-foreground transition-colors",
+              memberCount > 0
+                ? "hover:border-brand/50 hover:text-foreground"
+                : "opacity-40",
+            )}
+          >
+            {expanded && memberCount > 0 ? (
+              <Minus className="h-3 w-3" />
+            ) : (
+              <Plus className="h-3 w-3" />
+            )}
+          </button>
+        </span>
       </td>
     </tr>
   );

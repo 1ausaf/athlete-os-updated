@@ -17,7 +17,7 @@ import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { bucketLabel, type MemberBucket } from "@/lib/demo/data";
+import { athletes, bucketLabel, type MemberBucket } from "@/lib/demo/data";
 import { staffMembers } from "@/lib/demo/staff";
 import { cn } from "@/lib/utils";
 
@@ -78,14 +78,21 @@ export function NewGroupForm({ focusOptions }: { focusOptions: string[] }) {
     { ...BLANK_CONTACT },
   ]);
   const [coachIds, setCoachIds] = useState<string[]>([]);
+  // R41 — pick EXISTING athletes for the new group from a checklist.
+  const [memberIds, setMemberIds] = useState<string[]>([]);
 
   const [created, setCreated] = useState<{
     name: string;
     password: string;
+    memberNames: string[];
   } | null>(null);
 
   const canSubmit = name.trim().length > 1;
   const availableCoaches = staffMembers.filter((s) => !coachIds.includes(s.id));
+  const memberOptions = athletes
+    .filter((a) => a.status === "active")
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function setContact(i: number, patch: Partial<ContactDraft>) {
     setContacts((prev) =>
@@ -93,9 +100,21 @@ export function NewGroupForm({ focusOptions }: { focusOptions: string[] }) {
     );
   }
 
+  function toggleMember(id: string) {
+    setMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
+    );
+  }
+
   function handleSubmit() {
     if (!canSubmit) return;
-    setCreated({ name: name.trim(), password: generateTempPassword() });
+    setCreated({
+      name: name.trim(),
+      password: generateTempPassword(),
+      memberNames: memberOptions
+        .filter((a) => memberIds.includes(a.id))
+        .map((a) => a.name),
+    });
   }
 
   function resetForm() {
@@ -106,6 +125,7 @@ export function NewGroupForm({ focusOptions }: { focusOptions: string[] }) {
     setPlan("");
     setContacts([{ ...BLANK_CONTACT }]);
     setCoachIds([]);
+    setMemberIds([]);
     setCreated(null);
   }
 
@@ -119,6 +139,12 @@ export function NewGroupForm({ focusOptions }: { focusOptions: string[] }) {
             <p className="text-lg font-bold">
               {created.name} is on the books as a group
             </p>
+            {/* R41 — the picked existing members land in the group */}
+            {created.memberNames.length > 0 ? (
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Group members: {created.memberNames.join(", ")}.
+              </p>
+            ) : null}
             <p className="mt-2 text-sm text-muted-foreground">
               A login was created — temporary password:
             </p>
@@ -213,6 +239,38 @@ export function NewGroupForm({ focusOptions }: { focusOptions: string[] }) {
               />
             </Field>
           </div>
+        </div>
+
+        {/* R41 — pick existing athletes into the group right away */}
+        <div className="flex flex-col gap-4">
+          <SectionTitle>Group members</SectionTitle>
+          <div className="grid grid-cols-1 gap-x-2 sm:grid-cols-2 lg:grid-cols-3">
+            {memberOptions.map((a) => (
+              <label
+                key={a.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={memberIds.includes(a.id)}
+                  onChange={() => toggleMember(a.id)}
+                  className="h-3.5 w-3.5 accent-[hsl(var(--brand))]"
+                />
+                <AthleteAvatar
+                  initials={a.initials}
+                  hue={a.hue}
+                  size="sm"
+                  className="h-6 w-6 text-[0.55rem]"
+                />
+                <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                <span className="text-xs text-muted-foreground">{a.sport}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-[0.7rem] text-muted-foreground">
+            Need someone brand new? Add them as a member afterwards with Add
+            Group Member.
+          </p>
         </div>
 
         <div className="flex flex-col gap-4">

@@ -5,7 +5,6 @@ import { ArrowLeft, Clipboard, Clock, MapPin, UserCog } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PageHeader } from "@/components/app/page-header";
-import { Progress } from "@/components/app/progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -22,6 +21,7 @@ import {
 } from "@/lib/demo/data";
 import { seasonMeta } from "@/lib/demo/status";
 
+import { LiveCapacityBar, LiveRosterCount } from "./live-capacity";
 import { RosterManager, type RosterAthlete } from "./roster-manager";
 
 interface PageProps {
@@ -40,7 +40,6 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
 
   const confirmed = session.roster.filter((r) => r.state === "confirmed").length;
   const pending = session.roster.filter((r) => r.state === "pending").length;
-  const fillPct = Math.round((session.roster.length / session.capacity) * 100);
   const coachNames = session.coaches?.length
     ? session.coaches
     : [session.coach];
@@ -100,8 +99,12 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
       {/* B3 — two columns on lg: attendees + waitlist LEFT, summary RIGHT */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="flex flex-col gap-6">
-          {/* Attendees — add / remove / approve (C33) */}
-          <RosterManager initialRoster={session.roster} pool={pool} />
+          {/* Attendees — add / remove / approve (C33) + no-show (R29) */}
+          <RosterManager
+            sessionId={session.id}
+            initialRoster={session.roster}
+            pool={pool}
+          />
 
           {/* Waitlist */}
           {waitlist.length > 0 ? (
@@ -140,7 +143,11 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="brand" dot>
-                  {session.roster.length} on deck
+                  <LiveRosterCount
+                    sessionId={session.id}
+                    seedCount={session.roster.length}
+                  />{" "}
+                  on deck
                 </Pill>
                 <span className="text-xs text-muted-foreground">
                   capacity {session.capacity}
@@ -165,15 +172,19 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
               <div className="mb-1.5 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Capacity</span>
                 <span className="tnum font-semibold">
-                  {session.roster.length}
+                  <LiveRosterCount
+                    sessionId={session.id}
+                    seedCount={session.roster.length}
+                  />
                   <span className="text-muted-foreground">
                     /{session.capacity}
                   </span>
                 </span>
               </div>
-              <Progress
-                value={fillPct}
-                tone={fillPct >= 100 ? "warning" : "brand"}
+              <LiveCapacityBar
+                sessionId={session.id}
+                seedCount={session.roster.length}
+                capacity={session.capacity}
               />
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Pill tone="success">{confirmed} confirmed</Pill>

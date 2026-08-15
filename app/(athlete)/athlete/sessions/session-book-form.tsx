@@ -71,6 +71,10 @@ const PAST_RANGES: { key: PastRange; label: string; days: number | null }[] = [
 
 const WEEK_MS = 7 * 86_400_000;
 
+/** Round 10 (R10): plans cap bookings per 4-week BILLING CYCLE, not per week. */
+const CYCLE_WEEKS = 4;
+const CYCLE_MS = CYCLE_WEEKS * WEEK_MS;
+
 /** Monday-anchored start-of-week timestamp — the grouping key. */
 function weekStartMs(date: Date): number {
   const d = new Date(date);
@@ -79,6 +83,10 @@ function weekStartMs(date: Date): number {
   return d.getTime();
 }
 const weekOf = (iso: string) => weekStartMs(new Date(iso));
+
+/** Which 4-week billing cycle a date falls in: 0 = current, 1 = next… (<0 = past). */
+const cycleIndex = (iso: string, anchorWeekMs: number) =>
+  Math.floor((weekOf(iso) - anchorWeekMs) / CYCLE_MS);
 
 const labelTone: Record<BookableSlot["label"], PillTone> = {
   Coaching: "neutral",
@@ -275,28 +283,35 @@ export function SessionBooking({
     [bookings],
   );
 
-  // Weekly cadence = seeded count, adjusted by local books/cancels this week.
-  const initialIds = useMemo(
-    () => new Set(initialBookings.map((b) => b.id)),
-    [initialBookings],
-  );
-  const currentIds = new Set(bookings.map((b) => b.id));
-  const addedThisWeek = bookings.filter(
-    (b) =>
-      b.status === "confirmed" &&
-      !initialIds.has(b.id) &&
-      weekOf(b.startsAt) === thisWeekKey,
-  ).length;
-  const removedThisWeek = initialBookings.filter(
-    (b) =>
-      b.status === "confirmed" &&
-      !currentIds.has(b.id) &&
-      weekOf(b.startsAt) === thisWeekKey,
-  ).length;
-  const effectiveThisWeek = Math.max(
-    0,
-    bookedThisWeek + addedThisWeek - removedThisWeek,
-  );
+  /**
+   * Round 10 (R10): the strict per-week cap became a BILLING-CYCLE cap —
+   * a 4-week cycle allows frequencyPerWeek × 4 bookings total, so a missed
+   * week can be made up later in the SAME cycle (weekly overage is fine).
+   * Each future 4-week window carries its own cap.
+   */
+  const cycleCap = Math.max(1, frequencyPerWeek * CYCLE_WEEKS);
+
+  // Sessions already used earlier this week (attended, no longer upcoming) —
+  // the seeded weekly count minus the seeded upcoming bookings this week.
+  const usedEarlierThisWeek = useMemo(() => {
+    const upcomingThisWeek = initialBookings.filter(
+      (b) => b.status === "confirmed" && weekOf(b.startsAt) === thisWeekKey,
+    ).length;
+    return Math.max(0, bookedThisWeek - upcomingThisWeek);
+  }, [initialBookings, bookedThisWeek, thisWeekKey]);
+
+  /** Confirmed bookings per cycle (cycle 0 includes already-used sessions). */
+  const cycleBooked = useMemo(() => {
+    const map = new Map<number, number>();
+    map.set(0, usedEarlierThisWeek);
+    for (const b of bookings) {
+      if (b.status !== "confirmed") continue;
+      const c = cycleIndex(b.startsAt, thisWeekKey);
+      if (c < 0) continue;
+      map.set(c, (map.get(c) ?? 0) + 1);
+    }
+    return map;
+  }, [bookings, usedEarlierThisWeek, thisWeekKey]);
 
   const selectedSlots = useMemo(
     () => slots.filter((s) => selected.has(s.id)),
@@ -305,11 +320,24 @@ export function SessionBooking({
   const selectedThisWeek = selectedSlots.filter(
     (s) => weekOf(s.startsAt) === thisWeekKey,
   ).length;
-  const remainingThisWeek = Math.max(0, frequencyPerWeek - effectiveThisWeek);
-  const weekFull = remainingThisWeek === 0;
-  const atWeekCap = effectiveThisWeek + selectedThisWeek >= frequencyPerWeek;
-  const freqPct = Math.round(
-    (Math.min(effectiveThisWeek, frequencyPerWeek) / frequencyPerWeek) * 100,
+  const selectedByCycle = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const s of selectedSlots) {
+      const c = cycleIndex(s.startsAt, thisWeekKey);
+      map.set(c, (map.get(c) ?? 0) + 1);
+    }
+    return map;
+  }, [selectedSlots, thisWeekKey]);
+
+  /** Booked + selected inside one 4-week cycle — the number the cap gates. */
+  const cycleTotalWith = (c: number) =>
+    (cycleBooked.get(c) ?? 0) + (selectedByCycle.get(c) ?? 0);
+
+  const currentCycleBooked = cycleBooked.get(0) ?? 0;
+  const cycleFull = currentCycleBooked >= cycleCap;
+  const remainingThisCycle = Math.max(0, cycleCap - currentCycleBooked);
+  const cyclePct = Math.round(
+    (Math.min(currentCycleBooked, cycleCap) / cycleCap) * 100,
   );
 
   /* ---- actions (optimistic, local-only) ---- */
@@ -322,8 +350,10 @@ export function SessionBooking({
         next.delete(slot.id);
         return next;
       }
-      // Plan-cadence guardrail: block over-booking THIS week only.
-      if (weekOf(slot.startsAt) === thisWeekKey && atWeekCap) return prev;
+      // Billing-cycle guardrail (R10): block only when this slot's 4-week
+      // cycle would exceed frequency × 4 — weekly make-up overage is fine.
+      const c = cycleIndex(slot.startsAt, thisWeekKey);
+      if (c >= 0 && cycleTotalWith(c) >= cycleCap) return prev;
       next.add(slot.id);
       return next;
     });
@@ -374,10 +404,23 @@ export function SessionBooking({
     const releasing = rescheduling;
     const newBookings: MyBooking[] = [];
     const takenStarts = new Set(bookedStarts);
+    // R10: repeats respect the 4-week cycle caps too — a repeated pattern
+    // never books past frequency × 4 in any cycle.
+    const cycleCounts = new Map(cycleBooked);
+    let skippedByCap = 0;
     for (const s of selectedSlots) {
       for (let k = 0; k < Math.max(1, repeatWeeks); k++) {
         const times = k === 0 ? { startsAt: s.startsAt, endsAt: s.endsAt } : repeatTimesFor(s, k);
         if (takenStarts.has(times.startsAt)) continue;
+        const c = cycleIndex(times.startsAt, thisWeekKey);
+        if (c >= 0) {
+          const cur = cycleCounts.get(c) ?? 0;
+          if (cur >= cycleCap) {
+            skippedByCap += 1;
+            continue;
+          }
+          cycleCounts.set(c, cur + 1);
+        }
         takenStarts.add(times.startsAt);
         newBookings.push({
           id: `bk-${s.id}-w${k}`,
@@ -403,13 +446,19 @@ export function SessionBooking({
     setRescheduling(null);
     setRepeatWeeks(1);
     const n = newBookings.length;
+    const capNote =
+      skippedByCap > 0
+        ? ` ${skippedByCap} ${skippedByCap === 1 ? "time was" : "times were"} skipped — 4-week cycle cap.`
+        : "";
     showFlash({
       tone: "success",
-      text: releasing
-        ? `Rescheduled — ${n} new ${n === 1 ? "time" : "times"} booked${forNames} and ${fmtDay(releasing.startsAt)} · ${fmtTime(releasing.startsAt)} released.`
-        : weeks > 1
-          ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total)${forNames} — see them in My Bookings.`
-          : `Booked ${n} ${n === 1 ? "session" : "sessions"}${forNames} — see them in My Bookings.`,
+      text:
+        (releasing
+          ? `Rescheduled — ${n} new ${n === 1 ? "time" : "times"} booked${forNames} and ${fmtDay(releasing.startsAt)} · ${fmtTime(releasing.startsAt)} released.`
+          : weeks > 1
+            ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total)${forNames} — see them in My Bookings.`
+            : `Booked ${n} ${n === 1 ? "session" : "sessions"}${forNames} — see them in My Bookings.`) +
+        capNote,
     });
   }
 
@@ -528,35 +577,37 @@ export function SessionBooking({
 
       {tab === "book" ? (
       <>
-      {/* Weekly cadence meter (FR-10) — round 8 (M22/M23): no red pill, the
-          count sits plain at the right end of the meter line and the plan
-          line lives here instead of the page header. */}
+      {/* Billing-cycle meter — round 10 (R10): the cap is per 4-WEEK CYCLE
+          (frequency × 4), so a missed week can be made up inside the cycle.
+          The plan line still lives here instead of the page header (M23). */}
       <Card className="bg-brand-sheen">
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <CalendarClock className="h-5 w-5 text-brand-ink" aria-hidden />
-              <span className="eyebrow">Weekly cadence</span>
+              <span className="eyebrow">Billing cycle</span>
             </div>
             {planName ? (
-              <span className="text-xs text-muted-foreground">{planName}</span>
+              <span className="text-xs text-muted-foreground">
+                {planName} · {frequencyLabel}
+              </span>
             ) : null}
           </div>
           <div>
             <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Booked this week</span>
+              <span>Booked this 4-week cycle</span>
               <span className="tnum font-semibold text-foreground">
-                {effectiveThisWeek} of {frequencyPerWeek}
+                {currentCycleBooked} of {cycleCap}
               </span>
             </div>
-            <Progress value={freqPct} tone={weekFull ? "success" : "brand"} />
+            <Progress value={cyclePct} tone={cycleFull ? "success" : "brand"} />
           </div>
           <p className="text-xs text-muted-foreground text-pretty">
             {overdue
               ? "Booking is paused while your balance is past due — clear it from Billing to resume."
-              : weekFull
-                ? `You've hit your ${frequencyLabel} plan cadence for this week — keep stacking sessions in the weeks ahead.`
-                : `You can book ${remainingThisWeek} more this week on your ${frequencyLabel} plan. Later weeks are always open to book ahead.`}
+              : cycleFull
+                ? `You've used all ${cycleCap} sessions in this 4-week cycle — the next cycle is always open to book ahead.`
+                : `Your ${planName ?? `${frequencyLabel} plan`} allows ${cycleCap} sessions per 4-week cycle — missed weeks can be made up within the cycle. ${remainingThisCycle} left in this one.`}
           </p>
         </CardContent>
       </Card>
@@ -829,22 +880,25 @@ export function SessionBooking({
               </button>
               {isOpen ? (
                 <ul className="divide-y divide-border border-t border-border">
-                  {g.slots.map((slot) => (
-                    <SlotRow
-                      key={slot.id}
-                      slot={slot}
-                      locked={lockedSet.has(slot.label)}
-                      booked={bookedStarts.has(slot.startsAt)}
-                      waitlisted={waitlistStarts.has(slot.startsAt)}
-                      checked={selected.has(slot.id)}
-                      capBlocked={
-                        weekOf(slot.startsAt) === thisWeekKey && atWeekCap
-                      }
-                      overdue={overdue}
-                      onToggle={() => toggleSlot(slot)}
-                      onWaitlist={() => joinWaitlist(slot)}
-                    />
-                  ))}
+                  {g.slots.map((slot) => {
+                    // R10: a row only blocks when its whole 4-WEEK CYCLE is
+                    // at the plan cap (booked + selected) — never per week.
+                    const c = cycleIndex(slot.startsAt, thisWeekKey);
+                    return (
+                      <SlotRow
+                        key={slot.id}
+                        slot={slot}
+                        locked={lockedSet.has(slot.label)}
+                        booked={bookedStarts.has(slot.startsAt)}
+                        waitlisted={waitlistStarts.has(slot.startsAt)}
+                        checked={selected.has(slot.id)}
+                        capBlocked={c >= 0 && cycleTotalWith(c) >= cycleCap}
+                        overdue={overdue}
+                        onToggle={() => toggleSlot(slot)}
+                        onWaitlist={() => joinWaitlist(slot)}
+                      />
+                    );
+                  })}
                 </ul>
               ) : null}
             </Card>
@@ -1020,7 +1074,7 @@ function SlotRow({
   booked: boolean;
   waitlisted: boolean;
   checked: boolean;
-  /** Weekly plan cap reached — this-week rows only. */
+  /** This slot's 4-week billing cycle is at the plan cap (R10). */
   capBlocked: boolean;
   overdue: boolean;
   onToggle: () => void;
@@ -1117,7 +1171,7 @@ function SlotRow({
         <SlotInfo slot={slot} />
         <span className="ml-auto flex items-center gap-2">
           {capBlocked && !checked && !overdue ? (
-            <span className="text-xs text-warning">Plan cap this week</span>
+            <span className="text-xs text-warning">Cycle cap reached</span>
           ) : null}
           {/* Kept deliberately plain — the client doesn't want scarce spots
               drawing attention (no warning color on "1 spot left"). */}

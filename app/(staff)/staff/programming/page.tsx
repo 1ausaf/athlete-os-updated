@@ -22,11 +22,11 @@ import { ProgramLibrary } from "./program-library";
 type LibraryTab = "programs" | "circuits" | "exercises";
 
 /**
- * G1 — Programming is libraries only: the client queue is gone (Members owns
- * due-tracking now). Three libraries, each at a real ?tab= URL with the
- * red-line tab style (G2).
+ * G1 — Programs (R38 rename) is libraries only: the client queue is gone
+ * (Members owns due-tracking now). Three libraries, each at a real ?tab= URL
+ * with the red-line tab style (G2).
  */
-export default async function ProgrammingPage({
+export default async function ProgramsPage({
   searchParams,
 }: {
   searchParams?: { tab?: string };
@@ -50,7 +50,7 @@ export default async function ProgrammingPage({
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Team Workspace"
-        title="Programming"
+        title="Programs"
         description="Build and maintain the Program, Circuit and Exercise Libraries — master templates and reusable blocks live here. Client due-tracking lives in Members."
       />
 

@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
+import { Textarea } from "@/components/ui/textarea";
 import { fmtFullDay, type Pr } from "@/lib/demo/data";
 import {
   LB_PER_KG,
@@ -47,6 +48,8 @@ import {
 } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
+import { appendSessionFeedback } from "../session-feedback";
+
 /* ------------------------------------------------------------------ */
 /* Types & helpers                                                     */
 /* ------------------------------------------------------------------ */
@@ -65,6 +68,8 @@ interface SetLog {
 }
 
 interface WorkoutLoggerProps {
+  /** Round 10 (R9): keys the session-feedback → chat queue per athlete. */
+  athleteId: string;
   days: ProgramDay[];
   exercises: Record<string, LibraryExercise>;
   history: Record<string, ExerciseHistory>;
@@ -118,17 +123,16 @@ function weightInUnit(w: SetLog["weight"], unit: Unit): string {
   return String(w.unit === "lb" ? lbToKg(w.value) : kgToLb(w.value));
 }
 
-/** Resolve "60%" against the exercise's mother lift, in the display unit. */
-function resolvePct(
+/** Resolve "60%" against the exercise's mother lift, numerically, in the display unit. */
+function resolvePctValue(
   pct: number,
   lib: LibraryExercise | undefined,
   maxes: Record<string, ReferenceMaxEntry>,
   unit: Unit,
-): string | null {
+): number | null {
   const ref = lib?.referenceMax ? maxes[lib.referenceMax] : undefined;
   if (!ref) return null;
-  const raw = (ref.value * pct) / 100;
-  return `${convertRaw(raw, ref.unit, unit)} ${unit}`;
+  return convertRaw((ref.value * pct) / 100, ref.unit, unit);
 }
 
 function daysAgo(iso: string): string {
@@ -178,6 +182,7 @@ const COMPLETED_RANGES: {
 ];
 
 export function WorkoutLogger({
+  athleteId,
   days,
   exercises,
   history,
@@ -221,6 +226,23 @@ export function WorkoutLogger({
   /** Success flash on the landing page after Complete Session (M18). */
   const [landingFlash, setLandingFlash] = useState<string | null>(null);
   const landingFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Round 10 (R1): PRs live in state, seeded from props — completing a
+   * session with a new best updates the panel immediately ("New" pill).
+   */
+  const [prList, setPrList] = useState<Pr[]>(prs);
+  /** Round 10 (R9): the skippable "How did the session go?" dialog. */
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+
+  useEffect(() => {
+    if (!feedbackOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFeedbackOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [feedbackOpen]);
   /**
    * Which workout is open. Null = the landing page (tabs + PR panel). When
    * opened from the Past tab we keep the session so the header can flag
@@ -344,13 +366,78 @@ export function WorkoutLogger({
   }
 
   /**
+   * Round 10 (R1 bug fix): completing a session scans the logged weights —
+   * any logged weight × reps that beats the PR on file for that lift
+   * (matched on the library exercise name, case-insensitive: "Trap-bar
+   * Deadlift" ↔ "Trap-bar deadlift") updates the Personal Records panel
+   * immediately. Log 400 on the trap-bar and the PRs read 400 · "New".
+   */
+  function scanForPrs(day: ProgramDay): number {
+    let next = prList;
+    let updates = 0;
+    for (const section of day.sections) {
+      for (const ex of section.exercises) {
+        const lib = exercises[ex.exerciseId];
+        if (!lib || lib.circuit) continue;
+        const liftName = lib.name.trim().toLowerCase();
+        for (const row of logs[exKey(day.id, ex.slot)] ?? []) {
+          // Only sets that were actually done with a weight on the bar count.
+          if (row.weight == null || row.missed || row.result.trim() === "")
+            continue;
+          const parsedReps = parseInt(row.result, 10);
+          const repCount =
+            Number.isFinite(parsedReps) && parsedReps > 0
+              ? parsedReps
+              : undefined;
+          // Weight PRs only — jumps (in) and sprints (s) never match a load.
+          const matches = next.filter(
+            (p) =>
+              (p.unit === "lb" || p.unit === "kg") &&
+              p.lift.trim().toLowerCase() === liftName,
+          );
+          if (matches.length === 0) continue;
+          const inRowUnit = (p: Pr) =>
+            convertRaw(p.value, p.unit as Unit, row.unit);
+          const rowValue =
+            row.weight.unit === row.unit
+              ? row.weight.value
+              : convertRaw(row.weight.value, row.weight.unit, row.unit);
+          // Prefer the same-rep-count PR (1RM vs 3RM…); otherwise the lift's best.
+          const sameReps = matches.find((p) => p.reps === repCount);
+          const benchmark =
+            sameReps ??
+            matches.reduce((a, b) => (inRowUnit(a) >= inRowUnit(b) ? a : b));
+          if (rowValue <= inRowUnit(benchmark)) continue;
+          const entry: Pr = {
+            id: sameReps?.id ?? `pr-local-${lib.id}-${repCount ?? "max"}`,
+            lift: benchmark.lift,
+            value: rowValue,
+            unit: row.unit,
+            reps: repCount,
+            date: new Date().toISOString(),
+            isNew: true,
+          };
+          next = sameReps
+            ? next.map((p) => (p.id === sameReps.id ? entry : p))
+            : [entry, ...next];
+          updates += 1;
+        }
+      }
+    }
+    if (updates > 0) setPrList(next);
+    return updates;
+  }
+
+  /**
    * Round 8 (M18): the bottom "Complete Session" button — moves the workout
    * into Completed Workouts and returns to the landing tabs. Until it's
-   * pressed, the workout stays in Upcoming.
+   * pressed, the workout stays in Upcoming. Round 10: it also refreshes PRs
+   * (R1) and opens the skippable session-feedback dialog (R9).
    */
   function completeSession() {
     if (!activeDay) return;
     const setsLogged = countLoggedSets(activeDay);
+    const prUpdates = scanForPrs(activeDay);
     const entry: CompletedSession = {
       dayId: activeDay.id,
       dayNumber: activeDay.dayNumber,
@@ -362,8 +449,24 @@ export function WorkoutLogger({
     setCompletedDayIds((prev) => new Set([...prev, activeDay.id]));
     closeWorkout();
     flashLanding(
-      `Day ${activeDay.dayNumber} — ${activeDay.title} completed — it moved to Completed Workouts.`,
+      `Day ${activeDay.dayNumber} — ${activeDay.title} completed — it moved to Completed Workouts.${
+        prUpdates > 0
+          ? ` ${prUpdates === 1 ? "1 personal record" : `${prUpdates} personal records`} updated — see Personal Records below.`
+          : ""
+      }`,
     );
+    setFeedbackText("");
+    setFeedbackOpen(true);
+  }
+
+  /** Round 10 (R9): send the session feedback into the team chat. */
+  function sendSessionFeedback() {
+    const text = feedbackText.trim();
+    if (text === "") return;
+    appendSessionFeedback(athleteId, `Session Feedback: ${text}`);
+    setFeedbackOpen(false);
+    setFeedbackText("");
+    flashLanding("Feedback sent to your coaching staff.");
   }
 
   function updateSet(key: string, idx: number, patch: Partial<SetLog>) {
@@ -662,18 +765,20 @@ export function WorkoutLogger({
           </Card>
         )}
 
-        {/* Personal records — fully expanded on the landing page (A8) */}
-        <Card>
+        {/* Personal records — fully expanded on the landing page (A8).
+            Round 10 (R7): #pr anchor — the dashboard PR & Accolades tile
+            deep-links straight down to this section. */}
+        <Card id="pr" className="scroll-mt-24">
           <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-brand-ink" aria-hidden />
             <h3 className="text-base">Personal records</h3>
             <span className="ml-auto tnum text-xs text-muted-foreground">
-              {prs.length} on file
+              {prList.length} on file
             </span>
           </div>
           <ul className="flex flex-col gap-2">
-            {prs.map((pr) => (
+            {prList.map((pr) => (
               <li
                 key={pr.id}
                 className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
@@ -711,6 +816,68 @@ export function WorkoutLogger({
           </ul>
           </CardContent>
         </Card>
+
+        {/* Round 10 (R9): skippable session feedback — posts into the team
+            chat as "Session Feedback: …" so every coach sees it. */}
+        {feedbackOpen ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Session feedback"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+            onClick={() => setFeedbackOpen(false)}
+          >
+            <div
+              className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="eyebrow">Session feedback</span>
+                  <h3 className="mt-1 text-lg">How did the session go?</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+                    A quick note lands in your chat so the whole coaching
+                    staff sees it — or skip it, no pressure.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFeedbackOpen(false)}
+                  aria-label="Skip feedback"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface/60 text-muted-foreground transition-colors hover:bg-accent"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <Textarea
+                autoFocus
+                rows={4}
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Felt strong today — top set moved fast, shoulder felt fine…"
+                aria-label="How did the session go?"
+              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setFeedbackOpen(false)}
+                >
+                  Skip
+                </Button>
+                <Button
+                  type="button"
+                  variant="brand"
+                  disabled={feedbackText.trim() === ""}
+                  onClick={sendSessionFeedback}
+                >
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  Send feedback
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </>
     );
   }
@@ -1296,17 +1463,77 @@ function ExerciseBlock({
                   }}
                 />
               ) : set.loadMode === "pct" && set.load != null ? (
-                <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-                  <span className="tnum text-xs text-muted-foreground">
+                /* Round 10 (R8 bug fix): the computed % load is EDITABLE —
+                   prefilled from the ref max, typing overrides it (the bar
+                   was heavier/lighter than the math). The % hint stays. */
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="tnum shrink-0 text-xs text-muted-foreground">
                     {set.load}%
                   </span>
-                  <span className="tnum truncate text-sm font-semibold">
-                    {resolvePct(set.load, lib, maxes, row.unit) ?? "—"}
-                  </span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    aria-label={`Set ${i + 1} weight for ${name} in ${row.unit} — prescribed ${set.load}%, editable`}
+                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                    value={
+                      row.weight != null
+                        ? weightInUnit(row.weight, row.unit)
+                        : resolvePctValue(set.load, lib, maxes, row.unit) ?? ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") {
+                        onUpdateSet(i, { weight: null });
+                        return;
+                      }
+                      const n = Number(v);
+                      if (!Number.isNaN(n)) {
+                        onUpdateSet(i, {
+                          weight: { value: n, unit: row.unit },
+                        });
+                      }
+                    }}
+                  />
                 </span>
               ) : (
-                <span className="text-xs font-semibold text-muted-foreground">
-                  BW
+                /* Round 10 (R8 bug fix): BW rows take an optional added load
+                   — weighted vests, chains, a plate on the lap. Empty = just
+                   bodyweight. */
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                    BW
+                  </span>
+                  <span
+                    aria-hidden
+                    className="shrink-0 text-xs text-muted-foreground"
+                  >
+                    +
+                  </span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    placeholder="load"
+                    aria-label={`Set ${i + 1} added load for ${name} in ${row.unit} — optional, on top of bodyweight`}
+                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                    value={
+                      row.weight != null ? weightInUnit(row.weight, row.unit) : ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") {
+                        onUpdateSet(i, { weight: null });
+                        return;
+                      }
+                      const n = Number(v);
+                      if (!Number.isNaN(n)) {
+                        onUpdateSet(i, {
+                          weight: { value: n, unit: row.unit },
+                        });
+                      }
+                    }}
+                  />
                 </span>
               )}
 

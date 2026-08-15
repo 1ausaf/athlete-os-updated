@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -21,6 +23,7 @@ import {
   VoiceNoteBubble,
 } from "@/components/app/chat-composer";
 import { ANNOUNCEMENT_READ_KEY } from "@/components/nav/athlete-nav";
+import { TabBar } from "@/components/app/tab-bar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
@@ -28,6 +31,8 @@ import type { ThreadParticipant } from "@/lib/demo/data";
 import { relTime } from "@/lib/demo/data";
 import type { Announcement } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
+
+import { readSessionFeedback } from "../session-feedback";
 
 /**
  * Round 8 (M31): bubble timestamps — a bare time for today's messages,
@@ -72,9 +77,12 @@ function initialsFor(name: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Round 7: no tabs — "they only have one channel", so the page goes    */
-/* straight to the chat, with the read-only news feed compact below.    */
+/* Round 10 (R6): the TAB split returns — announcements got long, so    */
+/* Chat (default, first) and Announcements live on separate tabs. The   */
+/* tab is URL-backed (?tab=announcements) so deep links land right.     */
 /* ------------------------------------------------------------------ */
+
+type MessagesTab = "chat" | "announcements";
 
 export function MessagesClient({
   athleteId,
@@ -96,11 +104,38 @@ export function MessagesClient({
   initialMessages: ChatMessage[];
   announcements: Announcement[];
 }) {
-  // Round 8 (M32): chat 2/3 LEFT, announcements 1/3 RIGHT on lg — the same
-  // split as the coach member profile.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<MessagesTab>(() =>
+    searchParams.get("tab") === "announcements" ? "announcements" : "chat",
+  );
+
+  function selectTab(t: MessagesTab) {
+    setTab(t);
+    router.replace(
+      (t === "announcements"
+        ? "/athlete/messages?tab=announcements"
+        : "/athlete/messages") as Route,
+      { scroll: false },
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-      <div className="min-w-0 lg:col-span-2">
+    <div className="flex flex-col gap-6">
+      <TabBar<MessagesTab>
+        tabs={[
+          { value: "chat", label: "Chat" },
+          {
+            value: "announcements",
+            label: "Announcements",
+            count: announcements.length,
+          },
+        ]}
+        active={tab}
+        onSelect={selectTab}
+      />
+
+      {tab === "chat" ? (
         <CoachChat
           athleteId={athleteId}
           athleteName={athleteName}
@@ -110,9 +145,9 @@ export function MessagesClient({
           participants={participants}
           initialMessages={initialMessages}
         />
-      </div>
-
-      <AnnouncementsFeed announcements={announcements} />
+      ) : (
+        <AnnouncementsFeed announcements={announcements} />
+      )}
     </div>
   );
 }
@@ -145,6 +180,28 @@ function CoachChat({
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
+
+  // Round 10 (R9): merge queued "Session Feedback: …" notes from the workout
+  // logger (a tiny localStorage queue) into the thread as athlete messages.
+  useEffect(() => {
+    const entries = readSessionFeedback(athleteId);
+    if (entries.length === 0) return;
+    setMessages((prev) => {
+      const have = new Set(prev.map((m) => m.id));
+      const merged: ChatMessage[] = entries
+        .map((e) => ({
+          id: `feedback-${e.at}`,
+          senderId: athleteId,
+          senderName: athleteName,
+          senderRole: "athlete" as const,
+          body: e.body,
+          at: e.at,
+        }))
+        .filter((m) => !have.has(m.id));
+      if (merged.length === 0) return prev;
+      return [...prev, ...merged].sort((a, b) => a.at.localeCompare(b.at));
+    });
+  }, [athleteId, athleteName]);
 
   function send(body: string, attachments: ChatAttachment[]) {
     setMessages((prev) => [
@@ -476,8 +533,18 @@ function AttachmentCard({ attachment }: { attachment: ChatAttachment }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Right column — read-only news feed with read/unread state (M33)      */
+/* Announcements tab — full-height list with FULL bodies, links and     */
+/* images (R6), read/unread state kept (M33), #ann-{id} anchors for the */
+/* dashboard deep links (R5).                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Round 10 (R6): announcements that carry an image render a placeholder
+ * media block (the demo has no real uploads). Keyed by announcement id.
+ */
+const ANNOUNCEMENT_IMAGES: Record<string, string> = {
+  "ann-1": "front-desk-holiday-hours.jpg",
+};
 
 function AnnouncementsFeed({ announcements }: { announcements: Announcement[] }) {
   // Round 8 (M33): read ids persist in localStorage; the nav Chat badge
@@ -493,6 +560,18 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
     } catch {
       // Corrupt storage — treat everything as unread.
     }
+  }, []);
+
+  // Round 10 (R5): dashboard rows deep-link to #ann-{id} — once the tab is
+  // mounted, scroll the anchored announcement into view.
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash.startsWith("ann-")) return;
+    requestAnimationFrame(() => {
+      document
+        .getElementById(hash)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }, []);
 
   function persist(next: Set<string>) {
@@ -549,9 +628,11 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
 
       {announcements.map((a) => {
         const unread = !readIds.has(a.id);
+        const image = ANNOUNCEMENT_IMAGES[a.id];
         return (
           <Card
             key={a.id}
+            id={`ann-${a.id}`}
             role="button"
             tabIndex={0}
             aria-label={
@@ -565,7 +646,7 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
               }
             }}
             className={cn(
-              "cursor-pointer transition-colors",
+              "scroll-mt-24 cursor-pointer transition-colors",
               unread ? "border-brand/40" : "hover:bg-accent/30",
             )}
           >
@@ -593,9 +674,29 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
                     {relTime(a.at)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-pretty text-muted-foreground">
-                  {a.body}
-                </p>
+                {/* Round 10 (R6): the FULL body — long announcements welcome;
+                    URLs linkify via the shared chat renderer. */}
+                <div className="mt-1 text-sm text-pretty text-muted-foreground">
+                  {renderChatBody(a.body)}
+                </div>
+                {image ? (
+                  <span className="relative mt-3 block h-40 w-full max-w-md overflow-hidden rounded-xl border border-border">
+                    <span
+                      aria-hidden
+                      className="absolute inset-0"
+                      style={{
+                        background: `linear-gradient(135deg, hsl(${hueFor(image)} 62% 58%), hsl(${(hueFor(image) + 70) % 360} 55% 38%))`,
+                      }}
+                    />
+                    <ImageIcon
+                      className="absolute left-1/2 top-[42%] h-8 w-8 -translate-x-1/2 -translate-y-1/2 text-white/60"
+                      aria-hidden
+                    />
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-5 text-left text-[0.7rem] font-medium text-white">
+                      {image} · demo image — production shows the upload
+                    </span>
+                  </span>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <p className="text-xs font-medium text-foreground/70">
                     {a.author} · LPS staff

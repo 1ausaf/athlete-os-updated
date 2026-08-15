@@ -69,6 +69,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const [ecPhone, setEcPhone] = useState(member.emergencyContact?.phone ?? "");
   const [push, setPush] = useState(member.notifications.push);
   const [emailNotif, setEmailNotif] = useState(member.notifications.email);
+  // R37 — staff get pinged when a member books or cancels; on by default.
+  const [bookingNotif, setBookingNotif] = useState(true);
   const [saved, setSaved] = useState(false);
   // F4/S5 — self-serve certification upload + expired-cert renewal.
   const [certs, setCerts] = useState<StaffCertification[]>(
@@ -340,6 +342,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   // S1 — the push hint names what actually notifies you.
                   ["Push notifications", push, setPush, "Chats you're subscribed to or actively involved in — straight to your phone."],
                   ["Email", emailNotif, setEmailNotif, "Daily digest + anything that needs a reply."],
+                  // R37 — booking activity, default on.
+                  ["Booking activity", bookingNotif, setBookingNotif, "When a member books or cancels a session."],
                 ] as const
               ).map(([label, value, set, hint]) => (
                 <label

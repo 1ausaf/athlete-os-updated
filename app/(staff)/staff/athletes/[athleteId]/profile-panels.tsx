@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   CreditCard,
+  History,
   IdCard,
   LinkIcon,
   Pencil,
@@ -31,6 +32,7 @@ import {
   athletes,
   bucketLabel,
   fmtDay,
+  fmtFullDay,
   money2,
   statusLabel,
   type Athlete,
@@ -454,6 +456,23 @@ const NUTRITION_LABEL: Record<Athlete["nutrition"], string> = {
   pro: "Pro",
 };
 
+/** R20 — one saved protocol version: who, when, and the full field snapshot. */
+interface ProtocolRevision {
+  id: string;
+  date: string;
+  coach: string;
+  summary: string;
+  snapshot: {
+    summary: string;
+    meals: string[];
+    supplements: string[];
+    notes: string;
+  };
+}
+
+/** Rough popover height budget for the flip check (R19). */
+const NUTRITION_MENU_SPACE = 260;
+
 export function NutritionButton({
   athleteId,
   initial,
@@ -463,6 +482,21 @@ export function NutritionButton({
 }) {
   const [tier, setTier] = useState<Athlete["nutrition"]>(initial);
   const [open, setOpen] = useState(false);
+  // R19 — the dropdown clamps to the viewport: right-aligned to the button,
+  // scrollable when tall, and it FLIPS above when the bottom edge is near.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [dropUp, setDropUp] = useState(false);
+
+  function toggleOpen() {
+    if (!open && wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      setDropUp(
+        window.innerHeight - rect.bottom < NUTRITION_MENU_SPACE &&
+          rect.top > NUTRITION_MENU_SPACE,
+      );
+    }
+    setOpen((v) => !v);
+  }
   // C13 — the in-place protocol editor, seeded from the member's protocol.
   const seed = nutritionProtocols[athleteId];
   const [editing, setEditing] = useState(false);
@@ -483,6 +517,34 @@ export function NutritionButton({
   );
   const [notes, setNotes] = useState(seed?.notes ?? "");
   const [savedFlash, setSavedFlash] = useState(false);
+  // R20 — every save appends a revision (date + coach + snapshot); the list
+  // persists per athlete and older versions can be previewed and restored.
+  const revisionsKey = `aos-nutrition-revisions-${athleteId}`;
+  const [revisions, setRevisions] = useState<ProtocolRevision[]>([]);
+  const [revisionsLoaded, setRevisionsLoaded] = useState(false);
+  const [viewing, setViewing] = useState<ProtocolRevision | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(revisionsKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ProtocolRevision[];
+        if (Array.isArray(parsed)) setRevisions(parsed);
+      }
+    } catch {
+      /* corrupted storage — start empty */
+    }
+    setRevisionsLoaded(true);
+  }, [revisionsKey]);
+
+  useEffect(() => {
+    if (!revisionsLoaded) return;
+    try {
+      window.localStorage.setItem(revisionsKey, JSON.stringify(revisions));
+    } catch {
+      /* storage full/blocked — revisions still work in-memory */
+    }
+  }, [revisions, revisionsLoaded, revisionsKey]);
 
   function pick(next: Athlete["nutrition"]) {
     setTier(next);
@@ -490,12 +552,49 @@ export function NutritionButton({
   }
 
   function saveProtocol() {
+    // R20 — append this save to the revision history (newest first).
+    setRevisions((prev) => [
+      {
+        id: `rev-${Date.now()}`,
+        date: new Date().toISOString(),
+        coach: "Coach Ellis",
+        summary: "Protocol updated",
+        snapshot: {
+          summary,
+          meals: [...meals],
+          supplements: [...supplements],
+          notes,
+        },
+      },
+      ...prev,
+    ]);
     setSavedFlash(true);
     window.setTimeout(() => {
       setSavedFlash(false);
       setEditing(false);
     }, 900);
   }
+
+  /** R20 — swap the current fields to a previous snapshot. */
+  function restoreRevision(rev: ProtocolRevision) {
+    setSummary(rev.snapshot.summary);
+    setMeals([...rev.snapshot.meals]);
+    setSupplements([...rev.snapshot.supplements]);
+    setNotes(rev.snapshot.notes);
+    setViewing(null);
+  }
+
+  function closeEditor() {
+    setEditing(false);
+    setViewing(null);
+  }
+
+  // R20 — while previewing a revision the form shows that snapshot read-only.
+  const readOnly = viewing !== null;
+  const shownSummary = viewing ? viewing.snapshot.summary : summary;
+  const shownMeals = viewing ? viewing.snapshot.meals : meals;
+  const shownSupplements = viewing ? viewing.snapshot.supplements : supplements;
+  const shownNotes = viewing ? viewing.snapshot.notes : notes;
 
   function setLine(
     setter: (updater: (prev: string[]) => string[]) => void,
@@ -513,11 +612,11 @@ export function NutritionButton({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-expanded={open}
       >
         <Salad className="h-4 w-4" />
@@ -531,7 +630,14 @@ export function NutritionButton({
             aria-hidden
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-border bg-popover p-2 shadow-raised">
+          {/* R19 — right-aligned, viewport-clamped, flips above near the
+              bottom edge so the menu never falls off-screen */}
+          <div
+            className={cn(
+              "absolute right-0 z-50 max-h-[min(60vh,20rem)] w-56 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-raised scrollbar-slim",
+              dropUp ? "bottom-full mb-1.5" : "top-full mt-1.5",
+            )}
+          >
             {tier === "none" ? (
               <>
                 <p className="eyebrow px-2 pb-1.5">Enable nutrition</p>
@@ -571,13 +677,13 @@ export function NutritionButton({
         </>
       ) : null}
 
-      {/* C13 — the protocol editor dialog */}
+      {/* C13 — the protocol editor dialog (R20: with revision history) */}
       {editing ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/50"
             aria-hidden
-            onClick={() => setEditing(false)}
+            onClick={closeEditor}
           />
           <div
             role="dialog"
@@ -591,7 +697,7 @@ export function NutritionButton({
               </h3>
               <button
                 type="button"
-                onClick={() => setEditing(false)}
+                onClick={closeEditor}
                 aria-label="Close protocol editor"
                 className="ml-auto rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
               >
@@ -600,11 +706,30 @@ export function NutritionButton({
             </div>
 
             <div className="flex flex-col gap-4 overflow-y-auto p-5 scrollbar-slim">
+              {/* R20 — read-only preview banner while viewing a revision */}
+              {viewing ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-info/40 bg-info/10 p-3 text-xs font-medium text-info">
+                  <History className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    Viewing the {fmtFullDay(viewing.date)} version (
+                    {viewing.coach}) — read-only preview.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setViewing(null)}
+                    className="font-semibold underline-offset-2 hover:underline"
+                  >
+                    Back to current
+                  </button>
+                </div>
+              ) : null}
+
               <label className="flex flex-col gap-1">
                 <span className={FIELD_LABEL}>Protocol summary</span>
                 <Textarea
                   rows={3}
-                  value={summary}
+                  value={shownSummary}
+                  disabled={readOnly}
                   placeholder="The one-paragraph rule this member eats by…"
                   className="text-sm leading-relaxed"
                   onChange={(e) => setSummary(e.target.value)}
@@ -613,78 +738,146 @@ export function NutritionButton({
 
               <div className="flex flex-col gap-1.5">
                 <span className={FIELD_LABEL}>Meal checklist</span>
-                {meals.map((m, i) => (
+                {shownMeals.map((m, i) => (
                   <div key={i} className="flex items-center gap-1.5">
                     <Input
                       value={m}
+                      disabled={readOnly}
                       aria-label={`Meal line ${i + 1}`}
                       className="h-9 flex-1 text-sm"
                       onChange={(e) => setLine(setMeals, i, e.target.value)}
                     />
-                    <button
-                      type="button"
-                      aria-label={`Remove meal line ${i + 1}`}
-                      title="Remove line"
-                      onClick={() => removeLine(setMeals, i)}
-                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove meal line ${i + 1}`}
+                        title="Remove line"
+                        onClick={() => removeLine(setMeals, i)}
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setMeals((prev) => [...prev, ""])}
-                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add meal line
-                </button>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => setMeals((prev) => [...prev, ""])}
+                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add meal line
+                  </button>
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <span className={FIELD_LABEL}>Supplements</span>
-                {supplements.map((s, i) => (
+                {shownSupplements.map((s, i) => (
                   <div key={i} className="flex items-center gap-1.5">
                     <Input
                       value={s}
+                      disabled={readOnly}
                       aria-label={`Supplement ${i + 1}`}
                       className="h-9 flex-1 text-sm"
                       onChange={(e) =>
                         setLine(setSupplements, i, e.target.value)
                       }
                     />
-                    <button
-                      type="button"
-                      aria-label={`Remove supplement ${i + 1}`}
-                      title="Remove supplement"
-                      onClick={() => removeLine(setSupplements, i)}
-                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove supplement ${i + 1}`}
+                        title="Remove supplement"
+                        onClick={() => removeLine(setSupplements, i)}
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setSupplements((prev) => [...prev, ""])}
-                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add supplement
-                </button>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => setSupplements((prev) => [...prev, ""])}
+                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add supplement
+                  </button>
+                ) : null}
               </div>
 
               <label className="flex flex-col gap-1">
                 <span className={FIELD_LABEL}>Notes</span>
                 <Textarea
                   rows={3}
-                  value={notes}
+                  value={shownNotes}
+                  disabled={readOnly}
                   placeholder="Weigh-in cadence, hard rules, anything the member should read…"
                   className="text-sm leading-relaxed"
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </label>
+
+              {/* R20 — Revisions: every save on file, newest first */}
+              <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+                <span className={FIELD_LABEL}>Revisions</span>
+                {revisions.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border bg-surface/30 p-3 text-xs text-muted-foreground">
+                    No revisions yet — every save is recorded here with the
+                    date and coach.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {revisions.map((rev) => (
+                      <li
+                        key={rev.id}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border border-border bg-surface/50 px-3 py-2",
+                          viewing?.id === rev.id &&
+                            "border-brand/50 bg-brand/[0.05]",
+                        )}
+                      >
+                        <History
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 text-xs">
+                          <span className="tnum font-semibold">
+                            {fmtFullDay(rev.date)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {rev.coach} · {rev.summary}
+                          </span>
+                        </span>
+                        {viewing?.id === rev.id ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setViewing(null)}
+                          >
+                            Back to current
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setViewing(rev)}
+                          >
+                            View
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
@@ -698,16 +891,22 @@ export function NutritionButton({
                     Saved
                   </Pill>
                 ) : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditing(false)}
-                >
+                <Button variant="ghost" size="sm" onClick={closeEditor}>
                   Cancel
                 </Button>
-                <Button variant="brand" size="sm" onClick={saveProtocol}>
-                  Save protocol
-                </Button>
+                {viewing ? (
+                  <Button
+                    variant="brand"
+                    size="sm"
+                    onClick={() => restoreRevision(viewing)}
+                  >
+                    Restore this version
+                  </Button>
+                ) : (
+                  <Button variant="brand" size="sm" onClick={saveProtocol}>
+                    Save protocol
+                  </Button>
+                )}
               </span>
             </div>
           </div>
@@ -1391,10 +1590,13 @@ export function AvatarUpload({
   initials,
   hue,
   name,
+  uploadLabel,
 }: {
   initials: string;
   hue: number;
   name: string;
+  /** R23 — override for non-photo uploads, e.g. "Upload logo (demo)". */
+  uploadLabel?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [updated, setUpdated] = useState(false);
@@ -1405,11 +1607,11 @@ export function AvatarUpload({
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
-        aria-label={`Change ${name}'s photo`}
+        aria-label={uploadLabel ?? `Change ${name}'s photo`}
         title={
           updated
-            ? "Photo updated (saves locally in this demo)"
-            : "Change photo"
+            ? "Updated (saves locally in this demo)"
+            : (uploadLabel ?? "Change photo")
         }
         className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
       >

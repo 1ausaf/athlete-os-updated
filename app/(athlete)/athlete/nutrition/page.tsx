@@ -2,11 +2,8 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   AlertTriangle,
-  CalendarCheck,
-  CheckCircle2,
   CheckSquare,
   Droplet,
-  Droplets,
   FileText,
   Lock,
   Milk,
@@ -69,9 +66,9 @@ export default async function NutritionPage() {
               </h2>
               <p className="mx-auto max-w-md text-sm text-muted-foreground/80 text-pretty">
                 Pro athletes get an individualized protocol — weekly body-weight
-                and body-fat check-ins with trend tracking, example meals,
-                game-day fueling and a supplement plan — written and updated by
-                the coaching staff. Talk to your coach to upgrade.
+                and body-fat check-ins with trend tracking, example meals and a
+                supplement plan — written and updated by the coaching staff.
+                Talk to your coach to upgrade.
               </p>
             </div>
             <div className="mt-1 flex flex-wrap justify-center gap-2">
@@ -270,41 +267,9 @@ export default async function NutritionPage() {
         </CardContent>
       </Card>
 
-      {/* Game day + hydration */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
-            <div className="flex items-center gap-2">
-              <CalendarCheck
-                className="h-5 w-5 text-muted-foreground"
-                aria-hidden
-              />
-              <h3 className="text-base">Game day</h3>
-            </div>
-            <ul className="flex flex-col gap-2.5">
-              {protocol.gameDay.map((item) => (
-                <li key={item} className="flex items-start gap-2.5 text-sm">
-                  <CheckCircle2
-                    className="mt-0.5 h-4 w-4 shrink-0 text-success"
-                    aria-hidden
-                  />
-                  <span className="text-pretty">{item}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <div className="flex items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4 lg:self-start">
-          <Droplets className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-semibold text-info">Hydration</span>
-            <p className="text-sm leading-relaxed text-pretty">
-              {protocol.hydration}
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Round 10 (R11): the Game Day and Hydration sections are gone from
+          the athlete view — that guidance lives in the coach's notes and
+          protocol summary now. */}
 
       {/* Coach notes */}
       <Card>

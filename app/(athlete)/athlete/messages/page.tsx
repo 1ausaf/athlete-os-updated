@@ -9,9 +9,9 @@ import { announcements } from "@/lib/demo/training";
 import { MessagesClient } from "./messages-client";
 
 /**
- * Athlete Messages — round 7: "they only have one channel", so the page goes
- * STRAIGHT to the chat (no tabs); the read-only announcement feed sits
- * compactly below.
+ * Athlete Messages — round 10 (R6): the TAB split is back. Announcements got
+ * long (full bodies, links, images), so the page tabs into Chat (first,
+ * default) and Announcements; ?tab=announcements deep-links the news list.
  *
  * Round 5 (B1/P7): the channel is resolved PER ATHLETE — a parent managing
  * Maya sees Maya's chat, never Jordan's. Round 5 (P5): messages typed while
@@ -34,8 +34,8 @@ export default async function AthleteMessagesPage() {
         title="Chat"
         description={
           athlete.isMinor
-            ? "One channel to the whole coaching staff. Chats with minor athletes always keep a second adult present — the Rule of Two."
-            : "One channel to your whole coaching staff."
+            ? "Your channel to the whole coaching staff, plus facility announcements. Chats with minor athletes always keep a second adult present — the Rule of Two."
+            : "Your channel to the whole coaching staff — facility announcements live on their own tab."
         }
         actions={
           unread > 0 ? (

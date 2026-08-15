@@ -62,6 +62,7 @@ export default async function AthleteTrainingPage() {
 
       {/* Tabs (published / past) + logger + expanded PRs (client) */}
       <WorkoutLogger
+        athleteId={athlete.id}
         days={days}
         exercises={exerciseMap}
         history={history}

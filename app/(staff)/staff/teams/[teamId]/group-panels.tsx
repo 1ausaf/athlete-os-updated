@@ -1,26 +1,40 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useState } from "react";
-import { CheckCircle2, IdCard, NotebookPen, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  IdCard,
+  NotebookPen,
+  Plus,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
 
 import {
   ManagedSelect,
   ManagementCard,
 } from "@/app/(staff)/staff/athletes/[athleteId]/profile-panels";
+import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { RichTextComposer, RichTextView } from "@/components/app/rich-text";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import {
+  athleteById,
   athletes,
   bucketLabel,
   relTime,
   statusLabel,
+  type Athlete,
   type AthleteStatus,
   type MemberNote,
 } from "@/lib/demo/data";
 import { staffByName } from "@/lib/demo/staff";
-import type { TrainingGroup } from "@/lib/demo/training";
+import { trainingGroups, type TrainingGroup } from "@/lib/demo/training";
 
 /**
  * Round 8 (C21): the group profile mirrors the member profile — these are the
@@ -112,6 +126,140 @@ export function GroupDetailsCard({
 
         <p className="text-[0.7rem] text-muted-foreground">
           Saves locally in this demo.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Group Members (R23) — rows open the member profile; each row can be */
+/* REMOVED (confirm), existing un-grouped athletes are addable from a  */
+/* select, and "New member…" onboards someone brand new.               */
+/* ------------------------------------------------------------------ */
+
+export function GroupMembersCard({
+  group,
+  admin,
+}: {
+  group: TrainingGroup;
+  admin: boolean;
+}) {
+  const [memberIds, setMemberIds] = useState<string[]>(group.memberAthleteIds);
+
+  const members = memberIds
+    .map((id) => athleteById(id))
+    .filter((a): a is Athlete => Boolean(a))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // R23/R44 — only EXISTING athletes not already in a group are addable.
+  const groupedIds = new Set(
+    trainingGroups.flatMap((g) =>
+      g.id === group.id ? memberIds : g.memberAthleteIds,
+    ),
+  );
+  const addable = athletes
+    .filter((a) => a.status === "active" && !groupedIds.has(a.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Linked adds/removes shift the headline count with them.
+  const totalCount =
+    group.athleteCount + (memberIds.length - group.memberAthleteIds.length);
+
+  function removeMember(a: Athlete) {
+    if (
+      window.confirm(
+        `Remove ${a.name} from ${group.name}? Their member profile stays — they just leave the group.`,
+      )
+    ) {
+      setMemberIds((prev) => prev.filter((id) => id !== a.id));
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Group Members</h3>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {totalCount} members — {members.length} with linked profiles
+          </span>
+        </div>
+
+        {members.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+            No linked profiles yet — all {totalCount} members train under the
+            shared group program.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {members.map((a) => (
+              <li key={a.id} className="flex items-center gap-1.5">
+                <Link
+                  href={`/staff/athletes/${a.id}` as Route}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:border-brand/40"
+                >
+                  <AthleteAvatar initials={a.initials} hue={a.hue} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold">
+                      {a.name}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {a.sport} · {a.age} · {a.gender}
+                    </span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </Link>
+                {admin ? (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${a.name} from the group`}
+                    title="Remove from group"
+                    onClick={() => removeMember(a)}
+                    className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {admin ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* R23 — add an EXISTING athlete who isn't in a group yet */}
+            <select
+              value=""
+              aria-label="Add an existing member to the group"
+              onChange={(e) => {
+                if (e.target.value) {
+                  setMemberIds((prev) => [...prev, e.target.value]);
+                }
+              }}
+              className="h-9 min-w-44 flex-1 rounded-md border border-dashed border-input bg-surface px-2.5 text-sm text-muted-foreground"
+            >
+              <option value="">+ Add member…</option>
+              {addable.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} — {a.sport}
+                </option>
+              ))}
+            </select>
+            {/* Brand-new people still go through onboarding */}
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/staff/athletes/new?group=${group.id}` as Route}>
+                <Plus className="h-4 w-4" />
+                New member…
+              </Link>
+            </Button>
+          </div>
+        ) : null}
+        <p className="text-[0.7rem] text-muted-foreground">
+          Add member picks an existing athlete who isn&apos;t in a group yet;
+          New member… onboards someone brand new into this group. Saves locally
+          in this demo.
         </p>
       </CardContent>
     </Card>
@@ -217,6 +365,8 @@ export function GroupNotesPanel({
             placeholder={`Write a note about ${groupName}…`}
             onChangeHtml={setDraftHtml}
             resetKey={resetKey}
+            // R23 — group notes run longer; give the composer ~6 lines up front
+            className="[&_.rich-text]:min-h-[9rem]"
             actions={
               <>
                 {flash ? (

@@ -89,11 +89,15 @@ export function NewMemberForm({
   const [emergencyName, setEmergencyName] = useState("");
   const [emergencyRelation, setEmergencyRelation] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
+  // R40 — parent accounts: on by default whenever the guardian is filled in.
+  const [createParentLogin, setCreateParentLogin] = useState(true);
 
   const [created, setCreated] = useState<{
     name: string;
+    email: string;
     password: string;
     groupName?: string;
+    parentEmail?: string;
   } | null>(null);
 
   const canSubmit =
@@ -101,12 +105,21 @@ export function NewMemberForm({
     lastName.trim().length > 0 &&
     email.trim().length > 3;
 
+  const guardianFilled =
+    guardianName.trim().length > 0 || guardianEmail.trim().length > 0;
+
   function handleSubmit() {
     if (!canSubmit) return;
     setCreated({
       name: `${firstName.trim()} ${lastName.trim()}`,
+      email: email.trim(),
       password: generateTempPassword(),
       groupName: groups.find((g) => g.id === groupId)?.name,
+      // R40 — the parent invite goes out when the box stays checked
+      parentEmail:
+        createParentLogin && guardianEmail.trim().length > 3
+          ? guardianEmail.trim()
+          : undefined,
     });
   }
 
@@ -132,6 +145,7 @@ export function NewMemberForm({
     setEmergencyName("");
     setEmergencyRelation("");
     setEmergencyPhone("");
+    setCreateParentLogin(true);
     setCreated(null);
   }
 
@@ -155,9 +169,27 @@ export function NewMemberForm({
               <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden />
               {created.password}
             </p>
+            {/* R39 — the invite email carries a set-password link */}
             <p className="mt-2 text-xs text-muted-foreground">
-              They&apos;ll set their own password at first sign-in. Nothing is
-              emailed in this demo.
+              An invite email with a set-password link was sent to{" "}
+              <span className="font-semibold text-foreground">
+                {created.email}
+              </span>
+              .
+            </p>
+            {/* R40 — the parent gets their own invite */}
+            {created.parentEmail ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Parent invite sent to{" "}
+                <span className="font-semibold text-foreground">
+                  {created.parentEmail}
+                </span>{" "}
+                — they manage bookings, billing and chat for this athlete.
+              </p>
+            ) : null}
+            <p className="mt-2 text-xs text-muted-foreground">
+              They&apos;ll set their own password at first sign-in. (Demo — no
+              real email goes out.)
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -377,9 +409,28 @@ export function NewMemberForm({
               />
             </Field>
           </div>
+          {/* R40 — parent accounts: checked by default once a guardian is
+              filled in; the invite goes to the guardian email on submit */}
+          <label
+            className={cn(
+              "flex cursor-pointer items-center gap-2 text-sm font-medium",
+              !guardianFilled && "opacity-60",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={createParentLogin}
+              onChange={(e) => setCreateParentLogin(e.target.checked)}
+              className="h-4 w-4 accent-[hsl(var(--brand))]"
+            />
+            Create parent login
+            <span className="text-xs font-normal text-muted-foreground">
+              — invite sent to the guardian email
+            </span>
+          </label>
           <p className="text-[0.7rem] text-muted-foreground">
-            For minors, the parent gets their own login and manages bookings +
-            chat for this member.
+            For minors, the parent gets their own login and manages bookings,
+            billing and chat for this member.
           </p>
         </div>
 

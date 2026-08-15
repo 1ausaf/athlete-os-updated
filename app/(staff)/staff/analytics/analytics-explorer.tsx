@@ -297,6 +297,7 @@ export function AnalyticsExplorer() {
           </div>
         ) : points.length > 0 ? (
           <LiftProgression
+            lift={lift}
             points={points}
             testedMax={athleteMaxes[athleteId]?.[lift]}
             bodyweightLb={bwMode && nutritionOn ? bodyweightLb : undefined}
@@ -998,10 +999,13 @@ function RepMaxGrid({
 /* ------------------------------------------------------------------ */
 
 function LiftProgression({
+  lift,
   points,
   testedMax,
   bodyweightLb,
 }: {
+  /** R36 — the selected exercise; the history table names it explicitly. */
+  lift: string;
   points: LiftPoint[];
   testedMax?: ReferenceMaxEntry;
   /** R8 (A6) — when set, everything renders as lift ÷ bodyweight ("× BW"). */
@@ -1083,8 +1087,12 @@ function LiftProgression({
           />
         </div>
 
-        {/* Tested-set history */}
-        <div className="overflow-x-auto rounded-lg border border-border">
+        {/* R36 — per-exercise history: named so it's unmistakably per-exercise */}
+        <div className="flex min-w-0 flex-col gap-2">
+          <h3 className="text-sm font-semibold">
+            Exercise history — every logged session for {lift}
+          </h3>
+          <div className="overflow-x-auto rounded-lg border border-border">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -1114,6 +1122,7 @@ function LiftProgression({
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
       {bwMode ? (
@@ -1130,18 +1139,30 @@ function LiftProgression({
 /* Training summary panel body — sortable columns (C36)                */
 /* ------------------------------------------------------------------ */
 
-type SummarySortKey = "date" | "title" | "reps" | "volume" | "duration";
+type SummarySortKey =
+  | "date"
+  | "logged"
+  | "title"
+  | "reps"
+  | "volume"
+  | "duration";
 
 const SUMMARY_SORTERS: Record<
   SummarySortKey,
   (s: SessionSummary) => number | string
 > = {
   date: (s) => new Date(s.date).getTime(),
+  // R24 — the day the athlete actually logged it (defaults to the schedule).
+  logged: (s) => new Date(s.loggedOn ?? s.date).getTime(),
   title: (s) => s.title.toLowerCase(),
   reps: (s) => s.reps,
   volume: (s) => s.volumeKg,
   duration: (s) => s.durationMin,
 };
+
+/** R24 — tooltip for sessions logged off their scheduled day. */
+const LOGGED_OFF_SCHEDULE_TITLE =
+  "Logged on a different day than scheduled — sessions can't be moved, this is the factual date.";
 
 function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
   const [sortKey, setSortKey] = useState<SummarySortKey>("date");
@@ -1216,6 +1237,13 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
                 onSort={toggleSort}
               />
               <SortableHead
+                label="Logged"
+                sortKey="logged"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              <SortableHead
                 label="Session"
                 sortKey="title"
                 current={sortKey}
@@ -1258,10 +1286,26 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
             {sorted.map((s) => {
               const [done, prescribed] = s.blocksCompleted.split("/");
               const partial = done !== prescribed;
+              // R24 — when the log day differs from the schedule, flag it.
+              const loggedOffSchedule =
+                s.loggedOn != null && s.loggedOn !== s.date;
               return (
                 <TableRow key={s.date}>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
                     {fmtDay(s.date)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "whitespace-nowrap",
+                      loggedOffSchedule
+                        ? "font-medium text-warning"
+                        : "text-muted-foreground",
+                    )}
+                    title={
+                      loggedOffSchedule ? LOGGED_OFF_SCHEDULE_TITLE : undefined
+                    }
+                  >
+                    {fmtDay(s.loggedOn ?? s.date)}
                   </TableCell>
                   <TableCell className="font-medium">{s.title}</TableCell>
                   <TableCell className="tnum hidden text-right sm:table-cell">{s.reps}</TableCell>
@@ -1286,7 +1330,7 @@ function TrainingSummary({ summaries }: { summaries: SessionSummary[] }) {
           </TableBody>
           <TableFooter>
             <TableRow className="hover:bg-muted/50">
-              <TableCell colSpan={2} className="text-xs text-muted-foreground">
+              <TableCell colSpan={3} className="text-xs text-muted-foreground">
                 Totals · {summaries.length} sessions
               </TableCell>
               <TableCell className="tnum text-right">{totalReps}</TableCell>
