@@ -1846,7 +1846,12 @@ export function trainingGroupById(id: string): TrainingGroup | undefined {
 /* ------------------------------------------------------------------ */
 
 export interface SessionSummary {
+  /** The SCHEDULED day of the session. */
   date: string;
+  /** Round 10 (R24): when the athlete actually LOGGED it — can differ from
+   *  the scheduled day (trained early/late); sessions can't be moved, so
+   *  this is the factual record. Omitted = logged on the scheduled day. */
+  loggedOn?: string;
   title: string;
   reps: number;
   volumeKg: number;
@@ -1856,9 +1861,11 @@ export interface SessionSummary {
 
 export const trainingSummaries: Record<string, SessionSummary[]> = {
   "ath-jordan": [
-    { date: at(-2), title: "Block C — Day 13", reps: 96, volumeKg: 7420, durationMin: 64, blocksCompleted: "5/5" },
+    // R24: Day 13 was logged a day AFTER its scheduled slot; Day 11 a day
+    // early — the Logged column shows the factual date.
+    { date: at(-2), loggedOn: at(-1), title: "Block C — Day 13", reps: 96, volumeKg: 7420, durationMin: 64, blocksCompleted: "5/5" },
     { date: at(-5), title: "Block C — Day 12", reps: 88, volumeKg: 6980, durationMin: 58, blocksCompleted: "5/5" },
-    { date: at(-7), title: "Block C — Day 11", reps: 104, volumeKg: 8130, durationMin: 71, blocksCompleted: "4/5" },
+    { date: at(-7), loggedOn: at(-8), title: "Block C — Day 11", reps: 104, volumeKg: 8130, durationMin: 71, blocksCompleted: "4/5" },
     { date: at(-9), title: "Block C — Day 10", reps: 92, volumeKg: 7255, durationMin: 62, blocksCompleted: "5/5" },
     { date: at(-12), title: "Block C — Day 9", reps: 84, volumeKg: 6540, durationMin: 55, blocksCompleted: "5/5" },
     { date: at(-14), title: "Block C — Day 8", reps: 100, volumeKg: 7810, durationMin: 66, blocksCompleted: "5/5" },

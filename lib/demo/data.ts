@@ -282,10 +282,37 @@ export interface Invoice {
   athleteName: string;
   plan: string;
   amountCents: number;
+  /** Round 10 (R45): the audit trail — issue date alongside due date. */
+  issuedAt: string;
   dueDate: string;
-  status: "paid" | "due" | "overdue" | "upcoming" | "canceled";
+  status:
+    | "paid"
+    | "due"
+    | "overdue"
+    | "upcoming"
+    | "canceled"
+    | "partial"
+    | "refunded";
   method: "Square" | "Cash" | "Card on file";
+  /** Stamped when the invoice is resolved (paid or canceled) — R45. */
+  paidAt?: string;
+  canceledAt?: string;
+  /** How it was paid (chosen at mark-paid time) — R47. */
+  paidMethod?: string;
+  /** Partial payments (R48): amount received so far. */
+  paidAmountCents?: number;
+  /** Refunds (R49): amount refunded. */
+  refundedCents?: number;
 }
+
+/** Payment methods offered when marking an invoice paid (round 10, R47). */
+export const PAYMENT_METHODS = [
+  "Square",
+  "Credit / debit card",
+  "Cash",
+  "Cheque",
+  "Other",
+] as const;
 
 export interface ComplianceRow {
   threadId: string;
@@ -1298,7 +1325,7 @@ export const pastSessions: TrainingSession[] = [
 export const threads: Thread[] = [
   {
     id: "thread-maya",
-    subject: "Maya — RTP check-ins",
+    subject: "Maya Okafor",
     kind: "direct",
     involvesMinor: true,
     participants: [
@@ -1339,7 +1366,7 @@ export const threads: Thread[] = [
   },
   {
     id: "thread-jordan",
-    subject: "Jordan — programming",
+    subject: "Jordan Vega",
     kind: "direct",
     involvesMinor: false,
     participants: [
@@ -1367,6 +1394,87 @@ export const threads: Thread[] = [
       },
     ],
   },
+  // Round 10 (R23): GROUP chats — every group has one thread with its
+  // linked members + all its coaches.
+  {
+    id: "thread-grp-track",
+    subject: "Quest Sports Track Club",
+    kind: "direct",
+    involvesMinor: false,
+    participants: [
+      { id: "coach-clance", name: "Coach Clance", role: "coach" },
+      { id: "coach-ellis", name: "Coach Ellis", role: "coach" },
+      { id: "coach-nadia", name: "Coach Nadia", role: "coach" },
+      { id: "contact-angela", name: "Angela Reyes", role: "guardian" },
+    ],
+    unread: 1,
+    updatedAt: at(0, 7, 45),
+    messages: [
+      {
+        id: "gt1",
+        senderId: "coach-clance",
+        senderName: "Coach Clance",
+        senderRole: "coach",
+        body: "Sprint Development Block A wraps next week — testing day Thursday. Every athlete brings spikes.",
+        at: at(-2, 18),
+      },
+      {
+        id: "gt2",
+        senderId: "contact-angela",
+        senderName: "Angela Reyes",
+        senderRole: "guardian",
+        body: "Thanks coach — the club bus arrives 15 minutes early Thursday, gates open?",
+        at: at(0, 7, 45),
+      },
+    ],
+  },
+  {
+    id: "thread-grp-golf",
+    subject: "Sunday Golf Group",
+    kind: "direct",
+    involvesMinor: false,
+    participants: [
+      { id: "coach-ellis", name: "Coach Ellis", role: "coach" },
+      { id: "coach-nadia", name: "Coach Nadia", role: "coach" },
+      { id: "ath-leo", name: "Leo Martin", role: "athlete" },
+    ],
+    unread: 0,
+    updatedAt: at(-2, 10),
+    messages: [
+      {
+        id: "gg1",
+        senderId: "coach-nadia",
+        senderName: "Coach Nadia",
+        senderRole: "coach",
+        body: "Sunday crew — rotational power day this week. Bring your own glove if you want launch-monitor numbers after.",
+        at: at(-2, 10),
+      },
+    ],
+  },
+  {
+    id: "thread-grp-tigers",
+    subject: "Tigers HPP [A]",
+    kind: "direct",
+    involvesMinor: true,
+    participants: [
+      { id: "coach-clance", name: "Coach Clance", role: "coach" },
+      { id: "coach-nadia", name: "Coach Nadia", role: "coach" },
+      { id: "ath-ty", name: "Tyler Brooks", role: "athlete", isMinor: true },
+      { id: "contact-rick", name: "Rick Alvarez", role: "guardian" },
+    ],
+    unread: 0,
+    updatedAt: at(-3, 16),
+    messages: [
+      {
+        id: "tg1",
+        senderId: "coach-clance",
+        senderName: "Coach Clance",
+        senderRole: "coach",
+        body: "Tigers — arm-care circuit added before every session this block. 10 minutes, non-negotiable.",
+        at: at(-3, 16),
+      },
+    ],
+  },
   {
     id: "thread-broadcast",
     subject: "Facility — Holiday hours",
@@ -1391,7 +1499,7 @@ export const threads: Thread[] = [
   },
   {
     id: "thread-andre",
-    subject: "Andre — attendance + billing",
+    subject: "Andre Santos",
     kind: "direct",
     involvesMinor: true,
     participants: [
@@ -1484,15 +1592,15 @@ export const plans: Plan[] = [
 ];
 
 export const invoices: Invoice[] = [
-  { id: "inv-1", athleteId: "ath-dre", athleteName: "Andre Santos", plan: "Academy", amountCents: 32000, dueDate: at(-4), status: "overdue", method: "Square" },
-  { id: "inv-2", athleteId: "ath-sofia", athleteName: "Sofia Lindén", plan: "Pro Track", amountCents: 34000, dueDate: at(1), status: "due", method: "Card on file" },
-  { id: "inv-3", athleteId: "ath-ty", athleteName: "Tyler Brooks", plan: "Academy", amountCents: 26000, dueDate: at(3), status: "upcoming", method: "Square" },
-  { id: "inv-4", athleteId: "ath-jordan", athleteName: "Jordan Vega", plan: "Pro Track", amountCents: 34000, dueDate: at(-1), status: "paid", method: "Card on file" },
-  { id: "inv-5", athleteId: "ath-ren", athleteName: "Ren Tanaka", plan: "Elite", amountCents: 52000, dueDate: at(-2), status: "paid", method: "Square" },
-  { id: "inv-6", athleteId: "ath-maya", athleteName: "Maya Okafor", plan: "Academy", amountCents: 26000, dueDate: at(6), status: "upcoming", method: "Square" },
-  { id: "inv-7", athleteId: "ath-leo", athleteName: "Leo Martin", plan: "Executive", amountCents: 30000, dueDate: at(-1), status: "paid", method: "Card on file" },
+  { id: "inv-1", athleteId: "ath-dre", athleteName: "Andre Santos", plan: "Academy", amountCents: 32000, issuedAt: at(-18), dueDate: at(-4), status: "overdue", method: "Square" },
+  { id: "inv-2", athleteId: "ath-sofia", athleteName: "Sofia Lindén", plan: "Pro Track", amountCents: 34000, issuedAt: at(-13), dueDate: at(1), status: "due", method: "Card on file" },
+  { id: "inv-3", athleteId: "ath-ty", athleteName: "Tyler Brooks", plan: "Academy", amountCents: 26000, issuedAt: at(-11), dueDate: at(3), status: "upcoming", method: "Square" },
+  { id: "inv-4", athleteId: "ath-jordan", athleteName: "Jordan Vega", plan: "Pro Track", amountCents: 34000, issuedAt: at(-15), dueDate: at(-1), status: "paid", paidAt: at(-1), paidMethod: "Square", method: "Card on file" },
+  { id: "inv-5", athleteId: "ath-ren", athleteName: "Ren Tanaka", plan: "Elite", amountCents: 52000, issuedAt: at(-16), dueDate: at(-2), status: "paid", paidAt: at(-1), paidMethod: "Square", method: "Square" },
+  { id: "inv-6", athleteId: "ath-maya", athleteName: "Maya Okafor", plan: "Academy", amountCents: 26000, issuedAt: at(-8), dueDate: at(6), status: "upcoming", method: "Square" },
+  { id: "inv-7", athleteId: "ath-leo", athleteName: "Leo Martin", plan: "Executive", amountCents: 30000, issuedAt: at(-15), dueDate: at(-1), status: "paid", paidAt: at(-1), paidMethod: "Square", method: "Card on file" },
   // Round 5 (P2): Noah's overdue invoice feeds his parent-switcher badge.
-  { id: "inv-8", athleteId: "ath-noah", athleteName: "Noah Okafor", plan: "Academy", amountCents: 26000, dueDate: at(-3), status: "overdue", method: "Square" },
+  { id: "inv-8", athleteId: "ath-noah", athleteName: "Noah Okafor", plan: "Academy", amountCents: 26000, issuedAt: at(-17), dueDate: at(-3), status: "overdue", method: "Square" },
 ];
 
 /** 8-week revenue trend (cents), oldest → newest. */

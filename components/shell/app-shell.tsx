@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
@@ -58,13 +59,41 @@ export function AppShell({
   fullWidth = false,
   children,
 }: AppShellProps) {
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  // Round 10 (R2): the mobile drawer closes after any navigation, and a thin
+  // brand progress bar runs while the next page loads.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navigating, setNavigating] = useState(false);
 
   useEffect(() => {
     if (window.localStorage.getItem(SIDEBAR_KEY) === "collapsed") {
       setCollapsed(true);
     }
   }, []);
+
+  // Arriving on a new route: close the drawer, stop the progress bar.
+  useEffect(() => {
+    setMobileNavOpen(false);
+    setNavigating(false);
+  }, [pathname]);
+
+  // Delegate: any same-app link click to a DIFFERENT route starts the bar.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest?.("a[href]");
+      if (!a) return;
+      const href = a.getAttribute("href") ?? "";
+      if (!href.startsWith("/") || href.split("?")[0] === pathname) return;
+      setNavigating(true);
+    };
+    document.addEventListener("click", onClick, true);
+    const safety = window.setTimeout(() => setNavigating(false), 8000);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.clearTimeout(safety);
+    };
+  }, [pathname]);
 
   const toggleSidebar = () => {
     setCollapsed((prev) => {
@@ -91,6 +120,17 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Round 10 (R2): route-transition indicator — a thin brand bar that
+          sweeps while the next page loads. */}
+      {navigating ? (
+        <div
+          aria-hidden
+          className="fixed inset-x-0 top-0 z-[70] h-0.5 overflow-hidden"
+        >
+          <div className="nav-progress h-full w-1/3 rounded-r-full bg-brand" />
+        </div>
+      ) : null}
+
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -162,7 +202,7 @@ export function AppShell({
       >
         <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 md:px-8">
           {/* Mobile nav trigger */}
-          <Sheet>
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild>
               <Button
                 variant="ghost"

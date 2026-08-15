@@ -240,6 +240,19 @@
     @apply rounded bg-brand/10 px-1 font-semibold text-brand-ink no-underline;
   }
 
+  /* Round 10 (R2): indeterminate route-transition sweep. */
+  @keyframes nav-progress-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+  .nav-progress {
+    animation: nav-progress-sweep 1s ease-in-out infinite;
+  }
+
   /* Thin brand rule used on marketing sections. */
   .rule-brand {
     height: 2px;

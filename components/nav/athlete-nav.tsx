@@ -72,7 +72,7 @@ export function AthleteNav({
       href: "/athlete/nutrition",
       label: "Nutrition",
       icon: Apple,
-      tag: hasNutrition ? "Pro" : "Upgrade",
+      // Round 10 (R3): no "Pro" tag beside Nutrition — locked state only.
       locked: !hasNutrition,
     },
     { href: "/athlete/assessment", label: "Assessment", icon: ClipboardCheck },

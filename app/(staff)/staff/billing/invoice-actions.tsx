@@ -28,6 +28,8 @@ const statusMeta: Record<Invoice["status"], { label: string; tone: PillTone }> =
     due: { label: "Due", tone: "warning" },
     overdue: { label: "Overdue", tone: "danger" },
     canceled: { label: "Canceled", tone: "neutral" },
+    partial: { label: "Partially paid", tone: "info" },
+    refunded: { label: "Refunded", tone: "neutral" },
   };
 
 /**
@@ -259,6 +261,7 @@ function NewInvoiceDialog({
       athleteName: clientName,
       plan: memo.trim() || "One-off invoice",
       amountCents: Math.round(amountNum * 100),
+      issuedAt: new Date().toISOString(),
       dueDate: new Date(`${due}T12:00:00`).toISOString(),
       status: "due",
       method: "Square",

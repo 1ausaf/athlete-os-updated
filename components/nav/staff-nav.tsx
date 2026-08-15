@@ -31,7 +31,7 @@ export function StaffNav({ user }: { user: AppUser }) {
       icon: Users,
       badge: programsDue || undefined,
     },
-    { href: "/staff/programming", label: "Programming", icon: ClipboardList },
+    { href: "/staff/programming", label: "Programs", icon: ClipboardList },
     { href: "/staff/sessions", label: "Bookings", icon: CalendarRange },
     {
       href: "/staff/messaging",

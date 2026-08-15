@@ -82,6 +82,11 @@ export function threadIdForAthlete(athleteId: string): string {
   return threadIdFor(athleteId);
 }
 
+/** Round 10 (R23): every group has ONE chat — members + coaches together. */
+export function threadIdForGroup(groupId: string): string {
+  return `thread-${groupId}`;
+}
+
 function threadIdFor(athleteId: string): string {
   switch (athleteId) {
     case "ath-jordan":
