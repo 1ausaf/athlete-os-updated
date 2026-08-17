@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Check, Plus, UserPlus, UserX, X } from "lucide-react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
@@ -59,7 +59,11 @@ export function RosterManager({
   const [searchOpen, setSearchOpen] = useState(false);
   const [removal, setRemoval] = useState<RemovalStage | null>(null);
   // Skip persisting until the stored delta has been replayed on mount.
-  const hydrated = useRef(false);
+  // Round 12 (N15): state, not a ref — a ref flips synchronously in the
+  // replay effect, letting the persist effect run in the SAME commit with
+  // the still-seeded roster and clobber the stored `approved` list (dev
+  // StrictMode then replays the clobbered delta on its second mount pass).
+  const [hydrated, setHydrated] = useState(false);
 
   // R32/R33 — replay the persisted delta over the seeded roster on mount,
   // so edits survive navigating to the Briefing and back.
@@ -70,7 +74,9 @@ export function RosterManager({
       const kept = initialRoster
         .filter((e) => !delta.removed.includes(e.athleteId))
         .map((e) =>
-          e.state === "pending" && approved.has(e.athleteId)
+          // Round 12 (N15): waitlisted seeds promote to confirmed too.
+          (e.state === "pending" || e.state === "waitlisted") &&
+          approved.has(e.athleteId)
             ? { ...e, state: "confirmed" as BookingState }
             : e,
         );
@@ -83,16 +89,20 @@ export function RosterManager({
       return [...kept, ...added];
     });
     setNoShow(new Set(delta.noShow));
-    hydrated.current = true;
+    setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Recompute the delta vs the seed roster and persist + broadcast it.
   useEffect(() => {
-    if (!hydrated.current) return;
+    if (!hydrated) return;
     const seedIds = new Set(initialRoster.map((e) => e.athleteId));
+    // Round 12 (N15): waitlisted seeds count as approvable, so confirming
+    // one lands in the persisted delta and survives reload.
     const seedPending = new Set(
-      initialRoster.filter((e) => e.state === "pending").map((e) => e.athleteId),
+      initialRoster
+        .filter((e) => e.state === "pending" || e.state === "waitlisted")
+        .map((e) => e.athleteId),
     );
     const currentIds = new Set(roster.map((e) => e.athleteId));
     writeRosterDelta(sessionId, {
@@ -110,7 +120,7 @@ export function RosterManager({
         .map((e) => e.athleteId),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roster, noShow, sessionId]);
+  }, [roster, noShow, sessionId, hydrated]);
 
   const byId = new Map(pool.map((a) => [a.id, a]));
   const rows = roster
@@ -331,7 +341,7 @@ function RosterRow({
 
       {removalStep > 0 ? (
         // S5: two distinct confirmations before the booking is dropped.
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
           <span className="max-w-[240px] text-right text-xs font-medium text-destructive">
             {removalStep === 1
               ? `Remove ${athlete.name} from this session?`
@@ -353,7 +363,7 @@ function RosterRow({
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
           {noShow ? (
             // R29 — the no-show flag outranks the booking state on the row.
             <Pill tone="danger" dot>
@@ -374,17 +384,34 @@ function RosterRow({
               </button>
             </>
           ) : state === "waitlisted" ? (
-            <Pill tone="info">Waitlisted</Pill>
+            <>
+              <Pill tone="info">Waitlisted</Pill>
+              {/* Round 12 (N15): promote straight off the waitlist. */}
+              <button
+                type="button"
+                onClick={onApprove}
+                className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Add to Attendees
+              </button>
+            </>
           ) : (
             <Pill tone="success" dot>
               Confirmed
             </Pill>
           )}
-          {/* R29 — toggle a no-show; matters most on past sessions. */}
+          {/* R29 — toggle a no-show; matters most on past sessions.
+              Round 12 (N14): grey when unset, red when the flag is ON. */}
           <button
             type="button"
             onClick={onToggleNoShow}
             aria-pressed={noShow}
+            aria-label={
+              noShow
+                ? `Clear ${athlete.name}'s no-show`
+                : `Mark ${athlete.name} as a no-show`
+            }
             title={
               noShow
                 ? `Clear ${athlete.name}'s no-show`
@@ -392,12 +419,12 @@ function RosterRow({
             }
             className={
               noShow
-                ? "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface"
-                : "flex h-7 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20"
+                ? "flex h-7 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/20"
+                : "flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface"
             }
           >
             <UserX className="h-3.5 w-3.5" />
-            {noShow ? "Clear no-show" : "No-show"}
+            {noShow ? "No-Show" : "Mark No-Show"}
           </button>
           <button
             type="button"

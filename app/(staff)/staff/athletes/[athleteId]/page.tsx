@@ -9,9 +9,11 @@ import {
   ClipboardList,
   Dumbbell,
   MessagesSquare,
+  Salad,
   Trophy,
 } from "lucide-react";
 
+import { AvatarUpload } from "@/components/app/avatar-upload";
 import { PageHeader } from "@/components/app/page-header";
 import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,6 @@ import {
   athleteById,
   athleteGoals,
   athleteProfileById,
-  fmtDay,
   fmtFullDay,
   fmtRange,
   pastSessions,
@@ -34,23 +35,22 @@ import { isAdmin, isStaff } from "@/lib/rbac";
 import { NotesPanel } from "./notes-panel";
 import { RemindersCard } from "./reminders-card";
 import {
-  AvatarUpload,
   ContactLinksCard,
   DetailsCard,
   FinancialCard,
   FollowUpBanner,
   GoalsMedicalCard,
-  NutritionButton,
   ParentAccountsCard,
   TeamManagementCard,
 } from "./profile-panels";
 
 /**
  * Round-8 member profile. The header is avatar + name with four MATCHING
- * outline actions (C12); notes live RIGHT under the two 30-day tiles; the
- * left column stacks Details → Goals & Medical History → Latest Personal
- * Records → Contact & Links → Parent & Guardian Accounts (round 11, A2/A3) →
- * Team Management → Attendance (R18) → Upcoming Bookings → Financial →
+ * outline actions (C12; round 12: Nutrition links to its own page, N4); notes
+ * live RIGHT under the two 30-day tiles; the left column stacks Details →
+ * Attendance (round 12, N1/N2: one card — bookings + past days) → Goals &
+ * Medical History → Latest Personal Records → Contact & Links → Parent &
+ * Guardian Accounts (round 11, A2/A3) → Team Management → Financial →
  * Alerts & Reminders (R15).
  */
 export default async function StaffAthleteProfilePage({
@@ -67,19 +67,14 @@ export default async function StaffAthleteProfilePage({
   const admin = isAdmin(user);
   const profile = athleteProfileById(athlete.id);
 
-  // P15 — the next 5 sessions this member is on the roster for
-  const upcoming = sessions
-    .filter((s) => s.roster.some((r) => r.athleteId === athlete.id))
-    .sort((a, b) => (a.startsAt > b.startsAt ? 1 : -1))
-    .slice(0, 5);
-
   // P16 — up to 5 latest personal records
   const latestPrs = [...athlete.prs]
     .sort((a, b) => (a.date > b.date ? -1 : 1))
     .slice(0, 5);
 
-  // R18 — exact attendance days from bookings: past roster state completed =
-  // attended, pending in the past = no-show; upcoming confirmed listed on top.
+  // Round 12 (N1/N2) — ONE Attendance card: the NEXT 4 confirmed bookings
+  // (soonest first) then the LAST 3 past days — completed = attended, pending
+  // in the past = no-show — every row in the date-badge booking style.
   const attendance = [
     ...sessions
       .filter((s) =>
@@ -87,9 +82,12 @@ export default async function StaffAthleteProfilePage({
           (r) => r.athleteId === athlete.id && r.state === "confirmed",
         ),
       )
+      .sort((a, b) => (a.startsAt > b.startsAt ? 1 : -1))
+      .slice(0, 4)
       .map((s) => ({
         id: s.id,
-        date: s.startsAt,
+        startsAt: s.startsAt,
+        endsAt: s.endsAt,
         title: s.title,
         state: "upcoming" as const,
       })),
@@ -101,9 +99,12 @@ export default async function StaffAthleteProfilePage({
             (r.state === "completed" || r.state === "pending"),
         ),
       )
+      .sort((a, b) => (a.startsAt > b.startsAt ? -1 : 1))
+      .slice(0, 3)
       .map((s) => ({
         id: s.id,
-        date: s.startsAt,
+        startsAt: s.startsAt,
+        endsAt: s.endsAt,
         title: s.title,
         state:
           s.roster.find((r) => r.athleteId === athlete.id)?.state ===
@@ -111,7 +112,7 @@ export default async function StaffAthleteProfilePage({
             ? ("attended" as const)
             : ("noshow" as const),
       })),
-  ].sort((a, b) => (a.date > b.date ? -1 : 1));
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -123,6 +124,7 @@ export default async function StaffAthleteProfilePage({
               initials={athlete.initials}
               hue={athlete.hue}
               name={athlete.name}
+              storageKey={`aos-avatar-${athlete.id}`}
             />
             {athlete.name}
           </span>
@@ -142,7 +144,13 @@ export default async function StaffAthleteProfilePage({
                 Program
               </Link>
             </Button>
-            <NutritionButton athleteId={athlete.id} initial={athlete.nutrition} />
+            {/* Round 12 (N4) — Nutrition opens its own page now */}
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/staff/athletes/${athlete.id}/nutrition` as Route}>
+                <Salad className="h-4 w-4" />
+                Nutrition
+              </Link>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link
                 href={`/staff/messaging/${threadIdForAthlete(athlete.id)}` as Route}
@@ -163,6 +171,66 @@ export default async function StaffAthleteProfilePage({
         <div className="flex flex-col gap-6">
           {/* C15 — Details; the manage gears + delete are admin-only */}
           <DetailsCard athlete={athlete} dob={profile?.dob} admin={admin} />
+
+          {/* Round 12 (N1/N2) — ONE Attendance card: next 4 bookings + last
+              3 past days, date-badge rows with status pills; every row opens
+              the session page (it resolves history too). */}
+          <Section icon={CalendarCheck2} title="Attendance">
+            {attendance.length === 0 ? (
+              <Empty>No bookings on file yet.</Empty>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {attendance.map((row) => (
+                  <li key={row.id}>
+                    <Link
+                      href={`/staff/sessions/${row.id}` as Route}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:border-brand/40 hover:bg-accent/40"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-center">
+                        <span className="text-[0.6rem] uppercase text-muted-foreground">
+                          {new Date(row.startsAt).toLocaleDateString("en-US", {
+                            month: "short",
+                          })}
+                        </span>
+                        <span className="tnum text-sm font-bold leading-none">
+                          {new Date(row.startsAt).getDate()}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">
+                          {row.title}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {fmtRange(row.startsAt, row.endsAt)}
+                        </div>
+                      </div>
+                      {row.state === "attended" ? (
+                        <Pill tone="success" dot>
+                          Attended
+                        </Pill>
+                      ) : row.state === "noshow" ? (
+                        <Pill tone="danger" dot>
+                          No Showed
+                        </Pill>
+                      ) : (
+                        <Pill tone="info" dot>
+                          Upcoming
+                        </Pill>
+                      )}
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[0.7rem] text-muted-foreground text-pretty">
+              Attendance comes from bookings; the training summary logs when
+              the athlete logs.
+            </p>
+          </Section>
 
           {/* C17 — Goals & Medical History sits directly below Details */}
           <GoalsMedicalCard
@@ -218,87 +286,6 @@ export default async function StaffAthleteProfilePage({
 
           {/* C20 — Team Management */}
           <TeamManagementCard athlete={athlete} />
-
-          {/* R18 — Attendance: the exact booking days, attended vs no-show */}
-          <Section icon={CalendarCheck2} title="Attendance">
-            {attendance.length === 0 ? (
-              <Empty>No bookings on file yet.</Empty>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {attendance.map((row) => (
-                  <li
-                    key={row.id}
-                    className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 px-3 py-2"
-                  >
-                    <span className="tnum w-24 shrink-0 text-xs font-semibold">
-                      {fmtDay(row.date)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {row.title}
-                    </span>
-                    {row.state === "attended" ? (
-                      <Pill tone="success" dot>
-                        Attended
-                      </Pill>
-                    ) : row.state === "noshow" ? (
-                      <Pill tone="danger" dot>
-                        No-show
-                      </Pill>
-                    ) : (
-                      <Pill tone="info" dot>
-                        Upcoming
-                      </Pill>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="text-[0.7rem] text-muted-foreground text-pretty">
-              Attendance comes from bookings; the training summary logs when
-              the athlete logs.
-            </p>
-          </Section>
-
-          {/* C19 — Upcoming Bookings: each row opens the staff session page */}
-          <Section icon={CalendarDays} title="Upcoming Bookings">
-            {upcoming.length === 0 ? (
-              <Empty>No upcoming bookings.</Empty>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {upcoming.map((s) => (
-                  <li key={s.id}>
-                    <Link
-                      href={`/staff/sessions/${s.id}` as Route}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-3 transition-colors hover:border-brand/40 hover:bg-accent/40"
-                    >
-                      <div className="flex h-10 w-10 flex-col items-center justify-center rounded-md bg-muted text-center">
-                        <span className="text-[0.6rem] uppercase text-muted-foreground">
-                          {new Date(s.startsAt).toLocaleDateString("en-US", {
-                            month: "short",
-                          })}
-                        </span>
-                        <span className="tnum text-sm font-bold leading-none">
-                          {new Date(s.startsAt).getDate()}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">
-                          {s.title}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {fmtRange(s.startsAt, s.endsAt)}
-                        </div>
-                      </div>
-                      <ChevronRight
-                        className="h-4 w-4 shrink-0 text-muted-foreground"
-                        aria-hidden
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
 
           {/* C18 — Financial; coaches see the status pill only */}
           <FinancialCard athlete={athlete} admin={admin} />

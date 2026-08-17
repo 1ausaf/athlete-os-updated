@@ -131,8 +131,6 @@ export interface PerformanceRow {
   name: string;
   unit: string;
   value: number | null;
-  /** "Kids Only" rows stay blank for adults. */
-  kidsOnly?: boolean;
 }
 
 export interface ResultRow {
@@ -287,13 +285,15 @@ const SHOULDER_POSTURE_ROWS = [
   "Scapular Depressed",
 ];
 
+// Round 12 (N10): units live in the label; Push Up / Chin Up are plain rep
+// rows for everyone (the "kids only" skip is gone).
 const PERFORMANCE_ROWS: Omit<PerformanceRow, "value">[] = [
-  { name: "Vertical Jump", unit: "in" },
-  { name: "Broad Jump", unit: "in" },
-  { name: "Penta Jump", unit: "in" },
-  { name: "10Y Sprint", unit: "s" },
-  { name: "Push Up", unit: "reps", kidsOnly: true },
-  { name: "Chin Up", unit: "reps", kidsOnly: true },
+  { name: "Vertical Jump (inches)", unit: "in" },
+  { name: "Broad Jump (inches)", unit: "in" },
+  { name: "Penta Jump (inches)", unit: "in" },
+  { name: "10Y Sprint (seconds)", unit: "s" },
+  { name: "Push Up", unit: "reps" },
+  { name: "Chin Up", unit: "reps" },
 ];
 
 export const RESULT_CATEGORIES = [

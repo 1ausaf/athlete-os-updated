@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { TabBar } from "@/components/app/tab-bar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import {
@@ -57,6 +58,11 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
 const PIN_STORAGE_KEY = "lps-staff-messaging-pins";
 const MAX_PINS = 5;
 
+/** Round 12 (N17) — read/unread overrides persist too (reception-desk clear
+    sticks across visits); the sidebar Chats badge listens for the event. */
+const READ_STORAGE_KEY = "lps-staff-messaging-read";
+const READ_EVENT = "aos-staff-read-changed";
+
 /** H2 — rows carry just the member/group name (broadcasts use the subject). */
 function displayName(row: InboxThread): string {
   return row.athleteName ?? row.thread.subject;
@@ -88,6 +94,7 @@ export function MessagingInbox({
   const [readOverride, setReadOverride] = useState<
     Record<string, "read" | "unread">
   >({});
+  const [readLoaded, setReadLoaded] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
   const [pinsLoaded, setPinsLoaded] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -124,6 +131,57 @@ export function MessagingInbox({
     }
   }, [pinned, pinsLoaded]);
 
+  // N17 — read overrides follow the same load/persist pattern as pins…
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(READ_STORAGE_KEY);
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setReadOverride(parsed as Record<string, "read" | "unread">);
+        }
+      }
+    } catch {
+      // Ignore corrupt storage — no overrides.
+    }
+    setReadLoaded(true);
+  }, []);
+
+  // N18 — the thread-view "Subscribe to Chat" checkbox persists per thread;
+  // merging it here keeps the Subscribed tab honest.
+  const [subsOverride, setSubsOverride] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("aos-thread-subs");
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setSubsOverride(parsed as Record<string, boolean>);
+        }
+      }
+    } catch {
+      // Ignore corrupt storage — seed subscriptions stand.
+    }
+  }, []);
+
+  function isSubscribed(row: InboxThread): boolean {
+    return subsOverride[row.thread.id] ?? row.subscribed;
+  }
+
+  // …and every change persists + pings the sidebar Chats badge.
+  useEffect(() => {
+    if (!readLoaded) return;
+    try {
+      window.localStorage.setItem(
+        READ_STORAGE_KEY,
+        JSON.stringify(readOverride),
+      );
+    } catch {
+      // Storage unavailable — read state stays session-only.
+    }
+    window.dispatchEvent(new Event(READ_EVENT));
+  }, [readOverride, readLoaded]);
+
   useEffect(
     () => () => window.clearTimeout(flashTimer.current),
     [],
@@ -146,6 +204,14 @@ export function MessagingInbox({
   function markRead(id: string, read: boolean) {
     setReadOverride((prev) => ({ ...prev, [id]: read ? "read" : "unread" }));
     setMenuFor(null);
+  }
+
+  /** N17 — the reception-desk clear: force every chat to read. */
+  function markAllRead() {
+    const next: Record<string, "read" | "unread"> = {};
+    for (const r of rows) next[r.thread.id] = "read";
+    setReadOverride(next);
+    showFlash("All chats marked as read");
   }
 
   function togglePin(id: string) {
@@ -174,17 +240,18 @@ export function MessagingInbox({
   const counts = useMemo(
     () => ({
       involved: rows.filter((r) => r.involved).length,
-      subscribed: rows.filter((r) => r.subscribed).length,
+      subscribed: rows.filter((r) => isSubscribed(r)).length,
       everything: rows.length,
     }),
-    [rows],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, subsOverride],
   );
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matches = rows.filter((r) => {
       if (filter === "involved" && !r.involved) return false;
-      if (filter === "subscribed" && !r.subscribed) return false;
+      if (filter === "subscribed" && !isSubscribed(r)) return false;
       if (!q) return true;
       const haystack = [
         r.thread.subject,
@@ -234,7 +301,8 @@ export function MessagingInbox({
       return compare(a, b);
     });
     return matches;
-  }, [rows, filter, query, sortKey, sortDir, pinned, readOverride]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, filter, query, sortKey, sortDir, pinned, readOverride, subsOverride]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -259,6 +327,17 @@ export function MessagingInbox({
             className="pl-8"
           />
         </div>
+        {filter === "everything" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={markAllRead}
+          >
+            <MailOpen className="h-4 w-4" />
+            Mark all as read
+          </Button>
+        ) : null}
       </div>
 
       {!admin ? (

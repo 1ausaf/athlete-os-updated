@@ -19,6 +19,17 @@ import {
 
 import { ThreadConversation } from "./thread-conversation";
 
+/**
+ * Round 12 (N18): mirror of the inbox's hardcoded Subscribed set (see
+ * ../page.tsx) — seeds the thread's Subscribe checkbox for staff who follow
+ * a chat without being assigned to the member.
+ */
+const SUBSCRIBED: Record<string, readonly string[]> = {
+  "coach-ellis": ["thread-broadcast"],
+  "owner-jeremy": ["thread-jordan", "thread-broadcast"],
+  "admin-victoria": ["thread-broadcast"],
+};
+
 interface PageProps {
   params: { threadId: string };
 }
@@ -116,6 +127,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
           </div>
 
           <ThreadConversation
+            threadId={thread.id}
             initialMessages={thread.messages}
             participants={thread.participants}
             mentionNames={mentionNames}
@@ -127,6 +139,7 @@ export default async function StaffThreadPage({ params }: PageProps) {
             canPost={canPost}
             canDelete={admin}
             canJoin={!canPost}
+            seedSubscribed={SUBSCRIBED[user.id]?.includes(thread.id) ?? false}
           />
         </CardContent>
       </Card>

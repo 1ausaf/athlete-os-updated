@@ -29,7 +29,7 @@ type LibraryTab = "programs" | "circuits" | "exercises";
 export default async function ProgramsPage({
   searchParams,
 }: {
-  searchParams?: { tab?: string };
+  searchParams?: { tab?: string; exercise?: string };
 }) {
   const user = await requireUserWithProfile();
   if (!isStaff(user)) redirect("/athlete/dashboard");
@@ -102,7 +102,13 @@ export default async function ProgramsPage({
       {tab === "circuits" ? (
         <CircuitLibrary canManageCategories={canManageCategories} />
       ) : null}
-      {tab === "exercises" ? <ExerciseLibrary isAdmin={isAdmin} /> : null}
+      {/* N12 — ?exercise={id} deep-links straight into that exercise's editor */}
+      {tab === "exercises" ? (
+        <ExerciseLibrary
+          isAdmin={isAdmin}
+          deepLinkExercise={searchParams?.exercise}
+        />
+      ) : null}
     </div>
   );
 }

@@ -30,6 +30,55 @@ import { CombinePanel } from "./combine-panel";
  * assessment builder is phase 2 — the client's call.)
  */
 
+/* Round 12 (N6): every branch gets the standard breadcrumb (program/page.tsx
+   idiom) — the top bar already says "Team Workspace / Members", so it starts
+   at Members. `listHref` links back to the assessment list on record pages. */
+function Breadcrumbs({
+  athleteId,
+  athleteName,
+  listHref,
+  leaf,
+}: {
+  athleteId: string;
+  athleteName: string;
+  listHref?: string;
+  leaf: string;
+}) {
+  return (
+    <nav
+      aria-label="Breadcrumb"
+      className="eyebrow flex flex-wrap items-center gap-1.5"
+    >
+      <Link
+        href={"/staff/athletes" as Route}
+        className="transition-colors hover:text-foreground"
+      >
+        Members
+      </Link>
+      <span aria-hidden>/</span>
+      <Link
+        href={`/staff/athletes/${athleteId}` as Route}
+        className="transition-colors hover:text-foreground"
+      >
+        {athleteName}
+      </Link>
+      {listHref ? (
+        <>
+          <span aria-hidden>/</span>
+          <Link
+            href={listHref as Route}
+            className="transition-colors hover:text-foreground"
+          >
+            Assessments
+          </Link>
+        </>
+      ) : null}
+      <span aria-hidden>/</span>
+      <span className="text-foreground">{leaf}</span>
+    </nav>
+  );
+}
+
 const BLANK_COMBINE: CombineResult[] = [
   { metric: "Vertical Jump", value: null, unit: "in" },
   { metric: "Broad Jump", value: null, unit: "in" },
@@ -63,6 +112,12 @@ export default async function StaffAssessmentPage({
     const assessment = existing ?? blankAssessment(athlete.id);
     return (
       <div className="flex flex-col gap-6">
+        <Breadcrumbs
+          athleteId={athlete.id}
+          athleteName={athlete.name}
+          listHref={base}
+          leaf="Remapping Assessment™"
+        />
         <PageHeader
           title={`${athlete.name} — Remapping Assessment™`}
           description={
@@ -101,6 +156,12 @@ export default async function StaffAssessmentPage({
     const record = open && open !== "combine" ? combineAssessmentById(open) : undefined;
     return (
       <div className="flex flex-col gap-6">
+        <Breadcrumbs
+          athleteId={athlete.id}
+          athleteName={athlete.name}
+          listHref={base}
+          leaf="Combine Testing"
+        />
         <PageHeader
           title={`${athlete.name} — Combine Testing`}
           description={
@@ -127,6 +188,11 @@ export default async function StaffAssessmentPage({
   /* ---------------- The list + start menu ---------------- */
   return (
     <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        athleteId={athlete.id}
+        athleteName={athlete.name}
+        leaf="Assessments"
+      />
       <PageHeader
         title={`${athlete.name} — Assessments`}
         description="Every assessment on file — yearly Remapping plus combine testing days. Start a new one when it's time to retest."

@@ -112,13 +112,15 @@ interface ApplyTarget {
   kind: "athlete" | "team";
 }
 
+// Round 12 (N13): athletes A→Z, then teams A→Z — not seed order.
 const APPLY_TARGETS: ApplyTarget[] = [
   ...athletes
     .filter((a) => a.status === "active")
-    .map((a): ApplyTarget => ({ id: a.id, name: a.name, kind: "athlete" })),
-  ...trainingGroups.map(
-    (g): ApplyTarget => ({ id: g.id, name: g.name, kind: "team" }),
-  ),
+    .map((a): ApplyTarget => ({ id: a.id, name: a.name, kind: "athlete" }))
+    .sort((a, b) => a.name.localeCompare(b.name)),
+  ...trainingGroups
+    .map((g): ApplyTarget => ({ id: g.id, name: g.name, kind: "team" }))
+    .sort((a, b) => a.name.localeCompare(b.name)),
 ];
 
 /**

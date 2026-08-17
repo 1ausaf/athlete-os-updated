@@ -169,6 +169,12 @@ export function removeLocalTask(id: string): void {
     TASKS_KEY,
     readLocalTasks().filter((t) => t.id !== id),
   );
+  // Drop the task's done-state override too, so nothing orphans.
+  const overrides = taskStateOverrides();
+  if (id in overrides) {
+    delete overrides[id];
+    writeJson(TASKS_STATE_KEY, overrides);
+  }
 }
 
 /** Done-state overrides, keyed by task id (covers seeds + reminder rows). */

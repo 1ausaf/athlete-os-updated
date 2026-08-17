@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   Copy,
+  Link2,
   Plus,
   Search,
   Trash2,
@@ -117,10 +121,14 @@ const EMPTY_DRAFT: Draft = {
  */
 export function ExerciseLibrary({
   isAdmin = false,
+  deepLinkExercise,
 }: {
   /** R8 (G5) — deleting exercises/tags is admin-only. */
   isAdmin?: boolean;
+  /** N12 — ?exercise={id} opens that exercise's editor on mount. */
+  deepLinkExercise?: string;
 }) {
+  const router = useRouter();
   const [list, setList] = useState<LibraryExercise[]>(exerciseLibrary);
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
@@ -250,6 +258,42 @@ export function ExerciseLibrary({
     );
   }
 
+  /* ---- N12: ?exercise={id} deep link + shareable per-exercise URLs ---- */
+
+  // The deep-link id already reflected in the URL — stops the mount effect
+  // from re-opening (and clobbering) a draft after our own router.replace.
+  const handledDeepLink = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!deepLinkExercise || handledDeepLink.current === deepLinkExercise)
+      return;
+    handledDeepLink.current = deepLinkExercise;
+    const hit = list.find((ex) => ex.id === deepLinkExercise);
+    if (hit) openEditor(hit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkExercise]);
+
+  /** Row click — open the editor AND put the shareable URL in the bar. */
+  function openEditorSynced(ex: LibraryExercise) {
+    openEditor(ex);
+    handledDeepLink.current = ex.id;
+    router.replace(
+      `/staff/programming?tab=exercises&exercise=${ex.id}` as Route,
+      { scroll: false },
+    );
+  }
+
+  /** Close from any path (Cancel / X / backdrop / save) clears the param. */
+  function closeEditor() {
+    setDraft(null);
+    if (handledDeepLink.current) {
+      handledDeepLink.current = null;
+      router.replace("/staff/programming?tab=exercises" as Route, {
+        scroll: false,
+      });
+    }
+  }
+
   function saveDraft() {
     if (!draft || !draft.name.trim()) return;
     const tags = draft.tags.filter(Boolean);
@@ -277,7 +321,7 @@ export function ExerciseLibrary({
       ]);
       announce(`"${patch.name}" added to the library`);
     }
-    setDraft(null);
+    closeEditor();
   }
 
   return (
@@ -460,7 +504,7 @@ export function ExerciseLibrary({
               {rows.map((ex) => (
                 <TableRow
                   key={ex.id}
-                  onClick={() => openEditor(ex)}
+                  onClick={() => openEditorSynced(ex)}
                   className="cursor-pointer"
                 >
                   <TableCell className="max-w-52 truncate whitespace-nowrap py-2 font-medium">
@@ -582,7 +626,8 @@ export function ExerciseLibrary({
       {draft ? (
         <ExerciseEditor
           draft={draft}
-          setDraft={setDraft}
+          // N12 — closing must also clear the ?exercise param.
+          setDraft={(d) => (d === null ? closeEditor() : setDraft(d))}
           allTags={allTags}
           referenceOptions={referenceOptions}
           onSave={saveDraft}
@@ -621,6 +666,26 @@ function ExerciseEditor({
   onSave: () => void;
 }) {
   const [tagInput, setTagInput] = useState("");
+  /** N12 — brief "Link copied" flash on the share button. */
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
+  function copyShareLink() {
+    if (!draft.id) return;
+    void navigator.clipboard.writeText(
+      `${window.location.origin}/staff/programming?tab=exercises&exercise=${draft.id}`,
+    );
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2000);
+  }
 
   /** C29 — type-ahead over every existing tag stops Med ball/med-ball splits. */
   const suggestions = useMemo(() => {
@@ -667,14 +732,37 @@ function ExerciseEditor({
                 {draft.id ? draft.name || "Edit exercise" : "New exercise"}
               </h3>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDraft(null)}
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {/* N12 — share link; hidden until the exercise is saved */}
+              {draft.id ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={copyShareLink}
+                  title="Copy a link that opens this exercise"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4 text-success" />
+                      Link copied
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="h-4 w-4" />
+                      Copy link
+                    </>
+                  )}
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setDraft(null)}
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">

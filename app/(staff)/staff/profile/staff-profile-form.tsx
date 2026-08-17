@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import {
   BadgeCheck,
   Bell,
-  Camera,
   CheckCircle2,
   HeartPulse,
   Paperclip,
@@ -15,7 +14,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import { AvatarUpload } from "@/components/app/avatar-upload";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -133,21 +132,15 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
           <Card>
             <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
               <div className="flex flex-wrap items-center gap-4">
-                <div className="relative">
-                  <AthleteAvatar
-                    initials={member.initials}
-                    hue={member.hue}
-                    size="xl"
-                  />
-                  <button
-                    type="button"
-                    title="Upload photo (demo)"
-                    aria-label="Upload profile photo"
-                    className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-soft transition-colors hover:text-foreground"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                {/* Round 12 (N20): the camera button is live — shared
+                    crop-dialog upload, same as the member profile */}
+                <AvatarUpload
+                  initials={member.initials}
+                  hue={member.hue}
+                  name={member.name}
+                  uploadLabel="Upload photo (demo)"
+                  storageKey={`aos-avatar-staff-${member.id}`}
+                />
                 <div className="min-w-0">
                   <h3 className="text-lg font-bold">{displayName}</h3>
                   <p className="text-sm text-muted-foreground">

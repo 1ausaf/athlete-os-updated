@@ -112,25 +112,30 @@ function SessionBrief({ session }: { session: TrainingSession }) {
       {/* Session context + open loops */}
       <Card className="overflow-hidden bg-brand-sheen">
         <CardContent className="flex flex-col gap-5 p-6">
-          {/* B4 — who's working the floor, alphabetical */}
+          {/* B4 — who's working the floor, alphabetical.
+              Round 12 (N16): avatars only, overlapped — hover for the name. */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 pb-4">
             <span className="eyebrow">Coaches on this session</span>
-            {coachNames.map((name) => {
-              const staff = staffByName(name);
-              return (
-                <span key={name} className="inline-flex items-center gap-2">
-                  {staff ? (
+            <span className="flex items-center -space-x-1.5">
+              {coachNames.map((name) => {
+                const staff = staffByName(name);
+                return staff ? (
+                  <span key={name} title={name} className="inline-flex">
                     <AthleteAvatar
                       initials={staff.initials}
                       hue={staff.hue}
                       size="sm"
                       ring
                     />
-                  ) : null}
-                  <span className="text-sm font-semibold">{name}</span>
-                </span>
-              );
-            })}
+                  </span>
+                ) : (
+                  // No staff record → no avatar; the name is all we have.
+                  <span key={name} className="pl-2 text-sm font-semibold first:pl-0">
+                    {name}
+                  </span>
+                );
+              })}
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-4">

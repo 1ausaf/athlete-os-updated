@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   CalendarRange,
   ClipboardList,
@@ -20,7 +21,31 @@ import type { AppUser } from "@/types/user";
 import { ShellNav, type ShellNavItem } from "./shell-nav";
 
 export function StaffNav({ user }: { user: AppUser }) {
-  const unread = threads.reduce((n, t) => n + t.unread, 0);
+  // Round 12 (N17): the Chats badge honors the inbox read-overrides, so
+  // "Mark all as read" clears it too.
+  const [unread, setUnread] = useState(() =>
+    threads.reduce((n, t) => n + t.unread, 0),
+  );
+  useEffect(() => {
+    const recount = () => {
+      try {
+        const overrides = JSON.parse(
+          window.localStorage.getItem("lps-staff-messaging-read") ?? "{}",
+        ) as Record<string, "read" | "unread">;
+        setUnread(
+          threads.reduce(
+            (n, t) => n + (overrides[t.id] === "read" ? 0 : t.unread),
+            0,
+          ),
+        );
+      } catch {
+        setUnread(threads.reduce((n, t) => n + t.unread, 0));
+      }
+    };
+    recount();
+    window.addEventListener("aos-staff-read-changed", recount);
+    return () => window.removeEventListener("aos-staff-read-changed", recount);
+  }, []);
   const gaps = complianceRows.filter((r) => r.status === "gap").length;
   const programsDue = athletes.filter((a) => a.programDueInDays <= 5).length;
 

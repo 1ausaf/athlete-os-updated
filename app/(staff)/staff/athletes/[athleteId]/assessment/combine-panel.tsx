@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,13 +28,8 @@ export function CombinePanel({
   const [notes, setNotes] = useState(initialNotes);
   const [saved, setSaved] = useState(false);
 
-  function setValue(i: number, raw: string) {
-    const v = raw === "" ? null : Number(raw);
-    setResults((prev) =>
-      prev.map((r, j) =>
-        j === i ? { ...r, value: Number.isFinite(v as number) ? v : null } : r,
-      ),
-    );
+  function setValue(i: number, v: number | null) {
+    setResults((prev) => prev.map((r, j) => (j === i ? { ...r, value: v } : r)));
   }
 
   // Time-based metrics improve DOWNWARD.
@@ -70,12 +65,11 @@ export function CombinePanel({
                     <td className="px-3 py-2 text-right">
                       {editable ? (
                         <span className="inline-flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            value={r.value ?? ""}
-                            aria-label={`${r.metric} result`}
-                            onChange={(e) => setValue(i, e.target.value)}
-                            className="tnum h-8 w-20 text-right"
+                          <ResultField
+                            value={r.value}
+                            unit={r.unit}
+                            ariaLabel={`${r.metric} result`}
+                            onCommit={(v) => setValue(i, v)}
                           />
                           <span className="text-xs text-muted-foreground">{r.unit}</span>
                         </span>
@@ -140,5 +134,54 @@ export function CombinePanel({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Round 12 (N8): local string draft — partial input never round-trips through
+ * the model, so the first keystroke always lands. Commits only finite parses
+ * (empty → null); the draft resyncs if the model moves underneath.
+ */
+function ResultField({
+  value,
+  unit,
+  ariaLabel,
+  onCommit,
+}: {
+  value: number | null;
+  unit: string;
+  ariaLabel: string;
+  onCommit: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+
+  useEffect(() => {
+    const parsed = draft.trim() === "" ? NaN : Number(draft);
+    const committed = Number.isFinite(parsed) ? parsed : null;
+    if (committed !== value) setDraft(value == null ? "" : String(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return (
+    <Input
+      type="number"
+      inputMode={unit === "reps" ? "numeric" : "decimal"}
+      // Times keep hundredths, jumps half-inches, rep counts whole numbers.
+      step={unit === "s" ? "0.01" : unit === "reps" ? "1" : "0.5"}
+      min={0}
+      value={draft}
+      aria-label={ariaLabel}
+      className="tnum h-8 w-20 text-right"
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        if (raw.trim() === "") {
+          onCommit(null);
+          return;
+        }
+        const n = Number(raw);
+        if (Number.isFinite(n)) onCommit(n);
+      }}
+    />
   );
 }

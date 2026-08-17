@@ -12,10 +12,8 @@ import {
   Users,
 } from "lucide-react";
 
-import {
-  AvatarUpload,
-  LinksEditor,
-} from "@/app/(staff)/staff/athletes/[athleteId]/profile-panels";
+import { LinksEditor } from "@/app/(staff)/staff/athletes/[athleteId]/profile-panels";
+import { AvatarUpload } from "@/components/app/avatar-upload";
 import { PageHeader } from "@/components/app/page-header";
 import { StatTile } from "@/components/app/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -96,6 +94,7 @@ export default async function StaffGroupProfilePage({
               hue={group.hue}
               name={group.name}
               uploadLabel="Upload logo (demo)"
+              storageKey={`aos-avatar-group-${group.id}`}
             />
             Group: {group.name}
           </span>

@@ -1,15 +1,67 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import { Check, Plus, RotateCcw, Trash2 } from "lucide-react";
 
+import { TabBar } from "@/components/app/tab-bar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { allTasks, TASKS_EVENT, type StaffTask } from "@/lib/demo/tasks";
+import { Input } from "@/components/ui/input";
+import { Pill } from "@/components/ui/pill";
+import { fmtDay } from "@/lib/demo/data";
+import { staffById } from "@/lib/demo/staff";
+import {
+  allTasks,
+  appendLocalTask,
+  readLocalTasks,
+  removeLocalTask,
+  setTaskDone,
+  TASKS_EVENT,
+  type StaffTask,
+} from "@/lib/demo/tasks";
+import { cn } from "@/lib/utils";
 
 /**
- * Round 12 (N21): the Tasks list. Placeholder shell — the full manager
- * (To Do | Completed tabs, add/assign form, reminder roll-up) lands with the
- * round-12 implementation pass.
+ * Round 12 (N21): the Tasks manager — To Do | Completed tabs over the merged
+ * list (manual to-dos + every member's Alerts & Reminders), an assignee
+ * filter, and a collapsed add form in the RemindersCard idiom.
  */
+
+const FIELD_LABEL =
+  "text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground";
+
+type TaskTab = "todo" | "done";
+type TaskRecurrence = NonNullable<StaffTask["recurrence"]>;
+
+const RECURRENCE_LABEL: Record<TaskRecurrence, string> = {
+  weekly: "Weekly",
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+};
+
+function recurrenceLabel(t: StaffTask): string | null {
+  if (!t.recurrence) return null;
+  // Reminder rows keep the profile card's "Every 3 months" wording.
+  if (t.source === "reminder" && t.recurrence === "quarterly")
+    return "Every 3 months";
+  return RECURRENCE_LABEL[t.recurrence];
+}
+
+function assigneeName(t: StaffTask): string {
+  if (!t.assigneeId) return "Everyone involved";
+  return staffById(t.assigneeId)?.name ?? t.assigneeId;
+}
+
+/** Due-date sort: soonest first, no-date rows last. */
+function byDue(a: StaffTask, b: StaffTask): number {
+  if (!a.due && !b.due) return a.title.localeCompare(b.title);
+  if (!a.due) return 1;
+  if (!b.due) return -1;
+  return a.due.localeCompare(b.due) || a.title.localeCompare(b.title);
+}
+
 export function TasksManager({
   currentUserName,
   staff,
@@ -18,20 +70,369 @@ export function TasksManager({
   staff: { id: string; name: string }[];
 }) {
   const [tasks, setTasks] = useState<StaffTask[]>([]);
+  // Ids added in this browser — the only rows that get a delete control.
+  const [localIds, setLocalIds] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<TaskTab>("todo");
+  // "all" = Everyone; otherwise a staff id. "" assignees match every filter.
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
+
+  // The collapsed Add Task form.
+  const [formOpen, setFormOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [due, setDue] = useState("");
+  const [formAssignee, setFormAssignee] = useState("");
+  const [recurrence, setRecurrence] = useState<"" | TaskRecurrence>("");
+
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<number>();
 
   useEffect(() => {
-    const refresh = () => setTasks(allTasks());
+    const refresh = () => {
+      setTasks(allTasks());
+      setLocalIds(new Set(readLocalTasks().map((t) => t.id)));
+    };
     refresh();
     window.addEventListener(TASKS_EVENT, refresh);
     return () => window.removeEventListener(TASKS_EVENT, refresh);
   }, []);
 
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  function showFlash(message: string) {
+    setFlash(message);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 2200);
+  }
+
+  const filtered = useMemo(
+    () =>
+      tasks.filter(
+        (t) =>
+          assigneeFilter === "all" ||
+          t.assigneeId === "" ||
+          t.assigneeId === assigneeFilter,
+      ),
+    [tasks, assigneeFilter],
+  );
+
+  const todo = useMemo(
+    () => filtered.filter((t) => !t.done).sort(byDue),
+    [filtered],
+  );
+  const completed = useMemo(
+    () =>
+      filtered
+        .filter((t) => t.done)
+        .sort(
+          (a, b) =>
+            (b.doneAt ?? "").localeCompare(a.doneAt ?? "") || byDue(a, b),
+        ),
+    [filtered],
+  );
+
+  const visible = tab === "todo" ? todo : completed;
+  const today = new Date().toISOString().slice(0, 10);
+
+  function resetForm() {
+    setTitle("");
+    setDue("");
+    setFormAssignee("");
+    setRecurrence("");
+  }
+
+  const canSave = title.trim().length > 0;
+
+  function handleAdd() {
+    if (!canSave) return;
+    appendLocalTask({
+      id: `task-${Date.now()}`,
+      title: title.trim(),
+      due,
+      assigneeId: formAssignee,
+      done: false,
+      source: "manual",
+      createdBy: currentUserName,
+      recurrence: recurrence === "" ? undefined : recurrence,
+    });
+    resetForm();
+    setFormOpen(false);
+    showFlash("Task added");
+  }
+
   return (
-    <Card>
-      <CardContent className="p-5 text-sm text-muted-foreground">
-        {tasks.length} tasks loaded for {staff.length} staff —{" "}
-        {currentUserName}.
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-4">
+      <TabBar
+        tabs={[
+          { value: "todo" as TaskTab, label: "To Do", count: todo.length },
+          {
+            value: "done" as TaskTab,
+            label: "Completed",
+            count: completed.length,
+          },
+        ]}
+        active={tab}
+        onSelect={setTab}
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-sm">
+          <span className={FIELD_LABEL}>Assigned to</span>
+          <select
+            value={assigneeFilter}
+            aria-label="Filter by assignee"
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+          >
+            <option value="all">Everyone</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!formOpen ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setFormOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Add Task
+          </Button>
+        ) : null}
+      </div>
+
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5">
+          {formOpen ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand/[0.03] p-3">
+              <label className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>Task</span>
+                <Input
+                  autoFocus
+                  value={title}
+                  placeholder="e.g. Restock chalk + tape by the platforms"
+                  className="h-9 bg-surface text-sm"
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </label>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className={FIELD_LABEL}>Due</span>
+                  <input
+                    type="date"
+                    value={due}
+                    aria-label="Due date"
+                    onChange={(e) => setDue(e.target.value)}
+                    className="tnum h-9 rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={FIELD_LABEL}>Assign to</span>
+                  <select
+                    value={formAssignee}
+                    aria-label="Assign to"
+                    onChange={(e) => setFormAssignee(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+                  >
+                    <option value="">Everyone</option>
+                    {staff.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={FIELD_LABEL}>Repeats</span>
+                  <select
+                    value={recurrence}
+                    aria-label="Recurrence"
+                    onChange={(e) =>
+                      setRecurrence(e.target.value as "" | TaskRecurrence)
+                    }
+                    className="h-9 rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+                  >
+                    <option value="">One-time</option>
+                    {(Object.keys(RECURRENCE_LABEL) as TaskRecurrence[]).map(
+                      (f) => (
+                        <option key={f} value={f}>
+                          {RECURRENCE_LABEL[f]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2 border-t border-border/60 pt-2.5">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  disabled={!canSave}
+                  onClick={handleAdd}
+                >
+                  Add task
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    resetForm();
+                    setFormOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {visible.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+              {tab === "todo"
+                ? "Nothing on the list — add a task above."
+                : "Nothing completed yet."}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {visible.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  done={tab === "done"}
+                  today={today}
+                  deletable={localIds.has(t.id)}
+                />
+              ))}
+            </ul>
+          )}
+
+          <p className="text-[0.7rem] text-muted-foreground text-pretty">
+            Member Alerts &amp; Reminders roll in automatically — edit those on
+            the member&rsquo;s profile; here they only check off. Saves locally
+            in this demo.
+          </p>
+        </CardContent>
+      </Card>
+
+      {flash ? (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold shadow-raised"
+        >
+          {flash}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  done,
+  today,
+  deletable,
+}: {
+  task: StaffTask;
+  done: boolean;
+  today: string;
+  deletable: boolean;
+}) {
+  const overdue = !done && task.due !== "" && task.due < today;
+  const recurrence = recurrenceLabel(task);
+
+  return (
+    <li
+      className={cn(
+        "flex flex-wrap items-start gap-3 rounded-lg border border-border p-3",
+        done ? "bg-muted/30" : "bg-surface/50",
+      )}
+    >
+      {done ? (
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 border-success/50 bg-success/15 text-success"
+        >
+          <Check className="h-3 w-3" />
+        </span>
+      ) : (
+        <button
+          type="button"
+          aria-label={`Mark done: ${task.title}`}
+          title="Mark done"
+          onClick={() => setTaskDone(task.id, true)}
+          className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-full border-2 border-muted-foreground/40 transition-colors hover:border-brand hover:bg-brand/10"
+        />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              "text-sm font-semibold",
+              done && "font-medium text-muted-foreground line-through",
+            )}
+          >
+            {task.title}
+          </span>
+          {task.source === "reminder" ? (
+            <Pill tone="info">Reminder</Pill>
+          ) : null}
+          {recurrence ? <Pill tone="neutral">{recurrence}</Pill> : null}
+        </div>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "tnum font-medium",
+              overdue ? "text-destructive" : "text-foreground/80",
+              done && "text-muted-foreground",
+            )}
+          >
+            {done
+              ? `Done ${task.doneAt ? fmtDay(`${task.doneAt}T00:00:00`) : "today"}`
+              : task.due
+                ? fmtDay(`${task.due}T00:00:00`)
+                : "No due date"}
+          </span>
+          <span>· {assigneeName(task)}</span>
+          {task.source === "reminder" && task.athleteId ? (
+            <>
+              <span>·</span>
+              <Link
+                href={`/staff/athletes/${task.athleteId}` as Route}
+                className="font-medium text-brand-ink hover:underline"
+              >
+                {task.athleteName}
+              </Link>
+            </>
+          ) : null}
+        </p>
+      </div>
+
+      {done ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setTaskDone(task.id, false)}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reopen
+        </Button>
+      ) : deletable ? (
+        <button
+          type="button"
+          aria-label={`Delete task: ${task.title}`}
+          title="Delete task"
+          onClick={() => removeLocalTask(task.id)}
+          className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </li>
   );
 }

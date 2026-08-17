@@ -144,7 +144,35 @@ export function RichTextComposer({
         )}
 
         {mentionOpen ? (
-          <div className="absolute right-1 top-full z-30 mt-1 w-52 rounded-lg border border-border bg-card p-1 shadow-raised">
+          <div className="absolute right-1 top-full z-30 mt-1 w-64 rounded-lg border border-border bg-card p-1 shadow-raised">
+            {/* Round 12 (N3): broadcast targets ahead of the staff list */}
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insertMention("all");
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+            >
+              <span className="font-medium">@all</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                Every coach &amp; team member
+              </span>
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insertMention("team");
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+            >
+              <span className="font-medium">@team</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                Coaches on this member
+              </span>
+            </button>
+            <div className="my-1 h-px bg-border" aria-hidden />
             {staffMembers.map((s) => (
               <button
                 key={s.id}

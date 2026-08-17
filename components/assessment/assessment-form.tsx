@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -345,6 +345,10 @@ export function AssessmentForm({
           patch((d) => {
             d.bench.est1Rm = v;
             d.bench.achievedSetIdx = null; // stale index clears with the ladder
+            // Round 12 (N7): Scott Curl estimate autofills at 46% of bench —
+            // the coach can still overtype it below.
+            d.scott.est1Rm = v == null ? null : Math.round(v * 0.46);
+            d.scott.achievedSetIdx = null;
             return d;
           })
         }
@@ -402,19 +406,15 @@ export function AssessmentForm({
             <div className="rounded-lg border border-border bg-surface/50 p-3">
               <span className="eyebrow">Reps completed</span>
               {edit ? (
-                <Input
-                  type="number"
+                <NumberField
                   inputMode="numeric"
+                  step="1"
                   min={0}
                   className="tnum mt-1 h-9 w-24 font-bold"
-                  value={a.fiberTest.reps ?? ""}
+                  value={a.fiberTest.reps}
                   aria-label="Fiber test reps completed"
-                  onChange={(e) =>
-                    patch((d) => {
-                      d.fiberTest.reps =
-                        e.target.value === "" ? null : Number(e.target.value);
-                      return d;
-                    })
+                  onCommit={(v) =>
+                    patch((d) => ((d.fiberTest.reps = v), d))
                   }
                 />
               ) : (
@@ -469,51 +469,47 @@ export function AssessmentForm({
       <Card>
         <CardContent className="flex flex-col gap-4 p-5">
           <div className="grid gap-3 sm:grid-cols-3">
-            {a.performance.rows.map((row, i) => {
-              const skipped = row.kidsOnly && !athlete.isMinor;
-              return (
-                <div
-                  key={row.name}
-                  className={cn(
-                    "rounded-lg border border-border bg-surface/50 p-3",
-                    skipped && "opacity-50",
-                  )}
-                >
-                  <span className="eyebrow">
-                    {row.name}
-                    {row.kidsOnly ? " (kids only)" : ""}
-                  </span>
-                  {edit && !skipped ? (
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      className="tnum mt-1 h-9 w-28 font-bold"
-                      value={row.value ?? ""}
-                      aria-label={`${row.name} (${row.unit})`}
-                      onChange={(e) =>
-                        patch((d) => {
-                          d.performance.rows[i]!.value =
-                            e.target.value === ""
-                              ? null
-                              : Number(e.target.value);
-                          return d;
-                        })
-                      }
-                    />
-                  ) : (
-                    <p className="tnum mt-1 text-xl font-extrabold">
-                      {skipped ? "—" : (row.value ?? "—")}
-                      {!skipped && row.value != null ? (
-                        <span className="ml-1 text-xs font-medium text-muted-foreground">
-                          {row.unit}
-                        </span>
-                      ) : null}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+            {a.performance.rows.map((row, i) => (
+              <div
+                key={row.name}
+                className="rounded-lg border border-border bg-surface/50 p-3"
+              >
+                <span className="eyebrow">{row.name}</span>
+                {edit ? (
+                  <NumberField
+                    inputMode={row.unit === "reps" ? "numeric" : "decimal"}
+                    // N10: sprint keeps hundredths (1.64), jumps half-inches,
+                    // rep counts whole numbers.
+                    step={
+                      row.unit === "s"
+                        ? "0.01"
+                        : row.unit === "reps"
+                          ? "1"
+                          : "0.5"
+                    }
+                    className="tnum mt-1 h-9 w-28 font-bold"
+                    value={row.value}
+                    aria-label={
+                      row.unit === "reps" ? `${row.name} (reps)` : row.name
+                    }
+                    onCommit={(v) =>
+                      patch((d) => ((d.performance.rows[i]!.value = v), d))
+                    }
+                  />
+                ) : (
+                  <p className="tnum mt-1 text-xl font-extrabold">
+                    {row.value ?? "—"}
+                    {/* N10: jump/sprint labels already carry the unit —
+                        only rep counts still need the suffix. */}
+                    {row.unit === "reps" && row.value != null ? (
+                      <span className="ml-1 text-xs font-medium text-muted-foreground">
+                        reps
+                      </span>
+                    ) : null}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
           <NotesField
             value={a.performance.notes}
@@ -598,6 +594,64 @@ function HeaderField({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Round 12 (N8): every numeric field types into a LOCAL string draft, so
+ * partial input ("1.", "-") is never round-tripped through the model and
+ * clobbered — the first keystroke always lands. Only Number.isFinite parses
+ * commit (empty → null), and the draft resyncs when the model changes
+ * underneath (e.g. the bench 1RM autofilling Scott Curl).
+ */
+function NumberField({
+  value,
+  onCommit,
+  step,
+  inputMode,
+  min,
+  className,
+  "aria-label": ariaLabel,
+}: {
+  value: number | null;
+  onCommit: (v: number | null) => void;
+  step: string;
+  inputMode: "numeric" | "decimal";
+  min?: number;
+  className?: string;
+  "aria-label": string;
+}) {
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+
+  useEffect(() => {
+    const parsed = draft.trim() === "" ? NaN : Number(draft);
+    const committed = Number.isFinite(parsed) ? parsed : null;
+    if (committed !== value) setDraft(value == null ? "" : String(value));
+    // The model only pulls the draft when it moved externally — typing pushes
+    // the other way, so `draft` deliberately stays out of the deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return (
+    <Input
+      type="number"
+      inputMode={inputMode}
+      step={step}
+      min={min}
+      className={className}
+      value={draft}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        if (raw.trim() === "") {
+          onCommit(null);
+          return;
+        }
+        const n = Number(raw);
+        if (Number.isFinite(n)) onCommit(n);
+      }}
+    />
+  );
+}
+
 function HeaderNumber({
   label,
   value,
@@ -613,16 +667,13 @@ function HeaderNumber({
     <div>
       <span className="eyebrow">{label}</span>
       {edit ? (
-        <Input
-          type="number"
+        <NumberField
           inputMode="decimal"
           step="0.1"
           className="tnum mt-1 h-8 w-24 text-sm font-semibold"
-          value={value ?? ""}
+          value={value}
           aria-label={label}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? null : Number(e.target.value))
-          }
+          onCommit={onChange}
         />
       ) : (
         <p className="tnum mt-1 text-sm font-semibold">{value ?? "—"}</p>
@@ -833,16 +884,14 @@ function StrengthLadder({
               Estimated 1RM
             </span>
             {edit ? (
-              <Input
-                type="number"
+              <NumberField
                 inputMode="numeric"
+                step="1"
                 min={0}
                 className="tnum h-9 w-24 font-bold"
-                value={block.est1Rm ?? ""}
+                value={block.est1Rm}
                 aria-label={`${title} — estimated 1RM (lb)`}
-                onChange={(e) =>
-                  onEst(e.target.value === "" ? null : Number(e.target.value))
-                }
+                onCommit={onEst}
               />
             ) : (
               <span className="tnum text-lg font-extrabold">
@@ -962,19 +1011,13 @@ function AccessoryCard({
             >
               <span className="eyebrow">{label}</span>
               {edit ? (
-                <Input
-                  type="number"
+                <NumberField
                   inputMode="decimal"
-                  step="0.5"
+                  step="1"
                   className="tnum mt-1 h-9 w-24 font-bold"
-                  value={block[key] ?? ""}
+                  value={block[key]}
                   aria-label={`${title} — ${label} (lb)`}
-                  onChange={(e) =>
-                    onChange(
-                      key,
-                      e.target.value === "" ? null : Number(e.target.value),
-                    )
-                  }
+                  onCommit={(v) => onChange(key, v)}
                 />
               ) : (
                 <p className="tnum mt-1 text-xl font-extrabold">
