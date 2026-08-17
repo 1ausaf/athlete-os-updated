@@ -41,6 +41,7 @@ import {
   FollowUpBanner,
   GoalsMedicalCard,
   NutritionButton,
+  ParentAccountsCard,
   TeamManagementCard,
 } from "./profile-panels";
 
@@ -48,8 +49,9 @@ import {
  * Round-8 member profile. The header is avatar + name with four MATCHING
  * outline actions (C12); notes live RIGHT under the two 30-day tiles; the
  * left column stacks Details → Goals & Medical History → Latest Personal
- * Records → Contact & Links → Team Management → Attendance (R18) → Upcoming
- * Bookings → Financial → Alerts & Reminders (R15).
+ * Records → Contact & Links → Parent & Guardian Accounts (round 11, A2/A3) →
+ * Team Management → Attendance (R18) → Upcoming Bookings → Financial →
+ * Alerts & Reminders (R15).
  */
 export default async function StaffAthleteProfilePage({
   params,
@@ -210,6 +212,9 @@ export default async function StaffAthleteProfilePage({
 
           {/* C20 — Contact & Links */}
           <ContactLinksCard athlete={athlete} profile={profile} />
+
+          {/* Round 11 (A2/A3) — parent logins + member/parent password resets */}
+          <ParentAccountsCard athlete={athlete} profile={profile} admin={admin} />
 
           {/* C20 — Team Management */}
           <TeamManagementCard athlete={athlete} />

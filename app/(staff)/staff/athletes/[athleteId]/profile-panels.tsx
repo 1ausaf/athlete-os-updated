@@ -11,14 +11,17 @@ import {
   CreditCard,
   History,
   IdCard,
+  KeyRound,
   LinkIcon,
   Pencil,
   Plus,
   Salad,
+  Send,
   Settings2,
   Target,
   Trash2,
   UserCog,
+  UsersRound,
   X,
 } from "lucide-react";
 
@@ -29,11 +32,13 @@ import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/ui/pill";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  athleteById,
   athletes,
   bucketLabel,
   fmtDay,
   fmtFullDay,
   money2,
+  parentsOfAthlete,
   statusLabel,
   type Athlete,
   type AthleteProfile,
@@ -297,6 +302,16 @@ export function DetailsCard({
   );
   const [bucket, setBucket] = useState(bucketLabel[athlete.bucket]);
   const [focus, setFocus] = useState(athlete.sport);
+  // Round 11 (M30): identity fields are admin-editable from the staff side —
+  // names seed from the display-name split, sex/birthday from the record.
+  const [firstName, setFirstName] = useState(
+    () => athlete.name.split(" ")[0] ?? "",
+  );
+  const [lastName, setLastName] = useState(() =>
+    athlete.name.split(" ").slice(1).join(" "),
+  );
+  const [sex, setSex] = useState(athlete.gender === "M" ? "Male" : "Female");
+  const [birthDate, setBirthDate] = useState(dob ? dob.slice(0, 10) : "");
   const [deleted, setDeleted] = useState(false);
   // Delete Member is a two-step confirm: the first click ARMS the button for
   // ~4s ("Really delete?…"), the second click within that window deletes.
@@ -381,6 +396,31 @@ export function DetailsCard({
             </label>
           ) : null}
 
+          {/* Round 11 (M30): admins fix names/sex/birthday right here —
+              non-admin staff keep the read-only view */}
+          {admin ? (
+            <>
+              <label className="flex flex-col gap-0.5">
+                <span className={FIELD_LABEL}>First name</span>
+                <Input
+                  value={firstName}
+                  aria-label="First name"
+                  className="h-9"
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                <span className={FIELD_LABEL}>Last name</span>
+                <Input
+                  value={lastName}
+                  aria-label="Last name"
+                  className="h-9"
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+
           <ManagedSelect
             label="Type"
             storageKey="aos-member-type-options"
@@ -398,18 +438,51 @@ export function DetailsCard({
             manageable={admin}
           />
 
-          <div className="flex flex-col gap-0.5">
-            <span className={FIELD_LABEL}>Sex</span>
-            <div className="flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
-              {athlete.gender}
+          {admin ? (
+            <label className="flex flex-col gap-0.5">
+              <span className={FIELD_LABEL}>Sex</span>
+              <select
+                value={sex}
+                aria-label="Sex"
+                onChange={(e) => setSex(e.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+              >
+                {["Male", "Female", "Non-binary", "Prefer not to say"].map(
+                  (o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              <span className={FIELD_LABEL}>Sex</span>
+              <div className="flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
+                {athlete.gender}
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className={FIELD_LABEL}>Birthday</span>
-            <div className="tnum flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
-              {birthdayLabel(dob, athlete.yearOfBirth)}
+          )}
+          {admin ? (
+            <label className="flex flex-col gap-0.5">
+              <span className={FIELD_LABEL}>Birthday</span>
+              <input
+                type="date"
+                value={birthDate}
+                aria-label="Birthday"
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="tnum h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
+              />
+            </label>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              <span className={FIELD_LABEL}>Birthday</span>
+              <div className="tnum flex h-9 items-center rounded-md bg-surface/60 px-2.5 text-sm font-medium">
+                {birthdayLabel(dob, athlete.yearOfBirth)}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <p className="text-xs text-muted-foreground text-pretty">
@@ -1286,6 +1359,337 @@ export function ContactLinksCard({
             Synced from the member&apos;s profile — they keep it current.
           </p>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Round 11 (A2/A3) — Parent & Guardian accounts: the member's own     */
+/* login at the top (password reset), each linked parent login with    */
+/* reset/re-invite actions, and an admin add-parent mini-form. The     */
+/* card shows for all staff; the buttons and form are admin-only.      */
+/* ------------------------------------------------------------------ */
+
+/** A parent login added from this card — persists per athlete. */
+interface LocalParentAccount {
+  id: string;
+  name: string;
+  relation: string;
+  email: string;
+  childAthleteIds: string[];
+}
+
+export function ParentAccountsCard({
+  athlete,
+  profile,
+  admin,
+}: {
+  athlete: Athlete;
+  profile?: AthleteProfile;
+  admin: boolean;
+}) {
+  const storageKey = `aos-parent-accounts-${athlete.id}`;
+  const memberEmail = profile?.email;
+  const [local, setLocal] = useState<LocalParentAccount[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  // The add-parent mini-form
+  const [adding, setAdding] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addRelation, setAddRelation] = useState("");
+  const [addKids, setAddKids] = useState<Set<string>>(
+    () => new Set([athlete.id]),
+  );
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as LocalParentAccount[];
+        if (Array.isArray(parsed)) setLocal(parsed);
+      }
+    } catch {
+      /* corrupted storage — start empty */
+    }
+    setLoaded(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(local));
+    } catch {
+      /* storage full/blocked — accounts still work in-memory */
+    }
+  }, [local, loaded, storageKey]);
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+
+  function showFlash(message: string) {
+    setFlash(message);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 3500);
+  }
+
+  // Seeded parent logins + the ones added locally from this card.
+  const rows: LocalParentAccount[] = [
+    ...parentsOfAthlete(athlete.id).map((p) => ({
+      id: p.id,
+      name: p.name,
+      relation: p.relation,
+      email: p.email,
+      childAthleteIds: p.childAthleteIds,
+    })),
+    ...local,
+  ];
+
+  // Link-to-member options: this athlete first, then a few other actives.
+  const kidOptions = [
+    athlete,
+    ...athletes
+      .filter((a) => a.status === "active" && a.id !== athlete.id)
+      .slice(0, 4),
+  ];
+
+  function kidNames(ids: string[]): string {
+    return ids.map((id) => athleteById(id)?.name ?? id).join(", ");
+  }
+
+  function toggleKid(id: string) {
+    setAddKids((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function addParent() {
+    const name = addName.trim();
+    const email = addEmail.trim();
+    if (!name || !email) return;
+    setLocal((prev) => [
+      ...prev,
+      {
+        id: `local-parent-${Date.now()}`,
+        name,
+        relation: addRelation.trim() || "Guardian",
+        email,
+        childAthleteIds: addKids.size > 0 ? [...addKids] : [athlete.id],
+      },
+    ]);
+    setAdding(false);
+    setAddName("");
+    setAddEmail("");
+    setAddRelation("");
+    setAddKids(new Set([athlete.id]));
+    showFlash(`Parent account created — login invite sent to ${email}`);
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-5">
+        <div className="flex items-center gap-2">
+          <UsersRound className="h-5 w-5 text-muted-foreground" aria-hidden />
+          <h3 className="text-base">Parent &amp; Guardian Accounts</h3>
+        </div>
+
+        {flash ? (
+          <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5 text-xs font-medium text-success">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">{flash}</span>
+          </div>
+        ) : null}
+
+        {/* A3 — the MEMBER's own login: the manual password reset lives here */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/50 p-3">
+          <div className="min-w-0 flex-1">
+            <p className={FIELD_LABEL}>Member login</p>
+            <p className="truncate text-sm font-medium">{athlete.name}</p>
+            {memberEmail ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {memberEmail}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No login email on file yet.
+              </p>
+            )}
+          </div>
+          {admin && memberEmail ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() =>
+                showFlash(`Password reset email sent to ${memberEmail}`)
+              }
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              Send password reset
+            </Button>
+          ) : null}
+        </div>
+
+        {/* A2 — every parent login linked to this member */}
+        {rows.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+            No parent accounts linked yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {rows.map((p) => (
+              <li
+                key={p.id}
+                className="flex flex-col gap-2 rounded-lg border border-border bg-surface/50 p-3"
+              >
+                <div className="min-w-0 text-sm">
+                  <p className="font-medium">
+                    {p.name}
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      {p.relation}
+                    </span>
+                  </p>
+                  <p className="break-words text-xs">
+                    <a
+                      href={`mailto:${p.email}`}
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      {p.email}
+                    </a>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Linked: {kidNames(p.childAthleteIds)}
+                  </p>
+                </div>
+                {admin ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        showFlash(`Password reset email sent to ${p.email}`)
+                      }
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      Send password reset
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        showFlash(`Login invite re-sent to ${p.email}`)
+                      }
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Resend login invite
+                    </Button>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Admin-only: create a parent login and link it to members */}
+        {admin ? (
+          adding ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand/[0.03] p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-0.5">
+                  <span className={FIELD_LABEL}>Name</span>
+                  <Input
+                    autoFocus
+                    value={addName}
+                    placeholder="e.g. Priya Rahman"
+                    className="h-9"
+                    onChange={(e) => setAddName(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className={FIELD_LABEL}>Email</span>
+                  <Input
+                    type="email"
+                    value={addEmail}
+                    placeholder="parent@example.com"
+                    className="h-9"
+                    onChange={(e) => setAddEmail(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className={FIELD_LABEL}>Relation</span>
+                  <Input
+                    value={addRelation}
+                    placeholder="Mother / Father / Guardian"
+                    className="h-9"
+                    onChange={(e) => setAddRelation(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>Link to members</span>
+                <div className="grid grid-cols-1 gap-x-2 sm:grid-cols-2">
+                  {kidOptions.map((a) => (
+                    <label
+                      key={a.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={addKids.has(a.id)}
+                        onChange={() => toggleKid(a.id)}
+                        className="h-3.5 w-3.5 accent-[hsl(var(--brand))]"
+                      />
+                      <span className="min-w-0 truncate">{a.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="brand"
+                  size="sm"
+                  disabled={!addName.trim() || !addEmail.trim()}
+                  onClick={addParent}
+                >
+                  Create &amp; send invite
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAdding(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand-ink"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add parent account
+            </button>
+          )
+        ) : null}
+
+        <p className="text-[0.7rem] text-muted-foreground">
+          {admin
+            ? "Parents log in with their own account and see every linked kid. Resets and invites are demo flashes — production sends real emails."
+            : "Password resets and invites are admin-only — the card is read-only for coaches."}
+        </p>
       </CardContent>
     </Card>
   );

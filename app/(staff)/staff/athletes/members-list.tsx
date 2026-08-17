@@ -1,21 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import {
   ArrowDown,
   ArrowUp,
   CalendarClock,
-  CornerDownRight,
   Filter,
-  Minus,
   Plus,
   Search,
   Trash2,
   Users,
 } from "lucide-react";
-import { Fragment, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { TabBar } from "@/components/app/tab-bar";
@@ -45,11 +43,12 @@ import { programDueMeta } from "./program-due";
 
 /**
  * Round-8 members list: one table for EVERY member — individuals AND groups.
- * Groups render as "Group: {name}" rows with a +/− expander; their linked
- * members NEST underneath, indented and alphabetical, and don't count toward
- * the tab totals — the group counts as one (C9). Status tabs live in the URL
- * (C8), the coach filters are labeled Program / Manage (C3), and the add
- * buttons are admin-only links to the onboarding pages (C4/C10).
+ * Groups render as "Group: {name}" rows that count as ONE toward the tab
+ * totals; their linked members are hidden from the top level and managed by
+ * clicking into the group (round 11, C1 — no nested member rows). Status
+ * tabs live in the URL (C8), the coach filters are labeled Program / Manage
+ * (C3), and the add buttons are admin-only links to the onboarding pages
+ * (C4/C10).
  */
 
 const STATUS_TABS: AthleteStatus[] = ["active", "paused", "inactive"];
@@ -159,6 +158,8 @@ export function MembersList({
   initialStatus: AthleteStatus;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [list, setList] = useState<Athlete[]>(athletes);
   const [tab, setTab] = useState<AthleteStatus>(initialStatus);
   const [query, setQuery] = useState("");
@@ -171,10 +172,15 @@ export function MembersList({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("due");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  // C9 — groups start expanded so the nesting is visible at a glance.
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(trainingGroups.map((g) => g.id)),
-  );
+
+  // Round 11 (M1): Back/Forward must restore the tab — pushes alone desync
+  // when the component stays mounted, so the tab derives from the URL.
+  useEffect(() => {
+    const s = searchParams.get("status");
+    setTab(
+      STATUS_TABS.includes(s as AthleteStatus) ? (s as AthleteStatus) : "active",
+    );
+  }, [searchParams]);
 
   const focusOptions = useMemo(
     () => Array.from(new Set(list.map((a) => a.sport))).sort(),
@@ -259,27 +265,14 @@ export function MembersList({
     return out;
   }, [typeFilter, bucketChecks, query, progFilter, mgmtFilter, sportChecks, viewerStaffId, list]);
 
-  /** C9 — ids of members nesting under a VISIBLE group; a filtered-out group
+  /** C9/C1 — ids of members belonging to a VISIBLE group: they hide from the
+   *  top-level list (manage them inside the group); a filtered-out group
    *  releases its members back to the top level so they never vanish. */
   const nestedIds = useMemo(() => {
     const s = new Set<string>();
     for (const g of baseGroups) for (const id of g.memberAthleteIds) s.add(id);
     return s;
   }, [baseGroups]);
-
-  /** Linked members per group — always alphabetical (C9). */
-  const nestedByGroup = useMemo(() => {
-    const map = new Map<string, Athlete[]>();
-    for (const g of baseGroups) {
-      map.set(
-        g.id,
-        list
-          .filter((a) => g.memberAthleteIds.includes(a.id))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      );
-    }
-    return map;
-  }, [baseGroups, list]);
 
   /** Bracketed tab counts — a group counts as ONE; nested members don't (C9). */
   const counts = useMemo(() => {
@@ -294,7 +287,7 @@ export function MembersList({
     return c;
   }, [baseAthletes, baseGroups, nestedIds]);
 
-  /** Top-level rows only — sorting never reorders nested members (C9). */
+  /** Top-level rows only — grouped members are managed inside the group (C1). */
   const rows = useMemo(() => {
     const out: Row[] = baseAthletes
       .filter((a) => a.status === tab && !nestedIds.has(a.id))
@@ -328,12 +321,12 @@ export function MembersList({
     return out;
   }, [baseAthletes, baseGroups, nestedIds, tab, sortKey, sortDir]);
 
-  /** C8 — tab changes write a unique, shareable URL. */
+  /** C8 — tab changes write a unique, shareable URL; round 11 (M1): push a
+   *  history entry (built off the current pathname) so Back walks tabs. */
   function selectTab(next: AthleteStatus) {
+    if (next === tab) return;
     setTab(next);
-    router.replace(`/staff/athletes?status=${next}` as Route, {
-      scroll: false,
-    });
+    router.push(`${pathname}?status=${next}` as Route, { scroll: false });
   }
 
   function toggleSort(key: SortKey) {
@@ -350,15 +343,6 @@ export function MembersList({
     if (next.has(value)) next.delete(value);
     else next.add(value);
     apply(next);
-  }
-
-  function toggleExpand(groupId: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
   }
 
   /** Inactive members can be removed entirely (client: "completely removes"). */
@@ -545,7 +529,8 @@ export function MembersList({
         </div>
       </div>
 
-      {/* The list — every column sortable; groups expand their members (C9) */}
+      {/* The list — every column sortable; groups are single rows that open
+          the group profile where members are managed (C1) */}
       <div className="overflow-x-auto rounded-xl border border-border scrollbar-slim">
         <table className="w-full min-w-[980px] text-sm">
           <thead>
@@ -587,31 +572,13 @@ export function MembersList({
                   onDelete={() => deleteAthlete(row.a.id)}
                 />
               ) : (
-                <Fragment key={row.g.id}>
-                  <GroupRow
-                    group={row.g}
-                    expanded={expanded.has(row.g.id)}
-                    memberCount={nestedByGroup.get(row.g.id)?.length ?? 0}
-                    onToggle={() => toggleExpand(row.g.id)}
-                    onOpen={() =>
-                      router.push(`/staff/teams/${row.g.id}` as Route)
-                    }
-                  />
-                  {expanded.has(row.g.id)
-                    ? (nestedByGroup.get(row.g.id) ?? []).map((a) => (
-                        <MemberRow
-                          key={a.id}
-                          athlete={a}
-                          tab={tab}
-                          nested
-                          onOpen={() =>
-                            router.push(`/staff/athletes/${a.id}` as Route)
-                          }
-                          onDelete={() => deleteAthlete(a.id)}
-                        />
-                      ))
-                    : null}
-                </Fragment>
+                <GroupRow
+                  key={row.g.id}
+                  group={row.g}
+                  onOpen={() =>
+                    router.push(`/staff/teams/${row.g.id}` as Route)
+                  }
+                />
               ),
             )}
             {rows.length === 0 ? (
@@ -728,14 +695,11 @@ function LastNoteCell({ days, isGroup }: { days: number; isGroup?: boolean }) {
 function MemberRow({
   athlete,
   tab,
-  nested = false,
   onOpen,
   onDelete,
 }: {
   athlete: Athlete;
   tab: AthleteStatus;
-  /** C9 — indented row under its group. */
-  nested?: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -747,10 +711,7 @@ function MemberRow({
   return (
     <tr
       onClick={onOpen}
-      className={cn(
-        "cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40",
-        nested && "bg-muted/20",
-      )}
+      className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
       <td
         className={cn(
@@ -758,13 +719,7 @@ function MemberRow({
           limited && "border-l-2 border-l-warning",
         )}
       >
-        <span className={cn("flex items-center gap-2.5", nested && "pl-8")}>
-          {nested ? (
-            <CornerDownRight
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
-              aria-hidden
-            />
-          ) : null}
+        <span className="flex items-center gap-2.5">
           <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="sm" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
@@ -833,19 +788,14 @@ function MemberRow({
   );
 }
 
-/** A group row (C5/C9) — same columns as a member row: "Group: {name}", plus
- *  Type, Program/Manage coaches, the Due chip, and the +/− member expander. */
+/** A group row (C5/C1) — same columns as a member row: "Group: {name}", plus
+ *  Type, Program/Manage coaches and the Due chip. Clicking opens the group
+ *  profile, where members are managed. */
 function GroupRow({
   group,
-  expanded,
-  memberCount,
-  onToggle,
   onOpen,
 }: {
   group: TrainingGroup;
-  expanded: boolean;
-  memberCount: number;
-  onToggle: () => void;
   onOpen: () => void;
 }) {
   const due = programDueMeta(group.programDueInDays);
@@ -855,8 +805,6 @@ function GroupRow({
       onClick={onOpen}
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
-      {/* R16 — no expander here; it lives at the RIGHT end of the row so the
-          group name lines up with member names instead of looking indented */}
       <td className="px-3 py-2.5">
         <span className="flex items-center gap-2.5">
           <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
@@ -889,37 +837,10 @@ function GroupRow({
       <td className="px-3 py-2.5 text-muted-foreground">
         {group.managementCoach}
       </td>
-      {/* R16 — the +/− member expander sits on the RIGHT side of the row */}
+      {/* Round 11 (C1): no member expander — a placeholder cell keeps the
+          Last Comment column aligned; members are managed inside the group */}
       <td className="px-3 py-2.5">
-        <span className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            aria-expanded={expanded}
-            aria-label={
-              expanded
-                ? `Collapse ${group.name} members`
-                : `Expand ${group.name} members`
-            }
-            title={expanded ? "Collapse members" : "Expand members"}
-            disabled={memberCount === 0}
-            className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-surface text-muted-foreground transition-colors",
-              memberCount > 0
-                ? "hover:border-brand/50 hover:text-foreground"
-                : "opacity-40",
-            )}
-          >
-            {expanded && memberCount > 0 ? (
-              <Minus className="h-3 w-3" />
-            ) : (
-              <Plus className="h-3 w-3" />
-            )}
-          </button>
-        </span>
+        <span className="text-xs text-muted-foreground">—</span>
       </td>
     </tr>
   );

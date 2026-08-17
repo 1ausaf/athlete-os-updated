@@ -1,10 +1,9 @@
 
 import { PageHeader } from "@/components/app/page-header";
-import { Pill } from "@/components/ui/pill";
 import { requireAthleteContext } from "@/lib/demo/session";
-import { teamChannelFor } from "@/lib/demo/chat";
+import { channelDisplayNameFor, teamChannelFor } from "@/lib/demo/chat";
 import { athleteProfileById, parentAccountById } from "@/lib/demo/data";
-import { announcements } from "@/lib/demo/training";
+import { publishedAnnouncements } from "@/lib/demo/training";
 
 import { MessagesClient } from "./messages-client";
 
@@ -29,23 +28,13 @@ export default async function AthleteMessagesPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Round 11 (M2): the unread pill moved down into the tab row. */}
       <PageHeader
         title="Chat"
         description={
           athlete.isMinor
-            ? "Your channel to the whole coaching staff, plus facility announcements. Chats with minor athletes always keep a second adult present — the Rule of Two."
-            : "Your channel to the whole coaching staff — facility announcements live on their own tab."
-        }
-        actions={
-          unread > 0 ? (
-            <Pill tone="brand" dot>
-              {unread} unread
-            </Pill>
-          ) : (
-            <Pill tone="success" dot>
-              All caught up
-            </Pill>
-          )
+            ? "Chat with the LPS team. Get informed with Announcements. Chats with minor athletes keep a second adult present — the Rule of Two."
+            : "Chat with the LPS team. Get informed with Announcements."
         }
       />
 
@@ -57,7 +46,9 @@ export default async function AthleteMessagesPage() {
         parentName={parentName}
         participants={participants}
         initialMessages={seed}
-        announcements={announcements}
+        announcements={publishedAnnouncements()}
+        unread={unread}
+        channelName={channelDisplayNameFor(athlete.id)}
       />
     </div>
   );

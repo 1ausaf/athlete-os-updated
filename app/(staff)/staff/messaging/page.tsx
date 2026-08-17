@@ -79,7 +79,7 @@ export default async function StaffMessagingPage() {
         actions={
           admin ? (
             <>
-              <NewAnnouncementButton />
+              <NewAnnouncementButton staffName={user.fullName} />
               <Button asChild variant="brand" size="sm">
                 <Link href={"/staff/messaging/new" as Route}>
                   <Plus className="h-4 w-4" />

@@ -5,6 +5,8 @@ import type { Route } from "next";
 import { useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
+  Check,
+  ChevronDown,
   Clipboard,
   MapPin,
   Pencil,
@@ -21,8 +23,19 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pill } from "@/components/ui/pill";
+import { Pill, type PillTone } from "@/components/ui/pill";
+import { Textarea } from "@/components/ui/textarea";
 import { fmtDay, fmtTime, type TrainingSession } from "@/lib/demo/data";
+import {
+  DEFAULT_SESSION_TYPE_META,
+  loadSessionTypes,
+  saveSessionTypes,
+  sessionTypeMetaFor,
+  SESSION_TYPE_TONES,
+  SESSION_TYPES_EVENT,
+  type SessionTypeMeta,
+  type SessionTypeTone,
+} from "@/lib/demo/session-types";
 import { staffByName, staffMembers } from "@/lib/demo/staff";
 import { cn } from "@/lib/utils";
 
@@ -80,16 +93,28 @@ const REPEAT_LABEL: Record<RepeatKey, string> = {
   none: "Doesn't repeat",
 };
 
-/** R42 — the defaults; the list itself is manageable + persisted. */
-const DEFAULT_SESSION_TYPES = [
-  "Semi-Private",
-  "Team",
-  "Weightlifting Team",
-  "1:1",
-  "Online",
-];
+/* Round 11 (A4): session types moved to the shared managed store
+ * (@/lib/demo/session-types) — name + COLOR + DESCRIPTION per type. */
 
-const SESSION_TYPES_KEY = "aos-session-types";
+/** Tone → solid dot/swatch class (the Pill tone palette, full strength). */
+const TONE_DOT: Record<SessionTypeTone, string> = {
+  neutral: "bg-muted-foreground/50",
+  brand: "bg-brand",
+  info: "bg-info",
+  success: "bg-success",
+  warning: "bg-warning",
+  destructive: "bg-destructive",
+};
+
+/** SessionTypeTone → Pill tone ("destructive" is Pill's "danger"). */
+const TONE_TO_PILL: Record<SessionTypeTone, PillTone> = {
+  neutral: "neutral",
+  brand: "brand",
+  info: "info",
+  success: "success",
+  warning: "warning",
+  destructive: "danger",
+};
 
 interface BookingDraft {
   name: string;
@@ -210,7 +235,19 @@ export function SessionsList({
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<number>();
 
+  // A4 — managed type colors: rows re-tint live when the list changes.
+  const [types, setTypes] = useState<SessionTypeMeta[]>(
+    DEFAULT_SESSION_TYPE_META,
+  );
+
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  useEffect(() => {
+    const sync = () => setTypes(loadSessionTypes());
+    sync();
+    window.addEventListener(SESSION_TYPES_EVENT, sync);
+    return () => window.removeEventListener(SESSION_TYPES_EVENT, sync);
+  }, []);
 
   function showFlash(message: string) {
     setFlash(message);
@@ -473,6 +510,7 @@ export function SessionsList({
               <SessionRow
                 key={s.id}
                 session={s}
+                typeMeta={sessionTypeMetaFor(s.type, types)}
                 mode={mode}
                 gridCols={gridCols}
                 selected={selected.has(s.id)}
@@ -601,6 +639,7 @@ const GRID_PAST =
  */
 function SessionRow({
   session,
+  typeMeta,
   mode,
   gridCols,
   selected,
@@ -608,6 +647,8 @@ function SessionRow({
   onEdit,
 }: {
   session: TrainingSession;
+  /** A4 — managed meta for session.type (tone + description). */
+  typeMeta?: SessionTypeMeta;
   mode: ListMode;
   gridCols: string;
   selected: boolean;
@@ -652,8 +693,19 @@ function SessionRow({
         </span>
       </div>
 
-      <span className="min-w-0 text-[0.95rem] font-bold leading-snug xl:truncate xl:text-sm xl:font-semibold">
-        {session.title}
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-0 text-[0.95rem] font-bold leading-snug xl:truncate xl:text-sm xl:font-semibold">
+          {session.title}
+        </span>
+        {/* A4 — the type chip renders in its managed color */}
+        <span className="shrink-0" title={typeMeta?.description || undefined}>
+          <Pill
+            tone={TONE_TO_PILL[typeMeta?.tone ?? "neutral"]}
+            className="px-2 py-px text-[0.65rem]"
+          >
+            {session.type}
+          </Pill>
+        </span>
       </span>
 
       <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground xl:text-[0.8rem]">
@@ -666,7 +718,8 @@ function SessionRow({
       </span>
 
       {/* Mobile line 4: coach + count + actions */}
-      <div className="mt-1 flex items-center gap-2 xl:contents">
+      {/* Round 11: flex-wrap keeps the type chip + actions on-screen at 375px */}
+      <div className="mt-1 flex flex-wrap items-center gap-2 xl:contents">
         <span
           className="flex shrink-0 items-center gap-2 xl:justify-self-center"
           title={coachNames.join(" · ")}
@@ -1071,8 +1124,11 @@ function BookingDialog({
 
 /* ------------------------------------------------------------------ */
 /* R42 — Session-type select whose OPTIONS are manageable (add /        */
-/* rename / delete) from a gear popover; the list persists in           */
-/* localStorage. Mirrors the profile ManagedSelect pattern.             */
+/* rename / delete) from a gear popover. Round 11 (A4): the options     */
+/* are SessionTypeMeta from the shared store — the popover also edits   */
+/* each type's COLOR (6 Pill tones) and DESCRIPTION, and the select     */
+/* shows a colored dot per option (custom listbox — native <option>     */
+/* can't render one).                                                   */
 /* ------------------------------------------------------------------ */
 
 function ManagedTypeSelect({
@@ -1082,52 +1138,68 @@ function ManagedTypeSelect({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const [options, setOptions] = useState<string[]>(DEFAULT_SESSION_TYPES);
+  const [options, setOptions] = useState<SessionTypeMeta[]>(
+    DEFAULT_SESSION_TYPE_META,
+  );
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
   const [addDraft, setAddDraft] = useState("");
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  // A4 — which row has its color/description editor expanded.
+  const [detailIdx, setDetailIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(SESSION_TYPES_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as string[];
-        if (Array.isArray(parsed) && parsed.length > 0) setOptions(parsed);
-      }
-    } catch {
-      /* corrupted storage — keep defaults */
-    }
+    setOptions(loadSessionTypes());
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    try {
-      window.localStorage.setItem(SESSION_TYPES_KEY, JSON.stringify(options));
-    } catch {
-      /* storage full/blocked — options still work in-memory */
-    }
+    saveSessionTypes(options);
   }, [options, loaded]);
 
   // The current value always renders, even if its option was deleted.
-  const shown = options.includes(value) ? options : [value, ...options];
+  const shown = options.some((o) => o.name === value)
+    ? options
+    : [
+        { name: value, tone: "neutral" as const, description: "" },
+        ...options,
+      ];
+  const selectedTone =
+    shown.find((o) => o.name === value)?.tone ?? "neutral";
 
   function addOption() {
     const v = addDraft.trim();
     setAddDraft("");
-    if (!v || options.includes(v)) return;
-    setOptions((prev) => [...prev, v]);
+    if (!v || options.some((o) => o.name === v)) return;
+    setOptions((prev) => [
+      ...prev,
+      { name: v, tone: "neutral", description: "" },
+    ]);
   }
 
   function commitRename(i: number) {
     const next = editDraft.trim();
     setEditIdx(null);
-    if (!next || next === options[i] || options.includes(next)) return;
-    const prevName = options[i];
-    setOptions((prev) => prev.map((o, j) => (j === i ? next : o)));
+    if (
+      !next ||
+      next === options[i]?.name ||
+      options.some((o) => o.name === next)
+    )
+      return;
+    const prevName = options[i]?.name;
+    setOptions((prev) =>
+      prev.map((o, j) => (j === i ? { ...o, name: next } : o)),
+    );
     if (value === prevName) onChange(next);
+  }
+
+  function patchMeta(i: number, patch: Partial<SessionTypeMeta>) {
+    setOptions((prev) =>
+      prev.map((o, j) => (j === i ? { ...o, ...patch } : o)),
+    );
   }
 
   return (
@@ -1139,25 +1211,77 @@ function ManagedTypeSelect({
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-label="Manage session-type options"
-          title="Manage session types — add, rename or delete"
+          title="Manage session types — add, rename, color, description"
           className="rounded p-0.5 transition-colors hover:text-foreground"
         >
           <Settings2 className="h-3.5 w-3.5" />
         </button>
       </Label>
       <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+        {/* A4 — custom listbox so each option carries its colored dot */}
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={pickOpen}
           aria-label="Session type"
-          className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm"
+          onClick={() => setPickOpen((v) => !v)}
+          className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-surface px-2.5 text-sm"
         >
-          {shown.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              TONE_DOT[selectedTone],
+            )}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 truncate text-left">{value}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+        {pickOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              aria-hidden
+              onClick={() => setPickOpen(false)}
+            />
+            <ul
+              role="listbox"
+              aria-label="Session type options"
+              className="absolute left-0 top-full z-50 mt-1.5 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-raised"
+            >
+              {shown.map((o) => (
+                <li key={o.name}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={o.name === value}
+                    title={o.description || undefined}
+                    onClick={() => {
+                      onChange(o.name);
+                      setPickOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/40",
+                      o.name === value && "font-semibold",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        TONE_DOT[o.tone],
+                      )}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                    {o.name === value ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-brand-ink" />
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
         {open ? (
           <>
             <div
@@ -1165,58 +1289,120 @@ function ManagedTypeSelect({
               aria-hidden
               onClick={() => setOpen(false)}
             />
-            <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-2 shadow-raised">
+            <div className="absolute left-0 top-full z-50 mt-1.5 max-h-[26rem] w-72 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-raised">
               <p className="eyebrow px-1.5 pb-1.5">Session types</p>
               <ul className="flex flex-col gap-0.5">
                 {options.map((o, i) => (
                   <li
-                    key={`${o}-${i}`}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/40"
+                    key={`${o.name}-${i}`}
+                    className="rounded-md transition-colors hover:bg-accent/40"
                   >
-                    {editIdx === i ? (
-                      <input
-                        autoFocus
-                        value={editDraft}
-                        aria-label={`Rename ${o}`}
-                        onChange={(e) => setEditDraft(e.target.value)}
-                        onBlur={() => commitRename(i)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            (e.target as HTMLInputElement).blur();
-                          if (e.key === "Escape") setEditIdx(null);
-                        }}
-                        className="h-7 min-w-0 flex-1 rounded border border-input bg-surface px-1.5 text-sm focus:outline-none"
+                    <div className="flex items-center gap-1 px-1.5 py-1 text-sm">
+                      <span
+                        className={cn(
+                          "h-2 w-2 shrink-0 rounded-full",
+                          TONE_DOT[o.tone],
+                        )}
+                        aria-hidden
                       />
-                    ) : (
-                      <>
-                        <span className="min-w-0 flex-1 truncate">{o}</span>
-                        <button
-                          type="button"
-                          aria-label={`Rename ${o}`}
-                          title="Rename"
-                          onClick={() => {
-                            setEditIdx(i);
-                            setEditDraft(o);
+                      {editIdx === i ? (
+                        <input
+                          autoFocus
+                          value={editDraft}
+                          aria-label={`Rename ${o.name}`}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          onBlur={() => commitRename(i)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              (e.target as HTMLInputElement).blur();
+                            if (e.key === "Escape") setEditIdx(null);
                           }}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Delete ${o}`}
-                          title="Delete"
-                          onClick={() =>
-                            setOptions((prev) =>
-                              prev.filter((_, j) => j !== i),
-                            )
+                          className="h-7 min-w-0 flex-1 rounded border border-input bg-surface px-1.5 text-sm focus:outline-none"
+                        />
+                      ) : (
+                        <>
+                          {/* A4 — expand the row's color + description editor */}
+                          <button
+                            type="button"
+                            aria-expanded={detailIdx === i}
+                            aria-label={`Edit ${o.name} color and description`}
+                            title="Color & description"
+                            onClick={() =>
+                              setDetailIdx(detailIdx === i ? null : i)
+                            }
+                            className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                          >
+                            <span className="min-w-0 flex-1 truncate">
+                              {o.name}
+                            </span>
+                            <ChevronDown
+                              className={cn(
+                                "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+                                detailIdx === i && "rotate-180",
+                              )}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Rename ${o.name}`}
+                            title="Rename"
+                            onClick={() => {
+                              setEditIdx(i);
+                              setEditDraft(o.name);
+                            }}
+                            className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete ${o.name}`}
+                            title="Delete"
+                            onClick={() => {
+                              setDetailIdx(null);
+                              setOptions((prev) =>
+                                prev.filter((_, j) => j !== i),
+                              );
+                            }}
+                            className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {detailIdx === i ? (
+                      <div className="flex flex-col gap-2 px-1.5 pb-2 pl-5">
+                        <div className="flex items-center gap-1.5">
+                          {SESSION_TYPE_TONES.map(({ tone, label }) => (
+                            <button
+                              key={tone}
+                              type="button"
+                              aria-pressed={o.tone === tone}
+                              aria-label={`${label} color`}
+                              title={label}
+                              onClick={() => patchMeta(i, { tone })}
+                              className={cn(
+                                "h-5 w-5 rounded-full transition-transform hover:scale-110",
+                                TONE_DOT[tone],
+                                o.tone === tone &&
+                                  "ring-2 ring-foreground/60 ring-offset-2 ring-offset-popover",
+                              )}
+                            />
+                          ))}
+                        </div>
+                        <Textarea
+                          rows={2}
+                          value={o.description}
+                          placeholder="What members see when they pick this type…"
+                          aria-label={`${o.name} description`}
+                          onChange={(e) =>
+                            patchMeta(i, { description: e.target.value })
                           }
-                          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </>
-                    )}
+                          className="text-xs"
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -1242,7 +1428,8 @@ function ManagedTypeSelect({
                 </Button>
               </div>
               <p className="px-1.5 pt-1.5 text-[0.65rem] text-muted-foreground">
-                Saves locally in this demo.
+                Colors show on the schedule and booking chips. Saves locally in
+                this demo.
               </p>
             </div>
           </>

@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Plus, Receipt, Send, Undo2, XCircle } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Plus,
+  Receipt,
+  Send,
+  Undo2,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +66,7 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
   // B1 — row actions ask for confirmation before the status flips.
   const [confirming, setConfirming] = useState<{
     inv: Invoice;
-    action: "paid" | "cancel" | "record" | "refund";
+    action: "paid" | "cancel" | "record" | "refund" | "push";
   } | null>(null);
   // R50 — receipt/refund confirmations flash at the bottom of the screen.
   const [flash, setFlash] = useState<string | null>(null);
@@ -110,6 +119,23 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
       status: "canceled",
       canceledAt: new Date().toISOString(),
     });
+    setConfirming(null);
+  }
+
+  /** Round 11 (A6) — client away: push the cycle back a week or two. */
+  function pushDueDate(inv: Invoice, weeks: number) {
+    const shifted = new Date(
+      new Date(inv.dueDate).getTime() + weeks * 7 * 86_400_000,
+    ).toISOString();
+    patchRow(inv.id, {
+      dueDate: shifted,
+      status: inv.status === "overdue" ? "due" : inv.status,
+    });
+    showFlash(
+      `Due date pushed to ${fmtDay(shifted)} — cycle extended while ${
+        inv.athleteName
+      } is away.`,
+    );
     setConfirming(null);
   }
 
@@ -247,6 +273,19 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
                             <Check className="h-4 w-4" />
                             Mark paid
                           </Button>
+                          {/* A6 — client away: push the billing cycle back */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground"
+                            title="Push the due date back while the client is away"
+                            onClick={() =>
+                              setConfirming({ inv, action: "push" })
+                            }
+                          >
+                            <CalendarClock className="h-4 w-4" />
+                            Push due date
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -378,6 +417,15 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
         />
       ) : null}
 
+      {/* A6 — push the due date while the client is away. */}
+      {confirming?.action === "push" ? (
+        <PushDueDateDialog
+          inv={confirming.inv}
+          onClose={() => setConfirming(null)}
+          onConfirm={(weeks) => pushDueDate(confirming.inv, weeks)}
+        />
+      ) : null}
+
       {/* R49 — full or partial refund on a paid invoice. */}
       {confirming?.action === "refund" ? (
         <RefundDialog
@@ -500,6 +548,71 @@ function SettlePaymentDialog({
           onClick={() => onConfirm(method, receivedCents)}
         >
           {partial ? "Record partial payment" : "Confirm"}
+        </Button>
+      </div>
+    </BillingDialog>
+  );
+}
+
+/**
+ * Round 11 (A6) — push an open invoice's due date back one or two weeks:
+ * clients away for a week get their subscription cycle extended instead of
+ * going overdue. Overdue rows flip back to Due.
+ */
+function PushDueDateDialog({
+  inv,
+  onClose,
+  onConfirm,
+}: {
+  inv: Invoice;
+  onClose: () => void;
+  onConfirm: (weeks: number) => void;
+}) {
+  return (
+    <BillingDialog
+      title="Push due date"
+      subtitle={`${inv.athleteName} · ${money2(inv.amountCents)} · due ${fmtDay(
+        inv.dueDate,
+      )}`}
+      onClose={onClose}
+    >
+      <p className="text-sm text-muted-foreground">
+        Client away for a bit? Push the cycle back — the subscription picks up
+        where it left off, nothing is lost or charged twice.
+      </p>
+      <div className="flex flex-col gap-2">
+        {[1, 2].map((weeks) => {
+          const shifted = new Date(
+            new Date(inv.dueDate).getTime() + weeks * 7 * 86_400_000,
+          );
+          return (
+            <Button
+              key={weeks}
+              variant="outline"
+              size="sm"
+              className="justify-between"
+              onClick={() => onConfirm(weeks)}
+            >
+              <span className="flex items-center gap-1.5">
+                <CalendarClock className="h-4 w-4" />+{weeks} week
+                {weeks === 1 ? "" : "s"}
+              </span>
+              <span className="text-muted-foreground">
+                new due date {fmtDay(shifted.toISOString())}
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+      {inv.status === "overdue" ? (
+        <p className="text-xs text-muted-foreground">
+          This invoice is overdue — pushing the date also clears the overdue
+          flag back to Due.
+        </p>
+      ) : null}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Keep as is
         </Button>
       </div>
     </BillingDialog>

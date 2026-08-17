@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Dumbbell,
@@ -65,6 +66,8 @@ interface SetLog {
   result: string;
   /** Round 7: the ✗ beside the ✓ — "they hit, they miss". */
   missed?: boolean;
+  /** Round 11 (M9): the ✓ confirmed this row — a typed value stays put. */
+  confirmed?: boolean;
 }
 
 interface WorkoutLoggerProps {
@@ -192,18 +195,34 @@ export function WorkoutLogger({
   preferredUnit,
 }: WorkoutLoggerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   // Round 7 (R7-3): the tab lives in the URL so views are copy-pasteable.
   const [tab, setTab] = useState<LandingTab>(() =>
     searchParams.get("tab") === "past" ? "past" : "published",
   );
 
+  // Round 11 (M1): URLs build on the current pathname — the parent persona
+  // browses this page under /parent/*, which the middleware must keep.
+  const listUrl = (t: LandingTab) =>
+    t === "past" ? `${pathname}?tab=past` : pathname;
+  const workoutUrl = (t: LandingTab, dayId: string) =>
+    t === "past"
+      ? `${pathname}?tab=past&workout=${dayId}`
+      : `${pathname}?workout=${dayId}`;
+
+  /** Round 11 (M1): PUSH a history entry so Back works — no-op pushes skipped. */
+  function pushUrl(url: string) {
+    const qs = searchParams.toString();
+    const current = qs ? `${pathname}?${qs}` : pathname;
+    if (url === current) return;
+    router.push(url as Route, { scroll: false });
+  }
+
   function selectTab(t: LandingTab) {
+    if (t === tab) return;
     setTab(t);
-    router.replace(
-      (t === "past" ? "/athlete/training?tab=past" : "/athlete/training") as Route,
-      { scroll: false },
-    );
+    pushUrl(listUrl(t));
   }
   /** Round 8 (M18): sessions completed locally — the Completed tab's list. */
   const [localCompleted, setLocalCompleted] =
@@ -223,6 +242,25 @@ export function WorkoutLogger({
       (s) => new Date(s.completedOn).getTime() >= cutoff,
     );
   }, [localCompleted, completedRange]);
+  /** Round 11 (M4): Upcoming paginates — the next 5 rows, +5 per Show more. */
+  const [upcomingLimit, setUpcomingLimit] = useState(5);
+  useEffect(() => {
+    setUpcomingLimit(5);
+  }, [tab]);
+  /** Day ids with ANY completed session on record (seeded or this visit). */
+  const completedEver = useMemo(
+    () => new Set(localCompleted.map((s) => s.dayId)),
+    [localCompleted],
+  );
+  /**
+   * Upcoming = days never completed. Days completed THIS visit stay visible
+   * so they read green in place (M18) until the list reloads.
+   */
+  const upcomingDays = useMemo(
+    () =>
+      days.filter((d) => !completedEver.has(d.id) || completedDayIds.has(d.id)),
+    [days, completedEver, completedDayIds],
+  );
   /** Success flash on the landing page after Complete Session (M18). */
   const [landingFlash, setLandingFlash] = useState<string | null>(null);
   const landingFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -263,23 +301,54 @@ export function WorkoutLogger({
     return null;
   });
 
-  /** Round 8 (M12): opening a workout CHANGES THE URL; back clears it. */
+  /** Round 11 (M6): true when THIS session pushed the open workout URL. */
+  const openedByPush = useRef(false);
+
+  /**
+   * Round 8 (M12) / Round 11 (M6): opening a workout PUSHES a history entry
+   * that keeps the current tab in the URL — Edit from Completed pushes
+   * ?tab=past&workout=X, so browser Back lands on the list you came from.
+   */
   function openWorkout(dayId: string, completedSession: CompletedSession | null) {
     setOpen({ dayId, completedSession });
-    router.replace(`/athlete/training?workout=${dayId}` as Route, {
-      scroll: false,
-    });
+    openedByPush.current = true;
+    pushUrl(workoutUrl(tab, dayId));
   }
 
   function closeWorkout() {
-    setOpen(null);
-    router.replace(
-      (tab === "past"
-        ? "/athlete/training?tab=past"
-        : "/athlete/training") as Route,
-      { scroll: false },
-    );
+    if (openedByPush.current) {
+      // We pushed this workout open — Back returns to the exact list view.
+      openedByPush.current = false;
+      router.back();
+    } else {
+      // Deep-link arrival (e.g. a dashboard ?workout= link) — push the list.
+      setOpen(null);
+      pushUrl(listUrl(tab));
+    }
   }
+
+  // Round 11 (M1/M6): Back/Forward must restore the view — pushing alone
+  // desyncs state, so tab + open workout re-derive from the URL on change.
+  useEffect(() => {
+    setTab(searchParams.get("tab") === "past" ? "past" : "published");
+    const w = searchParams.get("workout");
+    if (w && days.some((d) => d.id === w)) {
+      setOpen((prev) =>
+        prev?.dayId === w
+          ? prev
+          : {
+              dayId: w,
+              completedSession:
+                localCompleted.find((c) => c.dayId === w) ?? null,
+            },
+      );
+    } else {
+      openedByPush.current = false;
+      setOpen(null);
+    }
+    // localCompleted is read fresh but only the URL triggers this sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, days]);
   const [logs, setLogs] = useState<Record<string, SetLog[]>>(() =>
     buildInitialLogs(days, preferredUnit),
   );
@@ -288,6 +357,110 @@ export function WorkoutLogger({
   );
   /** Per-movement completion for circuit blocks (the warm-up). */
   const [circuitDone, setCircuitDone] = useState<Record<string, boolean[]>>({});
+
+  /**
+   * Round 11 (M13): autosave — in-progress logging survives Back/refresh.
+   * Restore runs AFTER mount (an initializer would break SSR hydration);
+   * saves only start once the restore has run, so it never clobbers storage.
+   */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const storedLogs: Record<string, SetLog[]> = {};
+      const storedCircuit: Record<string, boolean[]> = {};
+      for (const day of days) {
+        const raw = window.localStorage.getItem(
+          `aos-workout-log:${athleteId}:${day.id}`,
+        );
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as {
+          logs?: Record<string, SetLog[]>;
+          circuit?: Record<string, boolean[]>;
+        };
+        for (const [key, rows] of Object.entries(parsed.logs ?? {})) {
+          if (Array.isArray(rows)) storedLogs[key] = rows;
+        }
+        for (const [key, items] of Object.entries(parsed.circuit ?? {})) {
+          if (Array.isArray(items)) storedCircuit[key] = items;
+        }
+      }
+      if (Object.keys(storedLogs).length > 0) {
+        setLogs((prev) => {
+          const next = { ...prev };
+          for (const [key, rows] of Object.entries(storedLogs)) {
+            const base = next[key];
+            if (!base) continue;
+            next[key] = base.map((row, i) => {
+              const s = rows[i];
+              return s && typeof s === "object" ? { ...row, ...s } : row;
+            });
+          }
+          return next;
+        });
+      }
+      if (Object.keys(storedCircuit).length > 0) {
+        setCircuitDone((prev) => ({ ...storedCircuit, ...prev }));
+      }
+      const rawCompleted = window.localStorage.getItem(
+        `aos-completed-local:${athleteId}`,
+      );
+      if (rawCompleted) {
+        const parsed = JSON.parse(rawCompleted) as CompletedSession[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLocalCompleted(parsed);
+          // A deep-linked open workout picks up its restored session too.
+          setOpen((prev) =>
+            prev && prev.completedSession == null
+              ? {
+                  ...prev,
+                  completedSession:
+                    parsed.find((c) => c.dayId === prev.dayId) ?? null,
+                }
+              : prev,
+          );
+        }
+      }
+    } catch {
+      // Corrupt storage never blocks the logger — start fresh.
+    }
+    setHydrated(true);
+  }, [athleteId, days]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      for (const day of days) {
+        const prefix = `${day.id}:`;
+        const dayLogs: Record<string, SetLog[]> = {};
+        const dayCircuit: Record<string, boolean[]> = {};
+        for (const [key, rows] of Object.entries(logs)) {
+          if (key.startsWith(prefix)) dayLogs[key] = rows;
+        }
+        for (const [key, items] of Object.entries(circuitDone)) {
+          if (key.startsWith(prefix)) dayCircuit[key] = items;
+        }
+        window.localStorage.setItem(
+          `aos-workout-log:${athleteId}:${day.id}`,
+          JSON.stringify({ logs: dayLogs, circuit: dayCircuit }),
+        );
+      }
+    } catch {
+      // Quota/private mode — logging still works for this visit.
+    }
+  }, [hydrated, logs, circuitDone, athleteId, days]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(
+        `aos-completed-local:${athleteId}`,
+        JSON.stringify(localCompleted),
+      );
+    } catch {
+      // Quota/private mode — the Completed list still works for this visit.
+    }
+  }, [hydrated, localCompleted, athleteId]);
+
   /** "Everything saves automatically" — flashes on each logged change. */
   const [savedFlash, setSavedFlash] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -479,11 +652,16 @@ export function WorkoutLogger({
     flashSaved();
   }
 
-  function toggleCircuitItem(key: string, idx: number, len: number) {
+  /**
+   * Round 11 (M7): the warm-up circuit completes as a unit — tapping ANY
+   * movement's ✓ marks the whole block done; tapping a done block clears it.
+   */
+  function toggleCircuitItem(key: string, _idx: number, len: number) {
     setCircuitDone((prev) => {
-      const items = [...(prev[key] ?? Array.from({ length: len }, () => false))];
-      items[idx] = !items[idx];
-      return { ...prev, [key]: items };
+      const items = prev[key] ?? [];
+      const allDone =
+        items.length >= len && items.slice(0, len).every(Boolean);
+      return { ...prev, [key]: Array.from({ length: len }, () => !allDone) };
     });
     flashSaved();
   }
@@ -501,9 +679,9 @@ export function WorkoutLogger({
   }
 
   /**
-   * One-tap set logging: empty result → autofill the target (the common "did
-   * exactly what was written" case); filled result → clear it (undo). A number
-   * typed below target simply stays — that IS the miss, no extra button.
+   * One-tap set logging — Round 11 (M9): ✓ on an empty box autofills the
+   * target; ✓ on a typed value KEEPS the value and confirms it; a second ✓
+   * un-logs the set (clearing is the undo). The ✗ alone marks a miss.
    */
   function toggleSetCheck(key: string, idx: number, target: string) {
     flashSaved();
@@ -513,11 +691,11 @@ export function WorkoutLogger({
         ...prev,
         [key]: rows.map((row, i) => {
           if (i !== idx) return row;
-          return {
-            ...row,
-            result: row.result.trim() === "" ? target : "",
-            missed: false,
-          };
+          if (row.result.trim() === "")
+            return { ...row, result: target, confirmed: true, missed: false };
+          if (row.confirmed)
+            return { ...row, result: "", confirmed: false, missed: false };
+          return { ...row, confirmed: true, missed: false };
         }),
       };
     });
@@ -533,7 +711,11 @@ export function WorkoutLogger({
         [key]: rows.map((row, i) => {
           if (i !== idx) return row;
           const missed = !row.missed;
-          return { ...row, missed, ...(missed ? { result: "" } : null) };
+          return {
+            ...row,
+            missed,
+            ...(missed ? { result: "", confirmed: false } : null),
+          };
         }),
       };
     });
@@ -595,15 +777,22 @@ export function WorkoutLogger({
               {/* Round 7: same row format as Past Completed Sessions — just
                   "Day N — Title" + where it happens. No movement counts, no
                   focus copy. */}
+              {upcomingDays.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
+                  Every workout is completed — find them under Completed
+                  Workouts.
+                </p>
+              ) : (
               <ul className="flex flex-col gap-2">
-                {days.map((day) => {
+                {/* Round 11 (M4): only the next 5 upcoming rows render */}
+                {upcomingDays.slice(0, upcomingLimit).map((day) => {
                   const p = dayProgress(day);
                   const completedNow = completedDayIds.has(day.id);
                   const complete =
                     completedNow || (p.total > 0 && p.done >= p.total);
-                  // Up next = the first day not yet completed this visit.
+                  // Up next = the first never-completed day of the FULL program.
                   const upNext =
-                    days.find((d) => !completedDayIds.has(d.id))?.id === day.id;
+                    days.find((d) => !completedEver.has(d.id))?.id === day.id;
                   return (
                     <li
                       key={day.id}
@@ -682,6 +871,19 @@ export function WorkoutLogger({
                   );
                 })}
               </ul>
+              )}
+              {upcomingDays.length > upcomingLimit ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-center"
+                  onClick={() => setUpcomingLimit((n) => n + 5)}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  Show more ({upcomingDays.length - upcomingLimit})
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
         ) : (
@@ -772,7 +974,7 @@ export function WorkoutLogger({
           <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
           <div className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-brand-ink" aria-hidden />
-            <h3 className="text-base">Personal records</h3>
+            <h3 className="text-base">Personal Records</h3>
             <span className="ml-auto tnum text-xs text-muted-foreground">
               {prList.length} on file
             </span>
@@ -872,7 +1074,7 @@ export function WorkoutLogger({
                   onClick={sendSessionFeedback}
                 >
                   <CheckCircle2 className="h-4 w-4" aria-hidden />
-                  Send feedback
+                  Send to Chat
                 </Button>
               </div>
             </div>
@@ -1179,11 +1381,34 @@ export function WorkoutLogger({
 /* Exercise block — header, history line, per-set table                */
 /* ------------------------------------------------------------------ */
 
-/** True when a logged result reads below the written target ("4" vs "6"). */
-function belowTarget(result: string, target: string): boolean {
-  const r = parseFloat(result.replace(",", "."));
-  const t = parseFloat(target.replace(",", "."));
-  return Number.isFinite(r) && Number.isFinite(t) && r < t;
+/**
+ * Round 11 (M11): rewrite every "@ N lb|kg" fragment of a history summary
+ * into the active section unit, with the same rounding the ref-max line uses
+ * (whole lb, half-kg steps).
+ */
+function summaryInUnit(summary: string, unit: Unit): string {
+  return summary.replace(
+    /@\s*([0-9]+(?:\.[0-9]+)?)\s*(lb|kg)\b/gi,
+    (_m, num: string, u: string) =>
+      `@ ${convertRaw(parseFloat(num), u.toLowerCase() as Unit, unit)} ${unit}`,
+  );
+}
+
+/** First "@ N lb|kg" weight inside a history summary — the seeded best. */
+function summaryWeight(summary: string): { value: number; unit: Unit } | null {
+  const m = /@\s*([0-9]+(?:\.[0-9]+)?)\s*(lb|kg)\b/i.exec(summary);
+  return m
+    ? { value: parseFloat(m[1]!), unit: m[2]!.toLowerCase() as Unit }
+    : null;
+}
+
+/**
+ * Round 11 (M12): "15 yd" → number for the input + unit for a suffix label.
+ * Null when the target carries no trailing unit text ("0:30", plain reps).
+ */
+function splitTarget(target: string): { value: string; unit: string } | null {
+  const m = /^([0-9]+(?:\.[0-9]+)?)\s*([a-z\/]+.*)$/i.exec(target.trim());
+  return m ? { value: m[1]!, unit: m[2]! } : null;
 }
 
 function ExerciseBlock({
@@ -1241,6 +1466,37 @@ function ExerciseBlock({
   /** The whole section shares one display unit (A7). */
   const sectionUnit: Unit = rows[0]?.unit ?? defaultUnit;
 
+  /**
+   * Round 11 (M10): live best — a set logged right now can beat the seeded
+   * best. Pure render-time derivation from the rows, so un-checking a set
+   * reverts the line automatically. Complete Session still runs scanForPrs.
+   */
+  const seededBest = hist ? summaryWeight(hist.bestSummary) : null;
+  let liveBest: { weight: number; unit: Unit; reps?: number } | null = null;
+  for (const row of rows) {
+    if (row.weight == null || row.missed || row.result.trim() === "") continue;
+    if (
+      liveBest == null ||
+      convertRaw(row.weight.value, row.weight.unit, "lb") >
+        convertRaw(liveBest.weight, liveBest.unit, "lb")
+    ) {
+      const parsedReps = parseInt(row.result, 10);
+      liveBest = {
+        weight: row.weight.value,
+        unit: row.weight.unit,
+        reps:
+          Number.isFinite(parsedReps) && parsedReps > 0
+            ? parsedReps
+            : undefined,
+      };
+    }
+  }
+  const livePr =
+    seededBest != null &&
+    liveBest != null &&
+    convertRaw(liveBest.weight, liveBest.unit, seededBest.unit) >
+      seededBest.value;
+
   const body = (
     // Desktop + print run two columns — exercise info left, the set table
     // right — so long programs stay short on screen and on paper (A10).
@@ -1266,7 +1522,7 @@ function ExerciseBlock({
                 {lib.circuit.length} videos
               </Pill>
             ) : null}
-            {hist?.isRecentPr ? (
+            {hist?.isRecentPr || livePr ? (
               <Pill tone="brand" icon={<Trophy className="h-3 w-3" />}>
                 PR
               </Pill>
@@ -1282,17 +1538,25 @@ function ExerciseBlock({
             // Round 8 (M15): Last/Best PRINTS — coaches want it on paper.
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
               <History className="h-3 w-3" aria-hidden />
+              {/* Round 11 (M11): Last/Best follow the section's lb⇄kg toggle;
+                  (M10): a live best from today's checked sets shows in place. */}
               <span>
                 Last ({daysAgo(hist.lastDate)}):{" "}
                 <span className="tnum font-semibold text-foreground">
-                  {hist.lastSummary}
+                  {summaryInUnit(hist.lastSummary, sectionUnit)}
                 </span>
               </span>
               <span aria-hidden>·</span>
               <span>
                 Best:{" "}
                 <span className="tnum font-semibold text-foreground">
-                  {hist.bestSummary}
+                  {livePr && liveBest
+                    ? `${liveBest.reps ?? 1} @ ${convertRaw(
+                        liveBest.weight,
+                        liveBest.unit,
+                        sectionUnit,
+                      )} ${sectionUnit}`
+                    : summaryInUnit(hist.bestSummary, sectionUnit)}
                 </span>
               </span>
             </p>
@@ -1383,16 +1647,21 @@ function ExerciseBlock({
                     {item.prescription}
                   </span>
                 </span>
-                {/* ✓-only mark control (A5) */}
+                {/* ✓ mark control (A5) — Round 11 (M7): one tap completes the
+                    whole circuit block; a second tap clears it. */}
                 <button
                   type="button"
                   aria-pressed={itemDone}
                   aria-label={
                     itemDone
-                      ? `${item.name}: complete — tap to undo`
-                      : `${item.name}: mark complete`
+                      ? `${item.name}: block complete — tap to undo`
+                      : `${item.name}: mark the whole block complete`
                   }
-                  title={itemDone ? "Complete — tap to undo" : "Mark complete"}
+                  title={
+                    itemDone
+                      ? "Block complete — tap to undo"
+                      : "Mark the whole block complete"
+                  }
                   onClick={() => lib?.circuit && onToggleCircuitItem(i, lib.circuit.length)}
                   className={cn(
                     "no-print flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors",
@@ -1428,7 +1697,9 @@ function ExerciseBlock({
             rows[i] ?? { weight: null, unit: defaultUnit, result: "" };
           const logged = row.result.trim() !== "";
           const missed = Boolean(row.missed);
-          const short = logged && belowTarget(row.result, set.target);
+          // Round 11 (M12): unit targets ("15 yd") — the box holds ONLY the
+          // number; the unit renders as a suffix label beside the input.
+          const targetParts = splitTarget(set.target);
           return (
             <div
               key={i}
@@ -1537,39 +1808,74 @@ function ExerciseBlock({
                 </span>
               )}
 
-              {/* Result cell — what was done IS the record. Under-target reads
-                  amber; a missed set reads red (round 7). */}
-              <Input
-                type="text"
-                aria-label={`Set ${i + 1} result for ${name}`}
-                placeholder={missed ? "Missed" : set.target}
-                className={cn(
-                  "tnum h-8 w-full min-w-0 px-1.5 text-sm",
-                  short && "text-warning",
-                  missed && "border-destructive/50 placeholder:text-destructive/70",
-                )}
-                value={row.result}
-                onChange={(e) => onUpdateSet(i, { result: e.target.value })}
-              />
+              {/* Result cell — what was done IS the record. Round 11 (M8): a
+                  filled result is logged, whatever the number — only the
+                  explicit ✗ marks a miss (a miss is an attempt, in red). */}
+              {targetParts ? (
+                <span className="flex min-w-0 items-center gap-1">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    aria-label={`Set ${i + 1} result for ${name} in ${targetParts.unit}`}
+                    placeholder={missed ? "Missed" : targetParts.value}
+                    className={cn(
+                      "tnum h-8 w-full min-w-0 px-1.5 text-sm",
+                      missed &&
+                        "border-destructive/50 placeholder:text-destructive/70",
+                    )}
+                    value={row.result}
+                    onChange={(e) => onUpdateSet(i, { result: e.target.value })}
+                  />
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {targetParts.unit}
+                  </span>
+                </span>
+              ) : (
+                <Input
+                  type="text"
+                  aria-label={`Set ${i + 1} result for ${name}`}
+                  placeholder={missed ? "Missed" : set.target}
+                  className={cn(
+                    "tnum h-8 w-full min-w-0 px-1.5 text-sm",
+                    missed && "border-destructive/50 placeholder:text-destructive/70",
+                  )}
+                  value={row.result}
+                  onChange={(e) => onUpdateSet(i, { result: e.target.value })}
+                />
+              )}
 
               {/* Round 7: ✓ hit + ✗ miss, side by side. Never printed (M15). */}
               <span className="no-print flex items-center justify-center gap-1">
+                {/* Round 11 (M9): ✓ confirms a typed value instead of
+                    clearing it; only a second ✓ on a confirmed set un-logs. */}
                 <button
                   type="button"
                   aria-label={
-                    logged
-                      ? `Set ${i + 1}: clear logged result`
-                      : `Set ${i + 1}: hit — log as written (${set.target})`
+                    row.confirmed
+                      ? `Set ${i + 1}: un-log this set`
+                      : logged
+                        ? `Set ${i + 1}: confirm the typed result`
+                        : `Set ${i + 1}: hit — log as written (${set.target})`
                   }
                   aria-pressed={logged}
-                  title={logged ? "Clear this set" : "Hit — log the set as written"}
-                  onClick={() => onToggleCheck(i, set.target)}
+                  title={
+                    row.confirmed
+                      ? "Logged — tap to undo"
+                      : logged
+                        ? "Confirm this result"
+                        : "Hit — log the set as written"
+                  }
+                  onClick={() =>
+                    onToggleCheck(
+                      i,
+                      // M12: unit targets autofill ONLY the number.
+                      targetParts ? targetParts.value : set.target,
+                    )
+                  }
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
                     logged
-                      ? short
-                        ? "border-warning/50 bg-warning/10 text-warning"
-                        : "border-success/50 bg-success/15 text-success"
+                      ? "border-success/50 bg-success/15 text-success"
                       : "border-border bg-surface/60 text-muted-foreground hover:bg-accent",
                   )}
                 >

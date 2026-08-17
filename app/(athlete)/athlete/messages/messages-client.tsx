@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
   Link2,
   Megaphone,
   Paperclip,
+  Send,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -24,8 +25,13 @@ import {
 } from "@/components/app/chat-composer";
 import { ANNOUNCEMENT_READ_KEY } from "@/components/nav/athlete-nav";
 import { TabBar } from "@/components/app/tab-bar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import {
+  ANN_STORE_EVENT,
+  memberAnnouncementFeed,
+} from "@/lib/demo/announcements-store";
 import type { ChatAttachment, ChatMessage } from "@/lib/demo/chat";
 import type { ThreadParticipant } from "@/lib/demo/data";
 import { relTime } from "@/lib/demo/data";
@@ -93,6 +99,8 @@ export function MessagesClient({
   participants,
   initialMessages,
   announcements,
+  unread,
+  channelName,
 }: {
   athleteId: string;
   athleteName: string;
@@ -103,22 +111,51 @@ export function MessagesClient({
   participants: ThreadParticipant[];
   initialMessages: ChatMessage[];
   announcements: Announcement[];
+  /** Unread chat count — the pill sits in the tab row now (M2). */
+  unread: number;
+  /** Round 11 (M21): member-facing channel title from channelDisplayNameFor. */
+  channelName: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<MessagesTab>(() =>
     searchParams.get("tab") === "announcements" ? "announcements" : "chat",
   );
 
+  // Round 11 (M28): the server passes the hydration-stable published list;
+  // after mount the archive-aware store takes over, re-reading whenever a
+  // staff surface posts or archives (ANN_STORE_EVENT) so the feed is live.
+  const [feed, setFeed] = useState<Announcement[]>(announcements);
+  useEffect(() => {
+    const refresh = () => setFeed(memberAnnouncementFeed());
+    refresh();
+    window.addEventListener(ANN_STORE_EVENT, refresh);
+    return () => window.removeEventListener(ANN_STORE_EVENT, refresh);
+  }, []);
+
   function selectTab(t: MessagesTab) {
     setTab(t);
-    router.replace(
+    // Round 11 (M1): PUSH so Back restores the previous tab; pathname-based
+    // so the parent persona keeps its /parent/* address space.
+    const current: MessagesTab =
+      searchParams.get("tab") === "announcements" ? "announcements" : "chat";
+    if (t === current) return;
+    router.push(
       (t === "announcements"
-        ? "/athlete/messages?tab=announcements"
-        : "/athlete/messages") as Route,
+        ? `${pathname}?tab=announcements`
+        : pathname) as Route,
       { scroll: false },
     );
   }
+
+  // Round 11 (M1): the URL is the source of truth — Back/Forward while the
+  // component stays mounted must re-derive the tab from searchParams.
+  useEffect(() => {
+    setTab(
+      searchParams.get("tab") === "announcements" ? "announcements" : "chat",
+    );
+  }, [searchParams]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,11 +165,22 @@ export function MessagesClient({
           {
             value: "announcements",
             label: "Announcements",
-            count: announcements.length,
+            count: feed.length,
           },
         ]}
         active={tab}
         onSelect={selectTab}
+        right={
+          unread > 0 ? (
+            <Pill tone="brand" dot>
+              {unread} unread
+            </Pill>
+          ) : (
+            <Pill tone="success" dot>
+              All caught up
+            </Pill>
+          )
+        }
       />
 
       {tab === "chat" ? (
@@ -144,9 +192,10 @@ export function MessagesClient({
           parentName={parentName}
           participants={participants}
           initialMessages={initialMessages}
+          channelName={channelName}
         />
       ) : (
-        <AnnouncementsFeed announcements={announcements} />
+        <AnnouncementsFeed announcements={feed} />
       )}
     </div>
   );
@@ -164,6 +213,7 @@ function CoachChat({
   parentName,
   participants,
   initialMessages,
+  channelName,
 }: {
   athleteId: string;
   athleteName: string;
@@ -172,6 +222,8 @@ function CoachChat({
   parentName: string | null;
   participants: ThreadParticipant[];
   initialMessages: ChatMessage[];
+  /** "You & The LPS Athletic Team" (or with the group's name) — M21. */
+  channelName: string;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const listRef = useRef<HTMLDivElement>(null);
@@ -231,21 +283,16 @@ function CoachChat({
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
-        {/* Team-channel header — presubscribed, no roster block (A11) */}
+        {/* Team-channel header — presubscribed, no roster block (A11).
+            Round 11 (M21–M23): just the member-facing title — the "Team
+            channel" pill and the who-sees-this sub-line are gone. */}
         <div className="flex flex-col gap-2 border-b border-border pb-4">
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
               <Users className="h-5 w-5" />
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 font-semibold">
-                LPS Coaching Staff
-                <Pill tone="brand">Team channel</Pill>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Your coaching staff sees this chat — any LPS coach can jump in
-                and reply, and you&apos;re notified when they do.
-              </p>
+            <div className="min-w-0 font-semibold text-pretty">
+              {channelName}
             </div>
           </div>
         </div>
@@ -348,7 +395,17 @@ function CoachChat({
               : "Message the coaching staff… (Enter for a new line)"
           }
           onSend={send}
-          hint="Ctrl+Enter or Send"
+          // Round 11 (M25): the word "Send" became the send icon.
+          hint={
+            <>
+              Ctrl+Enter or{" "}
+              <Send
+                className="inline h-3 w-3 align-[-0.08em]"
+                role="img"
+                aria-label="Send"
+              />
+            </>
+          }
         />
       </CardContent>
     </Card>
@@ -546,10 +603,14 @@ const ANNOUNCEMENT_IMAGES: Record<string, string> = {
   "ann-1": "front-desk-holiday-hours.jpg",
 };
 
+/** Round 11 (M26): announcements page in — latest 5, then +5 per click. */
+const ANN_PAGE_SIZE = 5;
+
 function AnnouncementsFeed({ announcements }: { announcements: Announcement[] }) {
   // Round 8 (M33): read ids persist in localStorage; the nav Chat badge
   // listens for the change event and recounts.
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(ANN_PAGE_SIZE);
 
   useEffect(() => {
     try {
@@ -597,6 +658,8 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
   }
 
   const unreadCount = announcements.filter((a) => !readIds.has(a.id)).length;
+  const visible = announcements.slice(0, visibleCount);
+  const remaining = Math.max(0, announcements.length - visible.length);
 
   return (
     <div className="flex flex-col gap-3">
@@ -615,7 +678,7 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
             className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <CheckCheck className="h-3.5 w-3.5" aria-hidden />
-            Mark all read
+            Mark all as read
           </button>
         ) : null}
       </div>
@@ -626,7 +689,7 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
         facility news here for every athlete.
       </div>
 
-      {announcements.map((a) => {
+      {visible.map((a) => {
         const unread = !readIds.has(a.id);
         const image = ANNOUNCEMENT_IMAGES[a.id];
         return (
@@ -720,6 +783,19 @@ function AnnouncementsFeed({ announcements }: { announcements: Announcement[] })
           </Card>
         );
       })}
+
+      {/* Round 11 (M26): +5 per click, remaining count in the label */}
+      {remaining > 0 ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-center"
+          onClick={() => setVisibleCount((c) => c + ANN_PAGE_SIZE)}
+        >
+          Show more ({remaining} more)
+        </Button>
+      ) : null}
     </div>
   );
 }

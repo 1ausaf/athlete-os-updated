@@ -33,11 +33,15 @@ import {
 import type { AthleteProfile } from "@/lib/demo/data";
 
 /**
- * Self-service profile (A20 + round 5 A16): photo spot, split name fields,
- * full address (province/state + country), read-only parent info linked from
- * the parent account, an editable emergency contact, and the preferred unit
- * that drives the session-log default.
+ * Self-service profile (A20 + round 5 A16): photo spot, split name fields
+ * (round 11, M30: names + gender are self-serve editable), full address
+ * (province/state + country), read-only parent info linked from the parent
+ * account, an editable emergency contact, and the preferred unit that drives
+ * the session-log default.
  */
+
+/** Round 11 (M30): gender is self-serve — the select's option set. */
+const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"];
 export function ProfileForm({
   initial,
   athleteName,
@@ -57,6 +61,10 @@ export function ProfileForm({
 }) {
   const [p, setP] = useState<AthleteProfile>(initial);
   const [saved, setSaved] = useState(false);
+  // Round 11 (M30): gender lives outside AthleteProfile — local state here.
+  const [genderValue, setGenderValue] = useState(
+    gender === "M" ? "Male" : "Female",
+  );
   // Round 7 (R7-17): notification prefs — BOTH on by default.
   const [pushOn, setPushOn] = useState(true);
   const [emailOn, setEmailOn] = useState(true);
@@ -87,7 +95,7 @@ export function ProfileForm({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Identity — photo spot + locked names + DOB (round 5, A16) */}
+      {/* Identity — photo spot + self-serve name/DOB/gender (round 11, M30) */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-2">
@@ -119,10 +127,16 @@ export function ProfileForm({
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="First name">
-              <Input value={p.firstName} disabled className="bg-muted/40" />
+              <Input
+                value={p.firstName}
+                onChange={(e) => set("firstName", e.target.value)}
+              />
             </Field>
             <Field label="Last name">
-              <Input value={p.lastName} disabled className="bg-muted/40" />
+              <Input
+                value={p.lastName}
+                onChange={(e) => set("lastName", e.target.value)}
+              />
             </Field>
             <Field label="Date of birth">
               <Input
@@ -132,12 +146,22 @@ export function ProfileForm({
               />
             </Field>
             <Field label="Gender">
-              <Input value={gender === "M" ? "Male" : "Female"} disabled className="bg-muted/40" />
+              <Select value={genderValue} onValueChange={setGenderValue}>
+                <SelectTrigger aria-label="Gender">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GENDER_OPTIONS.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
           <p className="text-xs text-muted-foreground">
-            Name changes go through the front desk — they update your legal
-            record everywhere at once.
+            Keep your details current — changes sync to your coaching team.
           </p>
         </CardContent>
       </Card>

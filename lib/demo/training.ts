@@ -1907,6 +1907,11 @@ export function trainingGroupById(id: string): TrainingGroup | undefined {
   return trainingGroups.find((g) => g.id === id);
 }
 
+/** Round 11 (M15/M21): the groups an athlete belongs to. */
+export function groupsForAthlete(athleteId: string): TrainingGroup[] {
+  return trainingGroups.filter((g) => g.memberAthleteIds.includes(athleteId));
+}
+
 /* ------------------------------------------------------------------ */
 /* Analytics: session summaries + lift history                         */
 /* ------------------------------------------------------------------ */

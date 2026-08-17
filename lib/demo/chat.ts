@@ -4,7 +4,7 @@ import {
   type Message,
   type ThreadParticipant,
 } from "@/lib/demo/data";
-import { trainingGroups } from "@/lib/demo/training";
+import { groupsForAthlete } from "@/lib/demo/training";
 
 /**
  * Round 11 (M21): the member-facing channel title. Default is
@@ -12,9 +12,7 @@ import { trainingGroups } from "@/lib/demo/training";
  * "You, {Group} & The {Company} Team".
  */
 export function channelDisplayNameFor(athleteId: string): string {
-  const group = trainingGroups.find((g) =>
-    g.memberAthleteIds.includes(athleteId),
-  );
+  const group = groupsForAthlete(athleteId)[0];
   return group
     ? `You, ${group.name} & The LPS Athletic Team`
     : "You & The LPS Athletic Team";

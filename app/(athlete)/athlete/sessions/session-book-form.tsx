@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,7 +20,6 @@ import {
   RotateCcw,
   ShieldCheck,
   Undo2,
-  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -31,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill, type PillTone } from "@/components/ui/pill";
 import {
+  groupsForAthlete,
   SESSION_TYPE_INFO,
   type BookableSlot,
   type MyBooking,
@@ -168,6 +168,12 @@ export function SessionBooking({
 }) {
   const thisWeekKey = weekStartMs(new Date());
   const lockedSet = useMemo(() => new Set(lockedTypes), [lockedTypes]);
+  // Round 11 (M15): activeKidId is always the VIEWED athlete's id — group
+  // members' team sessions are coach-scheduled, so Book only does individual.
+  const athleteGroup = useMemo(
+    () => (activeKidId ? groupsForAthlete(activeKidId)[0] : undefined),
+    [activeKidId],
+  );
   /** Round 8 (P4): parents with 2+ kids choose who each booking is for. */
   const multiKid = isParentView && bookKids.length >= 2;
   const [bookFor, setBookFor] = useState<ReadonlySet<string>>(
@@ -209,6 +215,7 @@ export function SessionBooking({
 
   /* ---- state: `bookings` is the single source of truth ---- */
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<MyBooking[]>(() =>
     [...initialBookings].sort(byStart),
@@ -219,6 +226,8 @@ export function SessionBooking({
   );
   const [flash, setFlash] = useState<Flash | null>(null);
   const [rescheduling, setRescheduling] = useState<MyBooking | null>(null);
+  /** Round 11 (M17): the booking whose Cancel awaits confirmation. */
+  const [confirmCancel, setConfirmCancel] = useState<MyBooking | null>(null);
   /** The three-tab layout: Book / Booked / Past — URL-backed (R7-3). */
   const [tab, setTab] = useState<SessionsTab>(() => {
     const t = searchParams.get("tab");
@@ -240,13 +249,24 @@ export function SessionBooking({
     // Round 7 bug fix (f_017): the sticky "N selected · Book" bar floated
     // over the other tabs — leaving Book clears the selection.
     if (t !== "book") setSelected(new Set());
-    router.replace(
-      (t === "book"
-        ? "/athlete/sessions"
-        : `/athlete/sessions?tab=${t}`) as Route,
-      { scroll: false },
-    );
+    // Round 11 (M20/M1): PUSH so Back walks tab history; pathname-relative
+    // so the parent persona keeps its /parent/* address space.
+    const q = searchParams.get("tab");
+    const current: SessionsTab = q === "booked" || q === "past" ? q : "book";
+    if (t === current) return;
+    router.push((t === "book" ? pathname : `${pathname}?tab=${t}`) as Route, {
+      scroll: false,
+    });
   }
+
+  // Round 11 (M1): the URL is the source of truth — Back/Forward while the
+  // component stays mounted must re-derive the tab from searchParams.
+  useEffect(() => {
+    const q = searchParams.get("tab");
+    const next: SessionsTab = q === "booked" || q === "past" ? q : "book";
+    setTab(next);
+    if (next !== "book") setSelected(new Set());
+  }, [searchParams]);
 
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const availableRef = useRef<HTMLDivElement | null>(null);
@@ -258,6 +278,16 @@ export function SessionBooking({
     },
     [],
   );
+
+  // Round 11 (M17): Escape dismisses the cancel-confirmation dialog.
+  useEffect(() => {
+    if (!confirmCancel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmCancel(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmCancel]);
 
   function showFlash(next: Flash) {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -350,9 +380,18 @@ export function SessionBooking({
         next.delete(slot.id);
         return next;
       }
+      const c = cycleIndex(slot.startsAt, thisWeekKey);
+      // Round 11 (M18): rescheduling is SINGLE-select — a new pick replaces
+      // the previous one (confirming swaps exactly one time for the old).
+      if (rescheduling) {
+        const releases =
+          cycleIndex(rescheduling.startsAt, thisWeekKey) === c ? 1 : 0;
+        if (c >= 0 && (cycleBooked.get(c) ?? 0) - releases >= cycleCap)
+          return prev;
+        return new Set([slot.id]);
+      }
       // Billing-cycle guardrail (R10): block only when this slot's 4-week
       // cycle would exceed frequency × 4 — weekly make-up overage is fine.
-      const c = cycleIndex(slot.startsAt, thisWeekKey);
       if (c >= 0 && cycleTotalWith(c) >= cycleCap) return prev;
       next.add(slot.id);
       return next;
@@ -502,8 +541,11 @@ export function SessionBooking({
 
   function startReschedule(b: MyBooking) {
     setRescheduling(b);
-    // The available-times list lives in the Book tab.
-    setTab("book");
+    // M18: rescheduling is single-select — drop any earlier multi-select.
+    setSelected(new Set());
+    // The available-times list lives in the Book tab — via selectTab so the
+    // URL follows the switch (M20; setTab alone left the address stale).
+    selectTab("book");
     requestAnimationFrame(() =>
       availableRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -577,6 +619,23 @@ export function SessionBooking({
 
       {tab === "book" ? (
       <>
+      {/* Round 11 (M15): group athletes' TEAM sessions are coach-scheduled —
+          this page books individual sessions only. Dormant for the current
+          portal personas (none belong to a group). */}
+      {athleteGroup ? (
+        <Card className="border-info/30">
+          <CardContent className="flex items-center gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
+              <Users className="h-5 w-5" aria-hidden />
+            </span>
+            <p className="min-w-0 flex-1 text-sm text-muted-foreground text-pretty">
+              Your {athleteGroup.name} team sessions are scheduled by your
+              coaches — book your individual sessions here.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Billing-cycle meter — round 10 (R10): the cap is per 4-WEEK CYCLE
           (frequency × 4), so a missed week can be made up inside the cycle.
           The plan line still lives here instead of the page header (M23). */}
@@ -607,7 +666,7 @@ export function SessionBooking({
               ? "Booking is paused while your balance is past due — clear it from Billing to resume."
               : cycleFull
                 ? `You've used all ${cycleCap} sessions in this 4-week cycle — the next cycle is always open to book ahead.`
-                : `Your ${planName ?? `${frequencyLabel} plan`} allows ${cycleCap} sessions per 4-week cycle — missed weeks can be made up within the cycle. ${remainingThisCycle} left in this one.`}
+                : `Your ${planName ?? `${frequencyLabel} plan`} allows ${cycleCap} sessions per 4-week cycle — missed days can be made up within the cycle. ${remainingThisCycle} left in this one.`}
           </p>
         </CardContent>
       </Card>
@@ -679,7 +738,7 @@ export function SessionBooking({
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => cancelBooking(b)}
+                        onClick={() => setConfirmCancel(b)}
                       >
                         <X className="h-3.5 w-3.5" aria-hidden />
                         Cancel
@@ -762,10 +821,6 @@ export function SessionBooking({
                         <span className="tnum">
                           {fmtDay(p.startsAt)} · {fmtRange(p.startsAt, p.endsAt)}
                         </span>
-                        <span className="inline-flex items-center gap-1">
-                          <UserRound className="h-3 w-3" aria-hidden />
-                          {p.coach}
-                        </span>
                       </div>
                     </div>
                     {p.attended ? (
@@ -835,14 +890,17 @@ export function SessionBooking({
               </strong>{" "}
               — check a replacement time below; booking releases the old spot.
             </span>
-            <button
+            {/* Round 11 (M18): a real button — the tiny X chip was missable */}
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto shrink-0"
               onClick={() => setRescheduling(null)}
-              className="ml-auto shrink-0 opacity-70 transition-opacity hover:opacity-100"
-              aria-label="Stop rescheduling"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <X className="h-3.5 w-3.5" aria-hidden />
+              Cancel Rescheduling
+            </Button>
           </div>
         ) : null}
 
@@ -939,9 +997,16 @@ export function SessionBooking({
                 onClick={bookSelected}
               >
                 <CheckCheck className="h-4 w-4" aria-hidden />
-                Book {selected.size} selected{" "}
-                {selected.size === 1 ? "session" : "sessions"}
-                {repeatWeeks > 1 ? ` × ${repeatWeeks} wks` : ""}
+                {/* Round 11 (M18): rescheduling swaps exactly one time */}
+                {rescheduling ? (
+                  "Confirm Reschedule"
+                ) : (
+                  <>
+                    Book {selected.size} selected{" "}
+                    {selected.size === 1 ? "session" : "sessions"}
+                    {repeatWeeks > 1 ? ` × ${repeatWeeks} wks` : ""}
+                  </>
+                )}
               </Button>
             </div>
             {/* Round 8 (P4): parents pick WHICH KIDS the booking is for */}
@@ -1049,6 +1114,56 @@ export function SessionBooking({
           </div>
         ) : null}
       </div>
+
+      {/* Round 11 (M17): Cancel asks first — the Undo flash still follows */}
+      {confirmCancel ? (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-background/60 backdrop-blur-[2px]"
+            onClick={() => setConfirmCancel(null)}
+            aria-hidden
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cancel this booking?"
+            className="absolute left-1/2 top-1/2 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-glow"
+          >
+            <p className="text-base font-semibold">Cancel this booking?</p>
+            <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
+              <span className="font-medium text-foreground">
+                {confirmCancel.label}
+              </span>{" "}
+              —{" "}
+              <span className="tnum">
+                {fmtDay(confirmCancel.startsAt)} ·{" "}
+                {fmtRange(confirmCancel.startsAt, confirmCancel.endsAt)}
+              </span>
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmCancel(null)}
+              >
+                Keep booking
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  cancelBooking(confirmCancel);
+                  setConfirmCancel(null);
+                }}
+              >
+                Cancel booking
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

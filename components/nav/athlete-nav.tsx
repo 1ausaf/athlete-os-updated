@@ -16,7 +16,10 @@ import {
 
 import type { Athlete } from "@/lib/demo/data";
 import { threads } from "@/lib/demo/data";
-import { announcements } from "@/lib/demo/training";
+import {
+  ANN_STORE_EVENT,
+  memberAnnouncementFeed,
+} from "@/lib/demo/announcements-store";
 import { canViewBilling } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
 
@@ -45,14 +48,21 @@ export function AthleteNav({
         const read = JSON.parse(
           window.localStorage.getItem(ANNOUNCEMENT_READ_KEY) ?? "[]",
         ) as string[];
-        setAnnUnread(announcements.filter((a) => !read.includes(a.id)).length);
+        // Round 11 (M28): archived announcements don't count as unread.
+        setAnnUnread(
+          memberAnnouncementFeed().filter((a) => !read.includes(a.id)).length,
+        );
       } catch {
-        setAnnUnread(announcements.length);
+        setAnnUnread(memberAnnouncementFeed().length);
       }
     };
     readCount();
     window.addEventListener("aos-ann-read-changed", readCount);
-    return () => window.removeEventListener("aos-ann-read-changed", readCount);
+    window.addEventListener(ANN_STORE_EVENT, readCount);
+    return () => {
+      window.removeEventListener("aos-ann-read-changed", readCount);
+      window.removeEventListener(ANN_STORE_EVENT, readCount);
+    };
   }, []);
 
   const hasNutrition = athlete.nutrition === "pro";
