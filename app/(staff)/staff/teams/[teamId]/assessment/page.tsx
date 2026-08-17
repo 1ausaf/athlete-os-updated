@@ -43,7 +43,6 @@ export default async function StaffGroupAssessmentPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Group Assessment"
         title={`Group: ${group.name} — Assessment`}
         description="One testing day across the whole group — key results in as you run each test."
         actions={

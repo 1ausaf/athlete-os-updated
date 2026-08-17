@@ -51,7 +51,6 @@ export default async function NutritionPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Member Portal · Nutrition"
           title="Nutrition"
           description="Fueling guidance written by your coach, tailored to your program and season."
         />
@@ -113,7 +112,6 @@ export default async function NutritionPage() {
       {/* Round 8: no Pro pill (M34), no Goal section (M35 — the Protocol
           Summary covers it), no authored-by line (M37). */}
       <PageHeader
-        eyebrow="Member Portal · Nutrition"
         title={protocol.title}
         description={
           <>

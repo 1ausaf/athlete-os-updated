@@ -45,7 +45,6 @@ export default async function StaffAthletesPage({
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        eyebrow="Team Workspace · Members"
         title="Members"
         description="Every member by status — click a row to open the full profile: notes, program, billing, the lot."
         actions={

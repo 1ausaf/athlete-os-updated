@@ -757,6 +757,20 @@ export const jordanProgramDays: ProgramDay[] = [
   },
 ];
 
+// Round 11 (M4): the block is programmed two more weeks out — enough upcoming
+// workouts that the landing list paginates ("next 5" + Show more), the way a
+// real 6–12-week block would. Sections are shared by reference; logs key on
+// dayId + slot so the clones stay independent.
+const jordanFutureWeeks: ProgramDay[] = [2, 3].flatMap((week) =>
+  jordanProgramDays.slice(0, 3).map((d, i) => ({
+    ...d,
+    id: `day-${(week - 1) * 3 + i + 1}`,
+    dayNumber: (week - 1) * 3 + i + 1,
+    title: `${d.title} (Week ${week})`,
+  })),
+);
+jordanProgramDays.push(...jordanFutureWeeks);
+
 /* ------------------------------------------------------------------ */
 /* Per-athlete published days (round 5, P7 — no more Jordan-only data)  */
 /* ------------------------------------------------------------------ */
@@ -1418,6 +1432,9 @@ export interface Announcement {
   body: string;
   author: string;
   at: string;
+  /** Round 11 (M28): archived announcements stay reusable for staff but
+   *  disappear from the member feed. */
+  archived?: boolean;
 }
 
 export const announcements: Announcement[] = [
@@ -1449,7 +1466,55 @@ export const announcements: Announcement[] = [
     author: "Kayla Chen",
     at: at(-15, 12),
   },
+  // Round 11 (M26): enough history that the member feed paginates —
+  // the latest five show, the rest sit behind "Show more".
+  {
+    id: "ann-5",
+    title: "Parking lot repaving — use the side entrance",
+    body: "The front lot gets repaved next week. Park on Bathview and come in through the side door by the turf.",
+    author: "Kayla Chen",
+    at: at(-20, 8),
+  },
+  {
+    id: "ann-6",
+    title: "Fall programs open for booking",
+    body: "Fall blocks are live in Bookings — in-gym and remote. Returning members keep their usual slots until the 25th.",
+    author: "Victoria Flores",
+    at: at(-24, 9),
+  },
+  {
+    id: "ann-7",
+    title: "Wolf Pack apparel pre-orders close Sunday",
+    body: "Last call on hoodies and tees. Orders in by Sunday night ship to the front desk in two weeks.",
+    author: "Kayla Chen",
+    at: at(-28, 15),
+  },
+  {
+    id: "ann-8",
+    title: "Welcome Coach Nadia to the speed staff",
+    body: "Coach Nadia joins the LPS speed program full-time. You'll see her on the floor Tuesdays and Thursdays.",
+    author: "Coach Clance",
+    at: at(-33, 11),
+  },
+  // Round 11 (M28): an archived example — hidden from members, kept for
+  // staff to reuse.
+  {
+    id: "ann-9",
+    title: "Spring break hours",
+    body: "March break hours: 9am–7pm all week. Regular schedule resumes the following Monday.",
+    author: "Kayla Chen",
+    at: at(-60, 10),
+    archived: true,
+  },
 ];
+
+/** Round 11 (M26/M28): the feed members see — published only, newest first. */
+export function publishedAnnouncements(): Announcement[] {
+  return announcements
+    .filter((a) => !a.archived)
+    .slice()
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+}
 
 /* ------------------------------------------------------------------ */
 /* Program templates ("master programs")                               */

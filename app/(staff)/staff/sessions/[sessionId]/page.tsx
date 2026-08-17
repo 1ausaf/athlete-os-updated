@@ -71,7 +71,6 @@ export default async function StaffSessionDetailPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Booking"
         title={session.title}
         description={fmtDay(session.startsAt)}
         actions={

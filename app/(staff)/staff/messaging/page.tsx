@@ -74,7 +74,6 @@ export default async function StaffMessagingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Chats"
         title="Chats"
         description="Chats open automatically from coach assignments — every conversation is visible to staff, and the admin auto-adds parents where a second adult belongs."
         actions={

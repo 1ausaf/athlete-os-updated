@@ -23,7 +23,7 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
         <h1 className="text-balance">{title}</h1>
         {description ? (

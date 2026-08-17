@@ -28,7 +28,6 @@ export default async function NewGroupPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Members"
         title="Add Group"
         description="A group trains as one — one plan, one program, shared contacts and coaches. Members link their own profiles underneath."
         actions={

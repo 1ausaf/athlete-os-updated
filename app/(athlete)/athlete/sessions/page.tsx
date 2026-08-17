@@ -21,7 +21,6 @@ export default async function AthleteSessionsPage() {
       {/* Round 8 (M21): Sessions → Bookings; the plan line moved into the
           weekly-cadence card (M23). */}
       <PageHeader
-        eyebrow="Member Portal · Bookings"
         title="Bookings"
         description="Book times across the next 12 weeks, keep an eye on what's booked, and count your past sessions — all in one place."
       />

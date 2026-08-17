@@ -50,7 +50,6 @@ export default function HuddleBriefPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Bookings"
         title={
           briefSessions.length > 1
             ? `Briefings — ${briefSessions.length} sessions`

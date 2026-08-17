@@ -21,7 +21,6 @@ export default async function AthleteTrainingPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Member Portal · Training"
           title="Training"
           description="Your program history stays right here for when you're back."
         />
@@ -54,7 +53,6 @@ export default async function AthleteTrainingPage() {
     <div className="flex flex-col gap-6">
       <div className="no-print">
         <PageHeader
-          eyebrow="Member Portal · Training"
           title="Training"
           description="Upcoming workouts run in sequence — finish a day to unlock the next. Completed workouts stay editable, and your personal records live below."
         />

@@ -34,7 +34,6 @@ export default async function NewMemberPage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Members"
         title="Add Member"
         description="Full onboarding — identity, contacts, goals and injury history. Submitting creates the member's login."
         actions={

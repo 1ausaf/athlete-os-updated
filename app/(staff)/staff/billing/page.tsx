@@ -34,7 +34,6 @@ export default async function StaffBillingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Admin"
         title="Billing & revenue"
         description="Recurring revenue, invoices, and membership plans — powered by Square at market rates, with no platform markup."
         actions={

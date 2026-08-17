@@ -19,6 +19,38 @@ import type { AppUser } from "@/types/user";
 
 const SIDEBAR_KEY = "aos-sidebar";
 
+// Round 11 (M2): the top bar carries the breadcrumb ("Member Portal / Chat"),
+// so pages no longer repeat the portal name above their titles.
+const SECTION_TITLES: Record<string, string> = {
+  dashboard: "Today",
+  training: "Training",
+  sessions: "Bookings",
+  messages: "Chat",
+  nutrition: "Nutrition",
+  assessment: "Assessment",
+  billing: "Billing",
+  profile: "Profile",
+  parent: "My Profile",
+  // Staff sections
+  athletes: "Members",
+  teams: "Members",
+  programming: "Programs",
+  messaging: "Chats",
+  analytics: "Analytics",
+  compliance: "Compliance",
+  team: "Team",
+};
+
+function sectionTitleFor(pathname: string): string | null {
+  const segments = pathname.split("/").filter(Boolean);
+  const area = segments[0];
+  const section = segments[1];
+  if (!section) return null;
+  // Staff bookings + member bookings share the "sessions" segment.
+  if (area === "staff" && section === "billing") return "Billing";
+  return SECTION_TITLES[section] ?? null;
+}
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -108,6 +140,15 @@ export function AppShell({
     label: p.label,
     blurb: p.blurb,
   }));
+
+  const sectionTitle = sectionTitleFor(pathname);
+  const homeHref = (
+    role === "parent"
+      ? "/parent/dashboard"
+      : role === "athlete"
+        ? "/athlete/dashboard"
+        : "/staff/athletes"
+  ) as Parameters<typeof Link>[0]["href"];
 
   // Round 8 (M2): clicking the header identity opens the right profile.
   const profileHref = (
@@ -225,8 +266,21 @@ export function AppShell({
             <BrandLockup subtitle={null} markClassName="h-8 w-8" />
           </div>
 
-          <p className="hidden text-sm font-medium text-muted-foreground md:block">
-            {workspaceLabel}
+          {/* Round 11 (M2): breadcrumb "Member Portal / Chat" lives up here so
+              pages don't repeat the portal name above their titles. */}
+          <p className="hidden items-center gap-1.5 text-sm md:flex">
+            <Link
+              href={homeHref}
+              className="font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {workspaceLabel}
+            </Link>
+            {sectionTitle ? (
+              <>
+                <span className="text-muted-foreground/50">/</span>
+                <span className="font-semibold">{sectionTitle}</span>
+              </>
+            ) : null}
           </p>
 
           {/* min-w-0 + overflow keep the parent controls (child switcher,
@@ -261,7 +315,7 @@ export function AppShell({
         <main className="flex-1">
           <div
             className={cn(
-              "w-full px-4 py-8 md:px-8 md:py-10",
+              "w-full px-4 pb-8 pt-5 md:px-8 md:pb-10 md:pt-6",
               !fullWidth && "mx-auto max-w-6xl",
             )}
           >

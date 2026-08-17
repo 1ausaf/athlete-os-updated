@@ -28,7 +28,7 @@ import {
   relTime,
 } from "@/lib/demo/data";
 import {
-  announcements,
+  publishedAnnouncements,
   programDaysFor,
   LOCATION_LABEL,
   myBookings,
@@ -58,7 +58,7 @@ export default async function AthleteDashboardPage() {
   const channel = teamChannelFor(athlete.id);
   const latestMessages = channel.messages.slice(-3);
   const unread = channel.unread;
-  const topAnnouncements = announcements.slice(0, 3);
+  const topAnnouncements = publishedAnnouncements().slice(0, 3);
 
   const billing = billingMeta[athlete.billing.state];
   const plan = plans.find((p) => athlete.planName.startsWith(p.name));
@@ -94,7 +94,6 @@ export default async function AthleteDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Member Portal"
         title={`Good to see you, ${firstName}.`}
         description="Facility news and your chat up top — then training, sessions, wins and billing."
       />

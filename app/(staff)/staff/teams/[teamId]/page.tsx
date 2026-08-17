@@ -89,7 +89,6 @@ export default async function StaffGroupProfilePage({
           R23: Assessment/Program/Chat deep-link to THIS group's pages, and
           the avatar carries a logo-upload affordance. */}
       <PageHeader
-        eyebrow="Team Workspace · Group"
         title={
           <span className="flex items-center gap-3">
             <AvatarUpload

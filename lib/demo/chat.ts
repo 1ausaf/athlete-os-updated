@@ -4,6 +4,21 @@ import {
   type Message,
   type ThreadParticipant,
 } from "@/lib/demo/data";
+import { trainingGroups } from "@/lib/demo/training";
+
+/**
+ * Round 11 (M21): the member-facing channel title. Default is
+ * "You & The {Company} Team"; members of a training group see
+ * "You, {Group} & The {Company} Team".
+ */
+export function channelDisplayNameFor(athleteId: string): string {
+  const group = trainingGroups.find((g) =>
+    g.memberAthleteIds.includes(athleteId),
+  );
+  return group
+    ? `You, ${group.name} & The LPS Athletic Team`
+    : "You & The LPS Athletic Team";
+}
 
 /**
  * The athlete team channel, seeded once and shared by every surface that

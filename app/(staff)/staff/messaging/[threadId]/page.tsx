@@ -65,7 +65,6 @@ export default async function StaffThreadPage({ params }: PageProps) {
     // plus a 70dvh floor keeps the message area usably tall on mobile.
     <div className="flex min-h-[70dvh] h-[calc(100vh-7rem)] supports-[height:100dvh]:h-[calc(100dvh-7rem)] flex-col gap-4 md:h-[calc(100vh-9rem)] md:supports-[height:100dvh]:h-[calc(100dvh-9rem)]">
       <PageHeader
-        eyebrow="Team Workspace · Chats"
         title={thread.subject}
         description={`Started ${fmtDay(thread.messages[0]?.at ?? thread.updatedAt)} · ${thread.participants
           .map((p) => p.name)

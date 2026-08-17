@@ -27,7 +27,6 @@ export default async function AthleteBillingPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Member Portal · Billing"
           title="Billing"
           description="Membership and payments for your training."
         />
@@ -81,7 +80,6 @@ export default async function AthleteBillingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Member Portal · Billing"
         title="Billing"
         description="Your membership and what's coming up next cycle. Payments run on Square at market processing rates — no platform markup."
         actions={

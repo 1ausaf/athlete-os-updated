@@ -21,7 +21,6 @@ export default async function ParentProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Member Portal · Parent"
         title="My Profile"
         description="Your own contact card — separate from your kids' profiles. What you save here auto-fills each child's parent section for the coaching staff."
       />

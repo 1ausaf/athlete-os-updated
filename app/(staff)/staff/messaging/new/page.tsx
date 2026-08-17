@@ -22,7 +22,6 @@ export default async function StaffNewMessagingPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="Team Workspace · Chats"
           title="New thread"
           actions={
             <Button asChild variant="ghost" size="sm">
@@ -63,7 +62,6 @@ export default async function StaffNewMessagingPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Chats"
         title="New thread"
         description="Start a conversation with an athlete. If the athlete is a minor, their parents are added to the chat automatically."
         actions={

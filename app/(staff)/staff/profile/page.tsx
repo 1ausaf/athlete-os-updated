@@ -22,7 +22,6 @@ export default async function StaffProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Team Workspace · Profile"
         title="Your profile"
         description="Contact details, bio and notifications — what athletes and the rest of the staff see about you."
       />
