@@ -5,6 +5,7 @@ import {
   ClipboardList,
   CreditCard,
   LineChart,
+  ListTodo,
   MessagesSquare,
   ShieldCheck,
   UserCog,
@@ -39,6 +40,8 @@ export function StaffNav({ user }: { user: AppUser }) {
       icon: MessagesSquare,
       badge: unread || undefined,
     },
+    // Round 12 (N21): staff to-dos + member reminders in one list.
+    { href: "/staff/tasks", label: "Tasks", icon: ListTodo },
     { href: "/staff/analytics", label: "Analytics", icon: LineChart },
   ];
 
