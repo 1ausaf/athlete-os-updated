@@ -709,7 +709,7 @@ export function SessionBooking({
                 return (
                   <li
                     key={b.id}
-                    className="flex items-center gap-3 p-3 sm:px-4"
+                    className="flex items-center gap-2 px-2 py-3 sm:gap-3 sm:px-4"
                   >
                     <DateBadge iso={b.startsAt} />
                     <div className="min-w-0 flex-1">
@@ -804,7 +804,7 @@ export function SessionBooking({
               {visiblePast.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-3 p-3 sm:px-4"
+                  className="flex items-center gap-2 px-2 py-3 sm:gap-3 sm:px-4"
                 >
                   <DateBadge iso={p.startsAt} />
                   <div className="min-w-0 flex-1">
@@ -1187,6 +1187,16 @@ function DateBadge({ iso }: { iso: string }) {
   );
 }
 
+/** "8:30 AM–10:00 AM" → "8:30–10:00 AM" — the first meridiem is noise when
+ *  both ends share it, and the saved width keeps the time on ONE line at
+ *  375px (the row otherwise scrunches). */
+function compactRange(startsAt: string, endsAt: string): string {
+  return fmtRange(startsAt, endsAt).replace(
+    /\s(AM|PM)(\s?[–-]\s?)(.*\1)$/,
+    "$2$3",
+  );
+}
+
 /** Title + muted weekday·time underneath — the unified row middle (B4). */
 function SlotTitle({
   slot,
@@ -1211,8 +1221,8 @@ function SlotTitle({
         </span>
         <SessionTypeInfoButton label={slot.label} />
       </span>
-      <span className="tnum block text-xs text-muted-foreground">
-        {fmtWeekday(slot.startsAt)} · {fmtRange(slot.startsAt, slot.endsAt)}
+      <span className="tnum block truncate text-xs text-muted-foreground">
+        {fmtWeekday(slot.startsAt)} · {compactRange(slot.startsAt, slot.endsAt)}
       </span>
       {note ? (
         <span className="block text-xs text-muted-foreground text-pretty">
@@ -1259,7 +1269,7 @@ function SlotRow({
 }) {
   if (booked) {
     return (
-      <li className="flex items-center gap-3 p-3 sm:px-4">
+      <li className="flex items-center gap-2 px-2 py-3 sm:gap-3 sm:px-4">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
           <Check className="h-3.5 w-3.5" aria-hidden />
         </span>
@@ -1277,7 +1287,7 @@ function SlotRow({
   // note sits under the time so the row stays clean at 375px (B4).
   if (locked) {
     return (
-      <li className="flex items-center gap-3 p-3 opacity-70 sm:px-4">
+      <li className="flex items-center gap-2 px-2 py-3 opacity-70 sm:gap-3 sm:px-4">
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
           <Lock className="h-3 w-3" aria-hidden />
         </span>
@@ -1294,7 +1304,7 @@ function SlotRow({
   // Full session → waitlist path (spots-left, danger tone).
   if (slot.spotsLeft === 0) {
     return (
-      <li className="flex items-center gap-3 p-3 sm:px-4">
+      <li className="flex items-center gap-2 px-2 py-3 sm:gap-3 sm:px-4">
         <span className="h-5 w-5 shrink-0 rounded-full border border-dashed border-border bg-muted/40" />
         <DateBadge iso={slot.startsAt} />
         <SlotTitle slot={slot} muted />
@@ -1324,7 +1334,7 @@ function SlotRow({
     <li>
       <label
         className={cn(
-          "flex items-center gap-3 p-3 transition-colors sm:px-4",
+          "flex items-center gap-2 px-2 py-3 transition-colors sm:gap-3 sm:px-4",
           disabled
             ? "cursor-not-allowed opacity-55"
             : "cursor-pointer hover:bg-accent/40",
