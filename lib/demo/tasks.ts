@@ -33,7 +33,13 @@ export interface StaffTask {
 
 export const TASKS_KEY = "aos-tasks";
 export const TASKS_STATE_KEY = "aos-tasks-state";
+/** Round 13 (K1): field edits layered over any manual task (seed or local). */
+export const TASKS_EDITS_KEY = "aos-tasks-edits";
 export const TASKS_EVENT = "aos-tasks-changed";
+
+export type TaskEdit = Partial<
+  Pick<StaffTask, "title" | "due" | "assigneeId" | "recurrence">
+>;
 
 function isoDay(offsetDays: number): string {
   const d = new Date();
@@ -192,11 +198,25 @@ export function setTaskDone(id: string, done: boolean): void {
   });
 }
 
+/** Round 13 (K1): per-task field edits (title/due/assignee/recurrence). */
+export function taskEditOverrides(): Record<string, TaskEdit> {
+  return readJson(TASKS_EDITS_KEY, {});
+}
+
+export function setTaskEdit(id: string, edit: TaskEdit): void {
+  writeJson(TASKS_EDITS_KEY, { ...taskEditOverrides(), [id]: edit });
+}
+
 /** The full merged list: local + seeds + member reminders, overrides applied. */
 export function allTasks(): StaffTask[] {
   const overrides = taskStateOverrides();
+  const edits = taskEditOverrides();
   return [...readLocalTasks(), ...taskSeeds, ...reminderTasks()].map((t) => {
     const o = overrides[t.id];
-    return o ? { ...t, done: o.done, doneAt: o.doneAt } : t;
+    const e = t.source === "manual" ? edits[t.id] : undefined;
+    let next = t;
+    if (e) next = { ...next, ...e };
+    if (o) next = { ...next, done: o.done, doneAt: o.doneAt };
+    return next;
   });
 }

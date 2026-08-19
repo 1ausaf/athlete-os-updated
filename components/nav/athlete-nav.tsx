@@ -36,9 +36,35 @@ export function AthleteNav({
   /** The athlete being viewed — self, or a parent's selected child. */
   athlete: Athlete;
 }) {
-  const unread = threads
-    .filter((t) => t.participants.some((p) => p.id === athlete.id))
-    .reduce((n, t) => n + t.unread, 0);
+  // Round 13 (C2): once the member opens their chat, its unread count is
+  // seen — the badge clears and stays cleared.
+  const [unread, setUnread] = useState(() =>
+    threads
+      .filter((t) => t.participants.some((p) => p.id === athlete.id))
+      .reduce((n, t) => n + t.unread, 0),
+  );
+  useEffect(() => {
+    const recount = () => {
+      let seen: Record<string, string> = {};
+      try {
+        seen = JSON.parse(
+          window.localStorage.getItem("aos-chat-seen") ?? "{}",
+        ) as Record<string, string>;
+      } catch {
+        /* corrupt store — keep seed counts */
+      }
+      setUnread(
+        seen[athlete.id]
+          ? 0
+          : threads
+              .filter((t) => t.participants.some((p) => p.id === athlete.id))
+              .reduce((n, t) => n + t.unread, 0),
+      );
+    };
+    recount();
+    window.addEventListener("aos-chat-seen-changed", recount);
+    return () => window.removeEventListener("aos-chat-seen-changed", recount);
+  }, [athlete.id]);
 
   // Unread announcements (post-mount so SSR and client agree).
   const [annUnread, setAnnUnread] = useState(0);
