@@ -344,9 +344,10 @@ export function MessagingInbox({
 
       {/* Round 13 (S8): the safe-sport line lives in the page header now */}
 
-      {/* H4 — the chats table */}
+      {/* H4 — the chats table. Phones: tighter cells + no Role column, so
+          the coaches' main mobile surface fits without sideways scroll. */}
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-soft">
-        <Table>
+        <Table className="max-sm:table-fixed max-sm:[&_td]:px-2 max-sm:[&_th]:px-2">
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <SortableHead
@@ -362,6 +363,7 @@ export function MessagingInbox({
                 current={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
+                className="max-sm:w-[4.75rem]"
               />
               <SortableHead
                 label="Unread"
@@ -369,6 +371,7 @@ export function MessagingInbox({
                 current={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
+                className="max-sm:w-14"
               />
               {/* Round 13 (S9a): Role reads last — activity columns first */}
               <SortableHead
@@ -377,6 +380,7 @@ export function MessagingInbox({
                 current={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
+                className="hidden sm:table-cell"
               />
               <TableHead className="w-10 text-right">
                 <span className="sr-only">Actions</span>
@@ -450,17 +454,19 @@ function SortableHead({
   current,
   dir,
   onSort,
+  className,
 }: {
   label: string;
   sortKey: SortKey;
   current: SortKey;
   dir: "asc" | "desc";
   onSort: (key: SortKey) => void;
+  className?: string;
 }) {
   const active = current === sortKey;
   const Icon = !active ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
   return (
-    <TableHead>
+    <TableHead className={className}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -552,8 +558,9 @@ function InboxRow({
           <span className="text-muted-foreground">—</span>
         )}
       </TableCell>
-      {/* S9a — Role trails the activity columns */}
-      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+      {/* S9a — Role trails the activity columns (phones: the column hides
+          so the inbox fits without sideways scroll) */}
+      <TableCell className="hidden whitespace-nowrap text-sm text-muted-foreground sm:table-cell">
         {row.roleLabel ?? "—"}
       </TableCell>
 

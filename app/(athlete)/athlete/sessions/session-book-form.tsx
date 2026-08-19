@@ -987,10 +987,12 @@ export function SessionBooking({
               >
                 Clear
               </Button>
+              {/* Full-width CTA where the row wraps (phones) — inline on sm+ */}
               <Button
                 type="button"
                 variant="brand"
                 size="sm"
+                className="w-full sm:w-auto"
                 disabled={multiKid && bookFor.size === 0}
                 onClick={bookSelected}
               >
@@ -1071,7 +1073,9 @@ export function SessionBooking({
                   </option>
                 ))}
               </select>
-              <span className="min-w-0 flex-1 text-[0.7rem] text-muted-foreground">
+              {/* The select speaks for itself on phones — the hint was
+                  squeezing into a 3-line sliver next to it. */}
+              <span className="hidden min-w-0 flex-1 text-[0.7rem] text-muted-foreground sm:inline">
                 {repeatWeeks > 1
                   ? `Books the same weekday & time pattern for ${repeatWeeks} weeks in one go.`
                   : "Ticked a weekly pattern? Book it for weeks ahead in one go."}

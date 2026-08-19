@@ -35,7 +35,7 @@ export function TabBar<T extends string>({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
+        "flex items-center gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border sm:gap-1",
         className,
       )}
     >
@@ -46,7 +46,7 @@ export function TabBar<T extends string>({
           onClick={() => onSelect(t.value)}
           aria-pressed={active === t.value}
           className={cn(
-            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
+            "-mb-px flex shrink-0 items-center gap-1 whitespace-nowrap border-b-2 px-1.5 py-2 text-[0.8rem] font-medium transition-colors sm:gap-1.5 sm:px-3.5 sm:text-sm",
             active === t.value
               ? "border-brand text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
@@ -54,7 +54,7 @@ export function TabBar<T extends string>({
         >
           {t.label}
           {t.count != null ? (
-            <span className="tnum text-xs text-muted-foreground">({t.count})</span>
+            <span className="tnum hidden text-xs text-muted-foreground sm:inline">({t.count})</span>
           ) : null}
         </button>
       ))}
@@ -73,7 +73,7 @@ export function TabLinkBar({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
+        "flex items-center gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border sm:gap-1",
         className,
       )}
     >
@@ -83,7 +83,7 @@ export function TabLinkBar({
           href={t.href}
           aria-current={t.active ? "page" : undefined}
           className={cn(
-            "-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2 text-sm font-medium transition-colors",
+            "-mb-px flex shrink-0 items-center gap-1 whitespace-nowrap border-b-2 px-1.5 py-2 text-[0.8rem] font-medium transition-colors sm:gap-1.5 sm:px-3.5 sm:text-sm",
             t.active
               ? "border-brand text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
@@ -91,7 +91,7 @@ export function TabLinkBar({
         >
           {t.label}
           {t.count != null ? (
-            <span className="tnum text-xs text-muted-foreground">({t.count})</span>
+            <span className="tnum hidden text-xs text-muted-foreground sm:inline">({t.count})</span>
           ) : null}
         </Link>
       ))}
