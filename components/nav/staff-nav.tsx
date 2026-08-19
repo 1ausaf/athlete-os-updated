@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { athletes, complianceRows, threads } from "@/lib/demo/data";
+import { dueSoonCount, TASKS_EVENT } from "@/lib/demo/tasks";
 import { canManageMemberships, canViewBilling, isAdmin } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
 
@@ -49,6 +50,15 @@ export function StaffNav({ user }: { user: AppUser }) {
   const gaps = complianceRows.filter((r) => r.status === "gap").length;
   const programsDue = athletes.filter((a) => a.programDueInDays <= 5).length;
 
+  // Round 14 (V18): tasks due within a day — post-mount (localStorage-backed).
+  const [tasksDueSoon, setTasksDueSoon] = useState(0);
+  useEffect(() => {
+    const recount = () => setTasksDueSoon(dueSoonCount());
+    recount();
+    window.addEventListener(TASKS_EVENT, recount);
+    return () => window.removeEventListener(TASKS_EVENT, recount);
+  }, []);
+
   const items: ShellNavItem[] = [
     // Round 6: due-tracking lives in Members — the badge moved with it.
     {
@@ -66,7 +76,8 @@ export function StaffNav({ user }: { user: AppUser }) {
       badge: unread || undefined,
     },
     // Round 12 (N21): staff to-dos + member reminders in one list.
-    { href: "/staff/tasks", label: "Tasks", icon: ListTodo },
+    // Round 14 (V18): the badge counts tasks overdue or due within a day.
+    { href: "/staff/tasks", label: "Tasks", icon: ListTodo, badge: tasksDueSoon || undefined },
     { href: "/staff/analytics", label: "Analytics", icon: LineChart },
   ];
 

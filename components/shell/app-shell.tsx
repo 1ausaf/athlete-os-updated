@@ -241,7 +241,12 @@ export function AppShell({
           collapsed ? "md:pl-16" : "md:pl-64",
         )}
       >
-        <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border glass px-4 md:px-8">
+        {/* Round 14 (V1): backdrop-filter directly on a sticky element breaks
+            iOS Safari hit-testing after scroll (menu/tabs stop responding
+            until you scroll back up). The blur lives on a non-sticky child
+            layer instead, and the header sits above every in-page sticky bar. */}
+        <header className="no-print sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-surface/80 px-4 md:px-8">
+          <div aria-hidden className="glass absolute inset-0 -z-10" />
           {/* Mobile nav trigger */}
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild>

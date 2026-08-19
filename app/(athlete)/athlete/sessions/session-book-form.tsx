@@ -853,9 +853,10 @@ export function SessionBooking({
           </p>
         </div>
 
-        {/* Calendar affordance: week-jump strip — Round 13 (B3): mb-2 keeps
-            it off the first week card */}
-        <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-slim">
+        {/* Calendar affordance: week-jump strip — Round 14 (V6): a clear
+            10px+ gap between the strip (and its scrollbar) and the first
+            week card. */}
+        <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-slim">
           <CalendarDays
             className="h-4 w-4 shrink-0 text-muted-foreground"
             aria-hidden

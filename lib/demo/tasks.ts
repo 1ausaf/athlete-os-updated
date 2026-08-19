@@ -198,6 +198,40 @@ export function setTaskDone(id: string, done: boolean): void {
   });
 }
 
+/** Round 14 (V19): the recurrence interval in days (month ≈ 30, quarter 91). */
+const RECURRENCE_DAYS: Record<NonNullable<StaffTask["recurrence"]>, number> = {
+  weekly: 7,
+  monthly: 30,
+  quarterly: 91,
+};
+
+/**
+ * Round 14 (V19): completing a task. Recurring tasks ROLL — this occurrence
+ * lands in Completed AND the next one appears in To Do with the due date
+ * advanced by the recurrence interval.
+ */
+export function completeTask(task: StaffTask): void {
+  setTaskDone(task.id, true);
+  if (!task.recurrence) return;
+  const base = task.due ? new Date(`${task.due}T12:00:00`) : new Date();
+  base.setDate(base.getDate() + RECURRENCE_DAYS[task.recurrence]);
+  appendLocalTask({
+    ...task,
+    id: `task-recur-${task.id}-${base.getTime()}`,
+    due: base.toISOString().slice(0, 10),
+    done: false,
+    doneAt: undefined,
+    source: "manual",
+  });
+}
+
+/** Round 14 (V18): open tasks that are overdue or due within a day. */
+export function dueSoonCount(): number {
+  const cutoff = isoDay(1);
+  return allTasks().filter((t) => !t.done && t.due !== "" && t.due <= cutoff)
+    .length;
+}
+
 /** Round 13 (K1): per-task field edits (title/due/assignee/recurrence). */
 export function taskEditOverrides(): Record<string, TaskEdit> {
   return readJson(TASKS_EDITS_KEY, {});
