@@ -90,6 +90,24 @@ function initialsFor(name: string): string {
 
 type MessagesTab = "chat" | "announcements";
 
+/**
+ * Round 13 (C2): viewing the Chat tab marks the thread SEEN — persisted per
+ * athlete so the "N unread" pill clears and stays cleared on later visits.
+ * The sidebar Chat badge listens for the same key + event (foundation).
+ */
+const CHAT_SEEN_KEY = "aos-chat-seen";
+const CHAT_SEEN_EVENT = "aos-chat-seen-changed";
+
+function readChatSeen(): Record<string, string> {
+  try {
+    return JSON.parse(
+      window.localStorage.getItem(CHAT_SEEN_KEY) ?? "{}",
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 export function MessagesClient({
   athleteId,
   athleteName,
@@ -157,6 +175,27 @@ export function MessagesClient({
     );
   }, [searchParams]);
 
+  // Round 13 (C2): rendering the Chat tab counts as reading it — persist the
+  // seen stamp and tell the sidebar badge; landing on Announcements first
+  // just re-reads whatever was already seen.
+  const [chatSeen, setChatSeen] = useState(false);
+  useEffect(() => {
+    if (tab !== "chat") {
+      setChatSeen(Boolean(readChatSeen()[athleteId]));
+      return;
+    }
+    setChatSeen(true);
+    try {
+      window.localStorage.setItem(
+        CHAT_SEEN_KEY,
+        JSON.stringify({ ...readChatSeen(), [athleteId]: new Date().toISOString() }),
+      );
+    } catch {
+      // Storage unavailable — seen state stays session-local.
+    }
+    window.dispatchEvent(new Event(CHAT_SEEN_EVENT));
+  }, [tab, athleteId]);
+
   return (
     <div className="flex flex-col gap-6">
       <TabBar<MessagesTab>
@@ -171,7 +210,7 @@ export function MessagesClient({
         active={tab}
         onSelect={selectTab}
         right={
-          unread > 0 ? (
+          unread > 0 && !chatSeen ? (
             <Pill tone="brand" dot>
               {unread} unread
             </Pill>
@@ -281,8 +320,10 @@ function CoachChat({
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+    // Round 13 (C3): on mobile the chat sheds its card chrome — the thread
+    // runs edge-to-edge inside the page padding; sm+ keeps the card look.
+    <Card className="max-sm:rounded-none max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none">
+      <CardContent className="flex flex-col gap-4 p-0 sm:p-5">
         {/* Team-channel header — presubscribed, no roster block (A11).
             Round 11 (M21–M23): just the member-facing title — the "Team
             channel" pill and the who-sees-this sub-line are gone. */}
@@ -318,7 +359,7 @@ function CoachChat({
         {/* Conversation */}
         <div
           ref={listRef}
-          className="flex max-h-[480px] flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-surface/30 p-4"
+          className="flex max-h-[480px] flex-col gap-4 overflow-y-auto sm:rounded-xl sm:border sm:border-border sm:bg-surface/30 sm:p-4"
         >
           {messages.length === 0 ? (
             <p className="m-auto max-w-xs py-8 text-center text-sm text-muted-foreground text-pretty">
@@ -332,15 +373,18 @@ function CoachChat({
               <div
                 key={m.id}
                 className={cn(
-                  "flex items-end gap-2.5",
+                  // Round 13 (C7): avatars sit at the TOP of the group.
+                  "flex items-start gap-2.5",
                   mine ? "flex-row-reverse" : "flex-row",
                 )}
               >
+                {/* Round 13 (C5): mobile drops avatars — names alone. */}
                 {!mine ? (
                   <AthleteAvatar
                     initials={initialsFor(m.senderName)}
                     hue={hueFor(m.senderId)}
                     size="sm"
+                    className="max-sm:hidden"
                   />
                 ) : null}
                 <div className={cn("max-w-[78%]", mine && "text-right")}>
@@ -365,7 +409,9 @@ function CoachChat({
                         "inline-block rounded-2xl px-3.5 py-2 text-left text-sm text-pretty",
                         mine
                           ? "rounded-br-sm bg-brand/15 text-foreground"
-                          : "rounded-bl-sm border border-border bg-card",
+                          : // Round 13 (C5): borderless on mobile — just the
+                            // tint; sm+ restores the outlined card bubble.
+                            "rounded-bl-sm bg-muted/60 sm:border sm:border-border sm:bg-card",
                       )}
                     >
                       {renderChatBody(m.body)}
@@ -389,10 +435,12 @@ function CoachChat({
         {/* Round 5 (A13): shared WhatsApp-style composer — multiline, bold /
             italic, image + video attach, voice notes. */}
         <ChatComposer
+          // Round 13 (C6): same copy as the composer default; parents keep
+          // the who-is-typing reminder (P5).
           placeholder={
             isParentView
-              ? `Message the coaching staff as ${parentName ?? "parent"}…`
-              : "Message the coaching staff… (Enter for a new line)"
+              ? `Write your message as ${parentName ?? "parent"}… (enter for a new line)`
+              : "Write your message… (enter for a new line)"
           }
           onSend={send}
           // Round 11 (M25): the word "Send" became the send icon.

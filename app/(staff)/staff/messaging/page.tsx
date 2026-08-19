@@ -73,9 +73,10 @@ export default async function StaffMessagingPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Round 13 (S8): one safe-sport line up here — the inbox banner is gone */}
       <PageHeader
         title="Chats"
-        description="Chats open automatically from coach assignments — every conversation is visible to staff, and the admin auto-adds parents where a second adult belongs."
+        description="Group chats are created automatically when you're assigned to a member — no private chats allowed (safe-sport)."
         actions={
           admin ? (
             <>

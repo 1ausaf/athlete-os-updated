@@ -55,8 +55,11 @@ const WEEK_FMT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
 });
+/** Round 13 (B4): the date badge carries month+day — rows only add the weekday. */
+const WEEKDAY_FMT = new Intl.DateTimeFormat("en-US", { weekday: "short" });
 
 const fmtDay = (iso: string) => DAY_FMT.format(new Date(iso));
+const fmtWeekday = (iso: string) => WEEKDAY_FMT.format(new Date(iso));
 const fmtTime = (iso: string) => TIME_FMT.format(new Date(iso));
 const fmtRange = (a: string, b: string) => `${fmtTime(a)}–${fmtTime(b)}`;
 
@@ -489,6 +492,13 @@ export function SessionBooking({
       skippedByCap > 0
         ? ` ${skippedByCap} ${skippedByCap === 1 ? "time was" : "times were"} skipped — 4-week cycle cap.`
         : "";
+    // Round 13 (B2): demo copy — production emails real calendar invites.
+    const calNote =
+      n === 0
+        ? ""
+        : releasing
+          ? " An updated calendar invite was sent to your email."
+          : ` Calendar ${n === 1 ? "invite" : "invites"} sent to your email.`;
     showFlash({
       tone: "success",
       text:
@@ -497,6 +507,7 @@ export function SessionBooking({
           : weeks > 1
             ? `Booked ${patternSize} ${patternSize === 1 ? "session" : "sessions"} × ${weeks} weeks (${n} total)${forNames} — see them in My Bookings.`
             : `Booked ${n} ${n === 1 ? "session" : "sessions"}${forNames} — see them in My Bookings.`) +
+        calNote +
         capNote,
     });
   }
@@ -524,9 +535,10 @@ export function SessionBooking({
   function cancelBooking(b: MyBooking) {
     setBookings((prev) => prev.filter((x) => x.id !== b.id));
     if (rescheduling?.id === b.id) setRescheduling(null);
+    // Round 13 (B2): confirmed bookings had an invite — cancel emails an update.
     showFlash({
       tone: "neutral",
-      text: `${b.status === "waitlisted" ? "Left the waitlist for" : "Cancelled"} ${fmtDay(b.startsAt)} · ${fmtTime(b.startsAt)}.`,
+      text: `${b.status === "waitlisted" ? "Left the waitlist for" : "Cancelled"} ${fmtDay(b.startsAt)} · ${fmtTime(b.startsAt)}.${b.status === "waitlisted" ? "" : " A calendar cancellation was sent to your email."}`,
       undoBooking: b,
     });
   }
@@ -689,36 +701,30 @@ export function SessionBooking({
         ) : (
           <Card>
             <ul className="divide-y divide-border">
+              {/* Round 13 (B4/B6): unified row — date badge, time under the
+                  title, actions stacked; Confirmed pill dropped (waitlisted
+                  is the exception worth flagging). */}
               {bookings.map((b) => {
-                const d = new Date(b.startsAt);
                 const isRescheduling = rescheduling?.id === b.id;
                 return (
                   <li
                     key={b.id}
-                    className="flex flex-wrap items-center gap-3 p-3 sm:px-4"
+                    className="flex items-center gap-3 p-3 sm:px-4"
                   >
-                    <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-center">
-                      <span className="text-[0.6rem] uppercase text-muted-foreground">
-                        {d.toLocaleDateString("en-US", { month: "short" })}
-                      </span>
-                      <span className="tnum text-sm font-bold leading-none">
-                        {d.getDate()}
-                      </span>
-                    </div>
+                    <DateBadge iso={b.startsAt} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                        {b.label}
-                        <Pill
-                          tone={b.status === "confirmed" ? "success" : "info"}
-                        >
-                          {b.status === "confirmed" ? "Confirmed" : "Waitlisted"}
-                        </Pill>
+                        <span className="truncate">{b.label}</span>
+                        {b.status === "waitlisted" ? (
+                          <Pill tone="info">Waitlisted</Pill>
+                        ) : null}
                       </div>
                       <div className="tnum text-xs text-muted-foreground">
-                        {fmtDay(b.startsAt)} · {fmtRange(b.startsAt, b.endsAt)}
+                        {fmtWeekday(b.startsAt)} ·{" "}
+                        {fmtRange(b.startsAt, b.endsAt)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 flex-col items-end gap-0.5">
                       {isRescheduling ? (
                         <Pill tone="warning">Picking new time…</Pill>
                       ) : (
@@ -726,6 +732,7 @@ export function SessionBooking({
                           type="button"
                           variant="ghost"
                           size="sm"
+                          className="h-7 px-2 text-xs"
                           disabled={overdue}
                           onClick={() => startReschedule(b)}
                         >
@@ -737,7 +744,7 @@ export function SessionBooking({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:text-destructive"
+                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                         onClick={() => setConfirmCancel(b)}
                       >
                         <X className="h-3.5 w-3.5" aria-hidden />
@@ -756,27 +763,26 @@ export function SessionBooking({
       {/* Booking History — attendance history w/ range filter (R7-10) */}
       {tab === "past" ? (
       <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg">My Booking History</h2>
-          {/* Like analytics: 30 days default, longer ranges a tap away */}
-          <div className="ml-auto flex items-center rounded-lg border border-border bg-surface p-0.5">
-            {PAST_RANGES.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                aria-pressed={pastRange === r.key}
-                onClick={() => setPastRange(r.key)}
-                className={cn(
-                  "rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                  pastRange === r.key
-                    ? "bg-brand text-brand-foreground shadow-soft"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+        <h2 className="text-lg">My Booking History</h2>
+        {/* Like analytics: 30 days default, longer ranges a tap away.
+            Round 13 (B9): left-aligned on its own row. */}
+        <div className="flex items-center self-start rounded-lg border border-border bg-surface p-0.5">
+          {PAST_RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={pastRange === r.key}
+              onClick={() => setPastRange(r.key)}
+              className={cn(
+                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                pastRange === r.key
+                  ? "bg-brand text-brand-foreground shadow-soft"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
         <p className="tnum text-sm text-muted-foreground">
           {visiblePast.length}{" "}
@@ -786,11 +792,6 @@ export function SessionBooking({
             ? ` · ${visiblePast.filter((p) => !p.attended).length} no-show`
             : ""}
         </p>
-        {/* M27: attendance defaults to Attended — no-shows are the exception */}
-        <p className="text-xs text-muted-foreground text-pretty">
-          Every session counts as attended unless your coach marks it a
-          no-show — attendance is marked by your coach.
-        </p>
         {visiblePast.length === 0 ? (
           <Empty>
             Nothing in this range — try a longer one, your history builds here.
@@ -798,41 +799,37 @@ export function SessionBooking({
         ) : (
           <Card>
             <ul className="divide-y divide-border">
-              {visiblePast.map((p) => {
-                const d = new Date(p.startsAt);
-                return (
-                  <li
-                    key={p.id}
-                    className="flex flex-wrap items-center gap-3 p-3 sm:px-4"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-center">
-                      <span className="text-[0.6rem] uppercase text-muted-foreground">
-                        {d.toLocaleDateString("en-US", { month: "short" })}
-                      </span>
-                      <span className="tnum text-sm font-bold leading-none">
-                        {d.getDate()}
-                      </span>
+              {/* Round 13 (B8): the badge owns the date — rows keep only the
+                  time under the title. */}
+              {visiblePast.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-3 p-3 sm:px-4"
+                >
+                  <DateBadge iso={p.startsAt} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">
+                      {p.label}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                        {p.label}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                        <span className="tnum">
-                          {fmtDay(p.startsAt)} · {fmtRange(p.startsAt, p.endsAt)}
-                        </span>
-                      </div>
+                    <div className="tnum text-xs text-muted-foreground">
+                      {fmtRange(p.startsAt, p.endsAt)}
                     </div>
-                    {p.attended ? (
-                      <Pill tone="success" icon={<Check className="h-3 w-3" />}>
-                        Attended
-                      </Pill>
-                    ) : (
-                      <Pill tone="danger">No-show</Pill>
-                    )}
-                  </li>
-                );
-              })}
+                  </div>
+                  {p.attended ? (
+                    <Pill
+                      tone="success"
+                      className="shrink-0"
+                      icon={<Check className="h-3 w-3" />}
+                    >
+                      Attended
+                    </Pill>
+                  ) : (
+                    <Pill tone="danger" className="shrink-0">
+                      No-show
+                    </Pill>
+                  )}
+                </li>
+              ))}
             </ul>
           </Card>
         )}
@@ -856,8 +853,9 @@ export function SessionBooking({
           </p>
         </div>
 
-        {/* Calendar affordance: week-jump strip */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-slim">
+        {/* Calendar affordance: week-jump strip — Round 13 (B3): mb-2 keeps
+            it off the first week card */}
+        <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-slim">
           <CalendarDays
             className="h-4 w-4 shrink-0 text-muted-foreground"
             aria-hidden
@@ -1172,6 +1170,70 @@ export function SessionBooking({
 /* Rows                                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Round 13 (B4): the uppercase-month + big-day date badge — the one anchor
+ * every row shares across all three tabs. Span-based so it's valid inside
+ * the Book tab's checkbox <label>.
+ */
+function DateBadge({ iso }: { iso: string }) {
+  const d = new Date(iso);
+  return (
+    <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md bg-muted text-center">
+      <span className="text-[0.6rem] uppercase text-muted-foreground">
+        {d.toLocaleDateString("en-US", { month: "short" })}
+      </span>
+      <span className="tnum text-sm font-bold leading-none">{d.getDate()}</span>
+    </span>
+  );
+}
+
+/** Title + muted weekday·time underneath — the unified row middle (B4). */
+function SlotTitle({
+  slot,
+  muted,
+  note,
+}: {
+  slot: BookableSlot;
+  muted?: boolean;
+  /** Extra muted line under the time (e.g. the locked-type access note). */
+  note?: string;
+}) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="flex items-center gap-1">
+        <span
+          className={cn(
+            "truncate text-sm font-semibold",
+            muted && "text-muted-foreground",
+          )}
+        >
+          {slot.label}
+        </span>
+        <SessionTypeInfoButton label={slot.label} />
+      </span>
+      <span className="tnum block text-xs text-muted-foreground">
+        {fmtWeekday(slot.startsAt)} · {fmtRange(slot.startsAt, slot.endsAt)}
+      </span>
+      {note ? (
+        <span className="block text-xs text-muted-foreground text-pretty">
+          {note}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Round 13 (B5): spots-left status — plenty of room reads as a calm "Open". */
+function SpotsPill({ spotsLeft }: { spotsLeft: number }) {
+  return (
+    <Pill tone="neutral" className="shrink-0">
+      {spotsLeft >= 6
+        ? "Open"
+        : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`}
+    </Pill>
+  );
+}
+
 function SlotRow({
   slot,
   locked,
@@ -1197,12 +1259,13 @@ function SlotRow({
 }) {
   if (booked) {
     return (
-      <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-success/15 text-success">
+      <li className="flex items-center gap-3 p-3 sm:px-4">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
           <Check className="h-3.5 w-3.5" aria-hidden />
         </span>
-        <SlotInfo slot={slot} muted />
-        <Pill tone="success" className="ml-auto">
+        <DateBadge iso={slot.startsAt} />
+        <SlotTitle slot={slot} muted />
+        <Pill tone="success" className="ml-auto shrink-0">
           Booked
         </Pill>
       </li>
@@ -1210,17 +1273,20 @@ function SlotRow({
   }
 
   // Locked type — the coaching staff grants access from the back end; the row
-  // is visible (so athletes know it exists) but can't be selected.
+  // is visible (so athletes know it exists) but can't be selected. The access
+  // note sits under the time so the row stays clean at 375px (B4).
   if (locked) {
     return (
-      <li className="flex flex-wrap items-center gap-3 px-4 py-3 opacity-70">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+      <li className="flex items-center gap-3 p-3 opacity-70 sm:px-4">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
           <Lock className="h-3 w-3" aria-hidden />
         </span>
-        <SlotInfo slot={slot} muted />
-        <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          Team members only — ask your coach for access
-        </span>
+        <DateBadge iso={slot.startsAt} />
+        <SlotTitle
+          slot={slot}
+          muted
+          note="Team members only — ask your coach for access"
+        />
       </li>
     );
   }
@@ -1228,10 +1294,11 @@ function SlotRow({
   // Full session → waitlist path (spots-left, danger tone).
   if (slot.spotsLeft === 0) {
     return (
-      <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-        <span className="h-5 w-5 shrink-0 rounded-md border border-dashed border-border bg-muted/40" />
-        <SlotInfo slot={slot} muted />
-        <span className="ml-auto flex items-center gap-2">
+      <li className="flex items-center gap-3 p-3 sm:px-4">
+        <span className="h-5 w-5 shrink-0 rounded-full border border-dashed border-border bg-muted/40" />
+        <DateBadge iso={slot.startsAt} />
+        <SlotTitle slot={slot} muted />
+        <span className="flex shrink-0 flex-col items-end gap-1">
           <Pill tone="danger">Full</Pill>
           {waitlisted ? (
             <Pill tone="info">On waitlist</Pill>
@@ -1257,7 +1324,7 @@ function SlotRow({
     <li>
       <label
         className={cn(
-          "flex flex-wrap items-center gap-3 px-4 py-3 transition-colors",
+          "flex items-center gap-3 p-3 transition-colors sm:px-4",
           disabled
             ? "cursor-not-allowed opacity-55"
             : "cursor-pointer hover:bg-accent/40",
@@ -1272,9 +1339,10 @@ function SlotRow({
           onChange={onToggle}
           aria-label={`${slot.label} — ${fmtDay(slot.startsAt)} ${fmtRange(slot.startsAt, slot.endsAt)}`}
         />
+        {/* Round 13 (B4): selection circle */}
         <span
           className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
             checked
               ? "border-brand bg-brand text-brand-foreground"
               : "border-border bg-surface/60",
@@ -1283,46 +1351,16 @@ function SlotRow({
         >
           {checked ? <Check className="h-3.5 w-3.5" /> : null}
         </span>
-        <SlotInfo slot={slot} />
-        <span className="ml-auto flex items-center gap-2">
+        <DateBadge iso={slot.startsAt} />
+        <SlotTitle slot={slot} />
+        <span className="flex shrink-0 flex-col items-end gap-1">
           {capBlocked && !checked && !overdue ? (
             <span className="text-xs text-warning">Cycle cap reached</span>
           ) : null}
-          {/* Kept deliberately plain — the client doesn't want scarce spots
-              drawing attention (no warning color on "1 spot left"). */}
-          <span className="tnum text-xs text-muted-foreground">
-            {slot.spotsLeft} {slot.spotsLeft === 1 ? "spot" : "spots"} left
-          </span>
+          <SpotsPill spotsLeft={slot.spotsLeft} />
         </span>
       </label>
     </li>
-  );
-}
-
-function SlotInfo({ slot, muted }: { slot: BookableSlot; muted?: boolean }) {
-  return (
-    <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-      <span
-        className={cn(
-          "w-24 shrink-0 text-sm font-semibold",
-          muted && "text-muted-foreground",
-        )}
-      >
-        {fmtDay(slot.startsAt)}
-      </span>
-      <span
-        className={cn(
-          "tnum w-36 shrink-0 text-sm",
-          muted ? "text-muted-foreground" : "text-foreground",
-        )}
-      >
-        {fmtRange(slot.startsAt, slot.endsAt)}
-      </span>
-      <span className="flex shrink-0 items-center gap-0.5">
-        <Pill tone={labelTone[slot.label]}>{slot.label}</Pill>
-        <SessionTypeInfoButton label={slot.label} />
-      </span>
-    </span>
   );
 }
 

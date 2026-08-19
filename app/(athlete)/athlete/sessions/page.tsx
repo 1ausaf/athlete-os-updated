@@ -19,11 +19,8 @@ export default async function AthleteSessionsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Round 8 (M21): Sessions → Bookings; the plan line moved into the
-          weekly-cadence card (M23). */}
-      <PageHeader
-        title="Bookings"
-        description="Book times across the next 12 weeks, keep an eye on what's booked, and count your past sessions — all in one place."
-      />
+          weekly-cadence card (M23). Round 13 (B1): description removed. */}
+      <PageHeader title="Bookings" />
 
       <SessionBooking
         slots={slots}

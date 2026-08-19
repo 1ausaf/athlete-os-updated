@@ -535,7 +535,15 @@ export function MembersList({
         <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
-              <SortHeader label="Member" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
+              {/* Round 13 (S1): the name column stays put while the table
+                  scrolls sideways on phones — opaque bg so rows slide under */}
+              <SortHeader
+                label="Member"
+                active={sortKey === "name"}
+                dir={sortDir}
+                onClick={() => toggleSort("name")}
+                className="max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-muted"
+              />
               <SortHeader label="Focus" active={sortKey === "focus"} dir={sortDir} onClick={() => toggleSort("focus")} />
               <SortHeader label="Age" active={sortKey === "age"} dir={sortDir} onClick={() => toggleSort("age")} />
               <SortHeader label="Sex" active={sortKey === "sex"} dir={sortDir} onClick={() => toggleSort("sex")} />
@@ -621,15 +629,17 @@ function SortHeader({
   active,
   dir,
   onClick,
+  className,
 }: {
   label: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <th
-      className="px-3 py-2.5"
+      className={cn("px-3 py-2.5", className)}
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : undefined}
     >
       <button
@@ -713,14 +723,21 @@ function MemberRow({
       onClick={onOpen}
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
+      {/* Round 13 (S1): sticky name cell on phones; avatar + plan line are
+          desktop-only so the column stays narrow */}
       <td
         className={cn(
-          "px-3 py-2.5",
+          "px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-background",
           limited && "border-l-2 border-l-warning",
         )}
       >
         <span className="flex items-center gap-2.5">
-          <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="sm" />
+          <AthleteAvatar
+            initials={athlete.initials}
+            hue={athlete.hue}
+            size="sm"
+            className="hidden sm:inline-flex"
+          />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
               {athlete.name}
@@ -732,7 +749,7 @@ function MemberRow({
                 />
               ) : null}
             </span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="hidden text-xs text-muted-foreground sm:block">
               {athlete.planName}
             </span>
           </span>
@@ -805,14 +822,20 @@ function GroupRow({
       onClick={onOpen}
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
-      <td className="px-3 py-2.5">
+      {/* Round 13 (S1): same sticky/mobile treatment as member rows */}
+      <td className="px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-background">
         <span className="flex items-center gap-2.5">
-          <AthleteAvatar initials={group.initials} hue={group.hue} size="sm" />
+          <AthleteAvatar
+            initials={group.initials}
+            hue={group.hue}
+            size="sm"
+            className="hidden sm:inline-flex"
+          />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold">
               Group: {group.name}
             </span>
-            <span className="block text-xs text-muted-foreground">
+            <span className="hidden text-xs text-muted-foreground sm:block">
               {group.planName}
             </span>
           </span>

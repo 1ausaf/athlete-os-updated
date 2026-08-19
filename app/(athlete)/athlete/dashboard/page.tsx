@@ -93,10 +93,7 @@ export default async function AthleteDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title={`Good to see you, ${firstName}.`}
-        description="Facility news and your chat up top — then training, sessions, wins and billing."
-      />
+      <PageHeader title={`Quick overview, ${firstName}.`} />
 
       {!hasProgram ? <NoProgramNotice athlete={athlete} /> : null}
 

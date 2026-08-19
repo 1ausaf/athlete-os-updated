@@ -767,9 +767,8 @@ export function WorkoutLogger({
                     <h3 className="text-base">Program</h3>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground text-pretty">
-                    Sessions run in order — day one, day two, day three,
-                    restarting each week. At LPS on a remote day? Skip ahead
-                    and do the next LPS session instead.
+                    Sessions are programmed in sequence — day 1, 2, 3, etc. If
+                    you need clarification, please chat with your coach.
                   </p>
                 </div>
               </div>
@@ -803,9 +802,10 @@ export function WorkoutLogger({
                           : "border-border bg-surface/50",
                       )}
                     >
+                      {/* Round 13 (T5): icon bubble hides on mobile — titles get the room */}
                       <span
                         className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+                          "hidden h-9 w-9 shrink-0 items-center justify-center rounded-md sm:flex",
                           complete
                             ? "bg-success/10 text-success"
                             : "bg-brand/10 text-brand-ink",
@@ -861,7 +861,7 @@ export function WorkoutLogger({
                         {completedNow ? (
                           <>
                             <PencilLine className="h-3.5 w-3.5" aria-hidden />
-                            Edit Workout
+                            Edit
                           </>
                         ) : (
                           "Start Workout"
@@ -889,20 +889,15 @@ export function WorkoutLogger({
         ) : (
           <Card>
             <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
-              <div className="flex flex-wrap items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <History className="h-5 w-5 text-brand-ink" aria-hidden />
-                    <h3 className="text-base">Completed Workouts</h3>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground text-pretty">
-                    Forgot to log a set, or entered the wrong unit? Open any
-                    completed workout and fix the entries — everything stays
-                    editable.
-                  </p>
+              {/* Round 13 (T9): title, then the chips on their own wrapping
+                  row, then the helper line — no collisions at 375px. */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <History className="h-5 w-5 text-brand-ink" aria-hidden />
+                  <h3 className="text-base">Completed Workouts</h3>
                 </div>
                 {/* Round 8 (M19): range chips — 30 days default */}
-                <div className="flex items-center rounded-lg border border-border bg-surface p-0.5">
+                <div className="flex flex-wrap items-center self-start rounded-lg border border-border bg-surface p-0.5">
                   {COMPLETED_RANGES.map((r) => (
                     <button
                       key={r.key}
@@ -920,6 +915,11 @@ export function WorkoutLogger({
                     </button>
                   ))}
                 </div>
+                <p className="text-xs text-muted-foreground text-pretty">
+                  Forgot to log a set, or entered the wrong unit? Open any
+                  completed workout and fix the entries — everything stays
+                  editable.
+                </p>
               </div>
 
               {visibleCompleted.length === 0 ? (
@@ -937,7 +937,8 @@ export function WorkoutLogger({
                         key={`${s.dayId}-${s.completedOn}-${i}`}
                         className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface/50 p-3"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
+                        {/* Round 13 (T10): status icon hides on mobile */}
+                        <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success/10 text-success sm:flex">
                           <CheckCircle2 className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1">
@@ -956,7 +957,7 @@ export function WorkoutLogger({
                           onClick={() => openWorkout(s.dayId, s)}
                         >
                           <PencilLine className="h-3.5 w-3.5" aria-hidden />
-                          Edit Workout
+                          Edit
                         </Button>
                       </li>
                     );
@@ -1502,7 +1503,7 @@ function ExerciseBlock({
     // right — so long programs stay short on screen and on paper (A10).
     <div className="print-two-col min-w-0 flex-1 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.9fr)] md:items-start md:gap-x-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{name}</span>
             {/* Round 8 (M16): circuit blocks drop the block-level play button
@@ -1528,6 +1529,33 @@ function ExerciseBlock({
               </Pill>
             ) : null}
             {/* Round 8 (M17): no "Done" pill — the green block state says it */}
+            {/* Round 13 (T8): per-section lb⇄kg toggle (A7) sits top-right in
+                the header row beside the name — no longer under Last/Best. */}
+            {usesWeight && !lib?.circuit ? (
+              <span
+                role="group"
+                aria-label={`${name}: weight unit for this section`}
+                title="Flips every set in this section between lb and kg"
+                className="no-print ml-auto flex items-center rounded-md border border-border bg-surface/60 p-0.5"
+              >
+                {(["lb", "kg"] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    aria-pressed={sectionUnit === u}
+                    onClick={() => onSetUnit(u)}
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[0.62rem] font-bold uppercase transition-colors",
+                      sectionUnit === u
+                        ? "bg-brand text-brand-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </span>
+            ) : null}
           </div>
           {ex.instructions ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1580,36 +1608,8 @@ function ExerciseBlock({
             </p>
           ) : null}
         </div>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {/* Per-section lb⇄kg toggle (A7) — defaults from the profile unit */}
-          {usesWeight && !lib?.circuit ? (
-            <span
-              role="group"
-              aria-label={`${name}: weight unit for this section`}
-              title="Flips every set in this section between lb and kg"
-              className="no-print flex items-center rounded-md border border-border bg-surface/60 p-0.5"
-            >
-              {(["lb", "kg"] as const).map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  aria-pressed={sectionUnit === u}
-                  onClick={() => onSetUnit(u)}
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[0.62rem] font-bold uppercase transition-colors",
-                    sectionUnit === u
-                      ? "bg-brand text-brand-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {u}
-                </button>
-              ))}
-            </span>
-          ) : null}
-          {/* Round 7: the section-level check is gone — the per-set ✓/✗
-              marks are the record, and the Done pill derives from them. */}
-        </span>
+        {/* Round 7: the section-level check is gone — the per-set ✓/✗
+            marks are the record, and the Done pill derives from them. */}
       </div>
 
       {/* Circuit blocks (warm-up): one row PER MOVEMENT, each with its own
@@ -1678,10 +1678,14 @@ function ExerciseBlock({
         </ol>
       ) : (
       <div className="mt-3 md:mt-0">
-        <div className="print-set-head grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground">
+        {/* Round 13 (T6/T7): no Target column on screen — the prescription
+            lives in each result input's placeholder (TrainHeroic style).
+            Print keeps a Target column via the print-set-* grid override.
+            Mobile template guarantees workable input widths at 375px. */}
+        <div className="print-set-head grid grid-cols-[1rem_minmax(3.5rem,1.5fr)_minmax(4.25rem,1fr)_3.25rem] items-center gap-x-1.5 pb-1 text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[1.25rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] sm:gap-x-2">
           <span>Set</span>
-          <span className="text-center">Target</span>
-          <span>
+          <span className="hidden text-center print:block">Target</span>
+          <span className="min-w-0 truncate">
             {weightHeader}
             {usesWeight ? (
               <span className="tnum ml-1 normal-case text-muted-foreground/80">
@@ -1689,7 +1693,7 @@ function ExerciseBlock({
               </span>
             ) : null}
           </span>
-          <span>{resultHeader}</span>
+          <span className="min-w-0 truncate">{resultHeader}</span>
           <span aria-hidden className="no-print" />
         </div>
         {ex.sets.map((set, i) => {
@@ -1703,12 +1707,14 @@ function ExerciseBlock({
           return (
             <div
               key={i}
-              className="print-set-row grid grid-cols-[1.25rem_3rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] items-center gap-x-2 border-t border-border/60 py-1.5"
+              className="print-set-row grid grid-cols-[1rem_minmax(3.5rem,1.5fr)_minmax(4.25rem,1fr)_3.25rem] items-center gap-x-1.5 border-t border-border/60 py-1.5 sm:grid-cols-[1.25rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] sm:gap-x-2"
             >
               <span className="tnum text-xs font-semibold text-muted-foreground">
                 {i + 1}
               </span>
-              <span className="tnum truncate text-center text-xs font-semibold">
+              {/* Round 13 (T7): Target prints only — on screen it's the
+                  result input's placeholder. */}
+              <span className="tnum hidden truncate text-center text-xs font-semibold print:block">
                 {set.target}
               </span>
 
@@ -1737,8 +1743,10 @@ function ExerciseBlock({
                 /* Round 10 (R8 bug fix): the computed % load is EDITABLE —
                    prefilled from the ref max, typing overrides it (the bar
                    was heavier/lighter than the math). The % hint stays. */
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="tnum shrink-0 text-xs text-muted-foreground">
+                /* Round 13 (T6): the % hint stacks ABOVE the input on mobile
+                   so the override box keeps a workable width at 375px. */
+                <span className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
+                  <span className="tnum shrink-0 text-[0.6rem] leading-none text-muted-foreground sm:text-xs sm:leading-normal">
                     {set.load}%
                   </span>
                   <Input
@@ -1771,15 +1779,11 @@ function ExerciseBlock({
                 /* Round 10 (R8 bug fix): BW rows take an optional added load
                    — weighted vests, chains, a plate on the lap. Empty = just
                    bodyweight. */
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-                    BW
-                  </span>
-                  <span
-                    aria-hidden
-                    className="shrink-0 text-xs text-muted-foreground"
-                  >
-                    +
+                /* Round 13 (T6): "BW +" stacks ABOVE the input on mobile so
+                   the added-load box keeps a workable width at 375px. */
+                <span className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1">
+                  <span className="shrink-0 text-[0.6rem] font-semibold leading-none text-muted-foreground sm:text-xs sm:leading-normal">
+                    BW&nbsp;+
                   </span>
                   <Input
                     type="number"
@@ -1826,7 +1830,9 @@ function ExerciseBlock({
                     value={row.result}
                     onChange={(e) => onUpdateSet(i, { result: e.target.value })}
                   />
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  {/* Round 13 (T6): tiny suffix on mobile — the input keeps
+                      its width. */}
+                  <span className="shrink-0 text-[0.6rem] text-muted-foreground sm:text-xs">
                     {targetParts.unit}
                   </span>
                 </span>

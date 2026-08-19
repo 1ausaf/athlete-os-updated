@@ -1,15 +1,12 @@
-import Link from "next/link";
-import type { Route } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Megaphone } from "lucide-react";
+import { Megaphone } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isAdmin, isStaff } from "@/lib/rbac";
-import { athleteById, fmtDay, threadById } from "@/lib/demo/data";
+import { athleteById, threadById } from "@/lib/demo/data";
 import {
   assignedStaffIds,
   assignmentsForAthlete,
@@ -17,7 +14,7 @@ import {
   staffMembers,
 } from "@/lib/demo/staff";
 
-import { ThreadConversation } from "./thread-conversation";
+import { ThreadConversation, ThreadSubscribeBar } from "./thread-conversation";
 
 /**
  * Round 12 (N18): mirror of the inbox's hardcoded Subscribed set (see
@@ -75,19 +72,17 @@ export default async function StaffThreadPage({ params }: PageProps) {
     // R34: iPhone got a too-short window — dvh sizing (with a vh fallback)
     // plus a 70dvh floor keeps the message area usably tall on mobile.
     <div className="flex min-h-[70dvh] h-[calc(100vh-7rem)] supports-[height:100dvh]:h-[calc(100dvh-7rem)] flex-col gap-4 md:h-[calc(100vh-9rem)] md:supports-[height:100dvh]:h-[calc(100dvh-9rem)]">
+      {/* Round 13 (S10a/b): participants only — no "Started …" prefix, and
+          the back button is gone (browser Back + breadcrumb cover it) */}
       <PageHeader
         title={thread.subject}
-        description={`Started ${fmtDay(thread.messages[0]?.at ?? thread.updatedAt)} · ${thread.participants
-          .map((p) => p.name)
-          .join(", ")}`}
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href={"/staff/messaging" as Route}>
-              <ArrowLeft className="h-4 w-4" />
-              Chats
-            </Link>
-          </Button>
-        }
+        description={thread.participants.map((p) => p.name).join(", ")}
+      />
+
+      {/* S10c — Subscribe moved out of the chat box, up under the header */}
+      <ThreadSubscribeBar
+        threadId={thread.id}
+        seedSubscribed={SUBSCRIBED[user.id]?.includes(thread.id) ?? false}
       />
 
       {/* R8 (H3): the Rule-of-Two banner is gone — the admin auto-adds

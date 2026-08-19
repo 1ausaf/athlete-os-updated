@@ -35,7 +35,8 @@ import { cn } from "@/lib/utils";
  * - Attach images + video files; mock voice-note recording.
  */
 export function ChatComposer({
-  placeholder = "Write a message… (Enter for a new line)",
+  // Round 13 (C6): one copy everywhere — athlete chat and staff threads.
+  placeholder = "Write your message… (enter for a new line)",
   onSend,
   hint,
   mentionNames,
@@ -276,15 +277,16 @@ export function ChatComposer({
           </span>
         ) : null}
         <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+        {/* Round 13 (C4): Attach + Voice are icon-only — the words live in
+            title/aria-label — so Send sits cleanly at the right. */}
         <button
           type="button"
           title="Attach photos or videos"
           aria-label="Attach photos or videos"
           onClick={() => fileRef.current?.click()}
-          className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Paperclip className="h-4 w-4" />
-          Attach
         </button>
         <button
           type="button"
@@ -292,10 +294,10 @@ export function ChatComposer({
           aria-label={recording ? "Stop recording" : "Record a voice note"}
           onClick={toggleRecord}
           className={cn(
-            "flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
+            "flex h-8 items-center justify-center rounded-md transition-colors",
             recording
-              ? "bg-destructive/10 text-destructive"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              ? "gap-1.5 bg-destructive/10 px-2 text-xs font-medium text-destructive"
+              : "w-8 text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
           {recording ? (
@@ -304,10 +306,7 @@ export function ChatComposer({
               <span className="tnum">Recording {recordLabel}</span>
             </>
           ) : (
-            <>
-              <Mic className="h-4 w-4" />
-              Voice
-            </>
+            <Mic className="h-4 w-4" />
           )}
         </button>
         <input
@@ -324,7 +323,9 @@ export function ChatComposer({
         <span className="ml-auto hidden text-[0.7rem] text-muted-foreground sm:block">
           {hint ?? "Ctrl+Enter"}
         </span>
-        <Button variant="brand" size="sm" onClick={send}>
+        {/* Round 13 (C4): the hint is sm+-only, so on mobile the button
+            claims the right edge itself. */}
+        <Button variant="brand" size="sm" className="max-sm:ml-auto" onClick={send}>
           <Send className="h-3.5 w-3.5" />
           Send
         </Button>

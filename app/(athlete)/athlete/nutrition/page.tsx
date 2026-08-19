@@ -122,7 +122,7 @@ export default async function NutritionPage() {
       />
 
       {/* Weekly check-in — weight / body fat / lean mass, trend + history */}
-      <WeeklyCheckIn initialCheckIns={protocol.checkIns} />
+      <WeeklyCheckIn initialCheckIns={protocol.checkIns} athleteId={athlete.id} />
 
       {/* Daily targets */}
       <section className="flex flex-col gap-3">

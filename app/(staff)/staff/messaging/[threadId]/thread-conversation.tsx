@@ -53,6 +53,9 @@ function fmtTime(iso: string): string {
 /** Round 12 (N18) — per-thread Subscribe checkbox state, persisted across
     visits ({[threadId]: boolean}; absent = the seed subscription). */
 const SUBS_KEY = "aos-thread-subs";
+/** Round 13 (S10c): the checkbox lives above the card now, so the two
+    components sync through this window event. */
+const SUBS_EVENT = "aos-thread-subs-changed";
 
 function readSubsMap(): Record<string, boolean> {
   try {
@@ -67,6 +70,53 @@ function readSubsMap(): Record<string, boolean> {
     // Corrupt storage — fall back to seeds.
   }
   return {};
+}
+
+function writeSub(threadId: string, next: boolean): void {
+  try {
+    window.localStorage.setItem(
+      SUBS_KEY,
+      JSON.stringify({ ...readSubsMap(), [threadId]: next }),
+    );
+  } catch {
+    // Storage unavailable — subscription stays session-only.
+  }
+  window.dispatchEvent(new Event(SUBS_EVENT));
+}
+
+/** S10c — the "Subscribe to Chat" control, rendered right under the
+    PageHeader; it writes the store the conversation below listens to. */
+export function ThreadSubscribeBar({
+  threadId,
+  seedSubscribed = false,
+}: {
+  threadId: string;
+  seedSubscribed?: boolean;
+}) {
+  const [subscribed, setSubscribed] = useState(false);
+
+  useEffect(() => {
+    const refresh = () =>
+      setSubscribed(readSubsMap()[threadId] ?? seedSubscribed);
+    refresh();
+    window.addEventListener(SUBS_EVENT, refresh);
+    return () => window.removeEventListener(SUBS_EVENT, refresh);
+  }, [threadId, seedSubscribed]);
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+      {subscribed ? (
+        <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
+          <BellRing className="h-3.5 w-3.5" />
+          Subscribed — you&apos;ll be notified of new messages in this chat.
+        </p>
+      ) : null}
+      <SubscribeCheckbox
+        checked={subscribed}
+        onChange={(next) => writeSub(threadId, next)}
+      />
+    </div>
+  );
 }
 
 export function ThreadConversation({
@@ -97,28 +147,21 @@ export function ThreadConversation({
   mentionNames?: string[];
 }) {
   const [messages, setMessages] = useState<ConvoMessage[]>(initialMessages);
-  // N18 — persistent Subscribe checkbox (replaces the R8 one-shot button).
+  // N18 — persistent subscription; Round 13 (S10c): the checkbox itself is
+  // the ThreadSubscribeBar above the card, synced here via SUBS_EVENT.
   const [subscribed, setSubscribed] = useState(false);
   // R35 — which message's read-receipt popover is open.
   const [receiptOpen, setReceiptOpen] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Checkbox loads after mount (avoids SSR/localStorage hydration mismatch).
+  // State loads after mount (avoids SSR/localStorage hydration mismatch).
   useEffect(() => {
-    setSubscribed(readSubsMap()[threadId] ?? seedSubscribed);
+    const refresh = () =>
+      setSubscribed(readSubsMap()[threadId] ?? seedSubscribed);
+    refresh();
+    window.addEventListener(SUBS_EVENT, refresh);
+    return () => window.removeEventListener(SUBS_EVENT, refresh);
   }, [threadId, seedSubscribed]);
-
-  function toggleSubscribed(next: boolean) {
-    setSubscribed(next);
-    try {
-      window.localStorage.setItem(
-        SUBS_KEY,
-        JSON.stringify({ ...readSubsMap(), [threadId]: next }),
-      );
-    } catch {
-      // Storage unavailable — subscription stays session-only.
-    }
-  }
 
   // N18 — for view-only coaches, subscribing = joining (posting + notify).
   const posting = canPost || (canJoin && subscribed);
@@ -306,22 +349,10 @@ export function ThreadConversation({
         })}
       </div>
 
-      {/* Composer pinned at the bottom of the pane */}
+      {/* Composer pinned at the bottom of the pane — S10c: the Subscribe
+          checkbox moved up under the PageHeader */}
       {posting ? (
         <div className="shrink-0">
-          <div className="mb-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <SubscribeCheckbox
-              checked={subscribed}
-              onChange={toggleSubscribed}
-            />
-            {subscribed ? (
-              <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
-                <BellRing className="h-3.5 w-3.5" />
-                Subscribed — you&apos;ll be notified of new messages in this
-                chat.
-              </p>
-            ) : null}
-          </div>
           <ChatComposer
             onSend={send}
             mentionNames={mentionNames}
@@ -334,15 +365,9 @@ export function ThreadConversation({
         <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-2">
             <Eye className="h-4 w-4 shrink-0" />
-            View only — you&rsquo;re not subscribed to this chat.
+            View only — you&rsquo;re not subscribed to this chat. Subscribe to
+            Chat above to join and post.
           </span>
-          {/* N18: the unsubscribed coach's way in — checking Subscribe joins
-              the chat (posting + notifications). */}
-          <SubscribeCheckbox
-            checked={subscribed}
-            onChange={toggleSubscribed}
-            className="ml-auto"
-          />
         </div>
       )}
     </div>

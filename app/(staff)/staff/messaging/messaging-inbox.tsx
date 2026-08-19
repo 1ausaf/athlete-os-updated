@@ -14,7 +14,6 @@ import {
   Pin,
   PinOff,
   Search,
-  ShieldCheck,
 } from "lucide-react";
 
 import { TabBar } from "@/components/app/tab-bar";
@@ -282,8 +281,10 @@ export function MessagingInbox({
         cmp = a.thread.updatedAt.localeCompare(b.thread.updatedAt);
       }
       if (cmp === 0) {
-        // Stable fallback: newest activity first.
-        cmp = -a.thread.updatedAt.localeCompare(b.thread.updatedAt);
+        // Round 13 (S9c): ties break by unread (most first), then newest
+        // activity — absolute order, not flipped by the sort direction.
+        cmp = unreadCount(b) - unreadCount(a);
+        if (cmp === 0) cmp = -a.thread.updatedAt.localeCompare(b.thread.updatedAt);
         return cmp;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -317,7 +318,8 @@ export function MessagingInbox({
         onSelect={setFilter}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
+        {/* Round 13 (S9b): full-width search on phones, capped on sm+ */}
+        <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -340,13 +342,7 @@ export function MessagingInbox({
         ) : null}
       </div>
 
-      {!admin ? (
-        <p className="inline-flex items-start gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Chats are created automatically when you&rsquo;re assigned to a
-          member — coaches can&rsquo;t start private chats (Safe-Sport).
-        </p>
-      ) : null}
+      {/* Round 13 (S8): the safe-sport line lives in the page header now */}
 
       {/* H4 — the chats table */}
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-soft">
@@ -361,13 +357,6 @@ export function MessagingInbox({
                 onSort={toggleSort}
               />
               <SortableHead
-                label="Role"
-                sortKey="role"
-                current={sortKey}
-                dir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortableHead
                 label="Last Activity"
                 sortKey="activity"
                 current={sortKey}
@@ -377,6 +366,14 @@ export function MessagingInbox({
               <SortableHead
                 label="Unread"
                 sortKey="unread"
+                current={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+              />
+              {/* Round 13 (S9a): Role reads last — activity columns first */}
+              <SortableHead
+                label="Role"
+                sortKey="role"
                 current={sortKey}
                 dir={sortDir}
                 onSort={toggleSort}
@@ -532,8 +529,9 @@ function InboxRow({
               aria-label="Pinned chat"
             />
           ) : null}
+          {/* S9d — phones lean on the Unread column; the pill is sm+ only */}
           {unread > 0 ? (
-            <Pill tone="brand" dot>
+            <Pill tone="brand" dot className="hidden sm:inline-flex">
               {unread} new
             </Pill>
           ) : null}
@@ -544,9 +542,6 @@ function InboxRow({
             : "No messages yet"}
         </p>
       </TableCell>
-      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-        {row.roleLabel ?? "—"}
-      </TableCell>
       <TableCell className="tnum whitespace-nowrap text-sm text-muted-foreground">
         {relTime(thread.updatedAt)}
       </TableCell>
@@ -556,6 +551,10 @@ function InboxRow({
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
+      </TableCell>
+      {/* S9a — Role trails the activity columns */}
+      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+        {row.roleLabel ?? "—"}
       </TableCell>
 
       {/* X1 — per-thread ⋮ menu (read state + pinning); clicks must not

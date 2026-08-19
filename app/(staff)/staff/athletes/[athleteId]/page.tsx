@@ -10,6 +10,7 @@ import {
   Dumbbell,
   MessagesSquare,
   Salad,
+  StickyNote,
   Trophy,
 } from "lucide-react";
 
@@ -130,28 +131,30 @@ export default async function StaffAthleteProfilePage({
           </span>
         }
         actions={
-          <>
-            <Button asChild variant="outline" size="sm">
+          /* Round 13 (S11): 2-column grid at phone width (2-2-1) — the
+             inline flex row survives on sm+ */
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+            <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
               <Link href={`/staff/athletes/${athlete.id}/assessment` as Route}>
                 <ClipboardCheck className="h-4 w-4" />
                 Assessment
               </Link>
             </Button>
-            {/* C12 — all four actions share the same outline style */}
-            <Button asChild variant="outline" size="sm">
+            {/* C12 — all actions share the same outline style */}
+            <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
               <Link href={`/staff/athletes/${athlete.id}/program` as Route}>
                 <Dumbbell className="h-4 w-4" />
                 Program
               </Link>
             </Button>
             {/* Round 12 (N4) — Nutrition opens its own page now */}
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
               <Link href={`/staff/athletes/${athlete.id}/nutrition` as Route}>
                 <Salad className="h-4 w-4" />
                 Nutrition
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
               <Link
                 href={`/staff/messaging/${threadIdForAthlete(athlete.id)}` as Route}
               >
@@ -159,7 +162,15 @@ export default async function StaffAthleteProfilePage({
                 Chat
               </Link>
             </Button>
-          </>
+            {/* Round 13 (S2): Notes shortcut — the notes panel stacks below
+                the fold on phones, so jump straight to it */}
+            <Button asChild variant="outline" size="sm" className="w-full justify-center sm:w-auto">
+              <a href="#notes">
+                <StickyNote className="h-4 w-4" />
+                Notes
+              </a>
+            </Button>
+          </div>
         }
       />
 
@@ -315,12 +326,15 @@ export default async function StaffAthleteProfilePage({
             />
           </div>
 
-          {/* Notes — composer (with link + @mention buttons) + history */}
-          <NotesPanel
-            athleteFirstName={athlete.name.split(" ")[0] ?? athlete.name}
-            authorName={user.fullName}
-            initialNotes={athlete.notes}
-          />
+          {/* Notes — composer (with link + @mention buttons) + history;
+              Round 13 (S2): id anchors the header's Notes shortcut */}
+          <div id="notes" className="scroll-mt-24">
+            <NotesPanel
+              athleteFirstName={athlete.name.split(" ")[0] ?? athlete.name}
+              authorName={user.fullName}
+              initialNotes={athlete.notes}
+            />
+          </div>
         </div>
       </div>
     </div>

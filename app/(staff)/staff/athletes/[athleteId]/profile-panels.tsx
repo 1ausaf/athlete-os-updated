@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Check,
   CreditCard,
+  GripVertical,
   IdCard,
   KeyRound,
   LinkIcon,
@@ -59,13 +60,6 @@ const STATUS_TONE: Record<AthleteStatus, "success" | "info" | "warning" | "neutr
   active: "success",
   paused: "warning",
   inactive: "neutral",
-};
-
-const STATUS_HELP: Record<AthleteStatus, string> = {
-  active: "Training normally — programs, booking and billing all run.",
-  paused:
-    "On hold (seasonal break or retention hold): login stays on, no programs run. The follow-up date drives the call.",
-  inactive: "Account disabled — no login. The record stays unless deleted.",
 };
 
 const FIELD_LABEL =
@@ -480,16 +474,11 @@ export function DetailsCard({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground text-pretty">
-          {STATUS_HELP[status]}
-        </p>
-
-        <div className="flex items-end justify-between gap-3 border-t border-border/60 pt-3">
-          <span className="text-[0.7rem] text-muted-foreground">
-            Saves locally in this demo.
-          </span>
-          {/* C15 — deleting a member is admin/owner only */}
-          {admin ? (
+        {/* C15 — deleting a member is admin/owner only; Round 13 (S3): the
+            status blurb + demo-save line are gone, so the footer only
+            renders when there's a delete action to hold */}
+        {admin ? (
+          <div className="flex justify-end border-t border-border/60 pt-3">
             <button
               type="button"
               onClick={handleDeleteClick}
@@ -506,8 +495,8 @@ export function DetailsCard({
                 "Delete Member"
               )}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -536,6 +525,11 @@ function normalizeUrl(u: string): string {
   return v && !/^https?:\/\//.test(v) ? `https://${v}` : v;
 }
 
+/** Round 13 (S7): tel: href — digits (and a leading +) only, pretty text stays. */
+function telHref(phone: string): string {
+  return `tel:${phone.replace(/[^+\d]/g, "")}`;
+}
+
 /** The editable external-link rows — shared by the member profile's Contact &
  *  Links card and the group profile's Links card (C21). */
 export function LinksEditor({
@@ -553,6 +547,9 @@ export function LinksEditor({
   const [adding, setAdding] = useState(false);
   const [addLabel, setAddLabel] = useState("");
   const [addUrl, setAddUrl] = useState("");
+  // Round 13 (S5): native HTML5 drag-to-reorder (program-builder idiom);
+  // the whole list lives in one state array, so the order persists as-is.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -590,6 +587,19 @@ export function LinksEditor({
     setAddLabel("");
     setAddUrl("");
     setAdding(false);
+  }
+
+  /** S5 — drop the dragged row at index i (persisted via the links effect). */
+  function dropOn(i: number) {
+    if (dragIdx === null || dragIdx === i) return;
+    setLinks((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIdx, 1);
+      if (!moved) return prev;
+      next.splice(i, 0, moved);
+      return next;
+    });
+    setDragIdx(null);
   }
 
   return (
@@ -653,8 +663,37 @@ export function LinksEditor({
               ) : (
                 <div
                   key={`${link.label}-${i}`}
-                  className="flex h-9 w-full items-stretch overflow-hidden rounded-md border border-input bg-surface text-sm font-medium"
+                  onDragOver={(ev) => {
+                    if (dragIdx !== null && dragIdx !== i) {
+                      ev.preventDefault();
+                      ev.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    dropOn(i);
+                  }}
+                  className={cn(
+                    "flex h-9 w-full items-stretch overflow-hidden rounded-md border border-input bg-surface text-sm font-medium",
+                    dragIdx === i && "opacity-50",
+                  )}
                 >
+                  {/* Round 13 (S5): grab here to reorder */}
+                  <span
+                    draggable
+                    role="button"
+                    aria-label={`Drag to reorder ${link.label}`}
+                    title="Drag to reorder"
+                    onDragStart={(ev) => {
+                      ev.dataTransfer.effectAllowed = "move";
+                      ev.dataTransfer.setData("text/plain", link.label);
+                      setDragIdx(i);
+                    }}
+                    onDragEnd={() => setDragIdx(null)}
+                    className="flex cursor-grab items-center border-r border-border/60 px-1.5 text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </span>
                   {link.url ? (
                     <a
                       href={link.url}
@@ -749,10 +788,6 @@ export function LinksEditor({
               </button>
             )}
           </div>
-      <p className="mt-1.5 text-[0.7rem] text-muted-foreground">
-        The external stack changes — edit or add links any time. Saves
-        locally in this demo.
-      </p>
     </div>
   );
 }
@@ -793,7 +828,15 @@ export function ContactLinksCard({
               <p className="font-medium">{athlete.name}</p>
               {profile ? (
                 <>
-                  <p>{profile.phone}</p>
+                  {/* S7 — phones dial on tap */}
+                  <p>
+                    <a
+                      href={telHref(profile.phone)}
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      {profile.phone}
+                    </a>
+                  </p>
                   {/* C16 — email is a mailto link */}
                   <p className="break-words">
                     <a
@@ -821,15 +864,20 @@ export function ContactLinksCard({
                       </a>
                     </p>
                   ) : null}
+                  {/* Round 13 (S6): HUDL reads like the Instagram row — a
+                      label plus a short "Profile" link, not the raw URL */}
                   {profile.hudl ? (
-                    <a
-                      href={normalizeUrl(profile.hudl)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      HUDL profile
-                    </a>
+                    <p>
+                      HUDL:{" "}
+                      <a
+                        href={normalizeUrl(profile.hudl)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand-ink underline-offset-2 hover:underline"
+                      >
+                        Profile
+                      </a>
+                    </p>
                   ) : null}
                 </>
               ) : (
@@ -842,14 +890,28 @@ export function ContactLinksCard({
                 <>
                   <p className="font-medium">{guardian.name}</p>
                   <p className="text-muted-foreground">{guardian.relation}</p>
-                  <p>{guardian.phone}</p>
+                  <p>
+                    <a
+                      href={telHref(guardian.phone)}
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      {guardian.phone}
+                    </a>
+                  </p>
                   <p className="break-words">{guardian.email}</p>
                 </>
               ) : emergency ? (
                 <>
                   <p className="font-medium">{emergency.name}</p>
                   <p className="text-muted-foreground">{emergency.relation}</p>
-                  <p>{emergency.phone}</p>
+                  <p>
+                    <a
+                      href={telHref(emergency.phone)}
+                      className="text-brand-ink underline-offset-2 hover:underline"
+                    >
+                      {emergency.phone}
+                    </a>
+                  </p>
                 </>
               ) : (
                 <p className="text-muted-foreground">None on file.</p>

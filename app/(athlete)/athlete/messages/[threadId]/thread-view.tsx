@@ -107,7 +107,7 @@ export function ThreadView({
             }
           }}
           rows={3}
-          placeholder="Write a message…  (⌘/Ctrl + Enter to send)"
+          placeholder="Write your message… (enter for a new line)"
           className="resize-none"
         />
         <div className="flex justify-end">

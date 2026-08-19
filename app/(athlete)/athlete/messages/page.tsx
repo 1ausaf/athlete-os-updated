@@ -28,15 +28,9 @@ export default async function AthleteMessagesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Round 11 (M2): the unread pill moved down into the tab row. */}
-      <PageHeader
-        title="Chat"
-        description={
-          athlete.isMinor
-            ? "Chat with the LPS team. Get informed with Announcements. Chats with minor athletes keep a second adult present — the Rule of Two."
-            : "Chat with the LPS team. Get informed with Announcements."
-        }
-      />
+      {/* Round 13 (C1): description gone — the tabs + channel title carry
+          the meaning (minors keep the Rule-of-Two note inside the chat). */}
+      <PageHeader title="Chat" />
 
       <MessagesClient
         athleteId={athlete.id}

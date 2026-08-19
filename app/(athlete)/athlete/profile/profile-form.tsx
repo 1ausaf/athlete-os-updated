@@ -115,13 +115,9 @@ export function ProfileForm({
                 <Camera className="h-3.5 w-3.5" />
               </button>
             </div>
+            {/* Round 13 (P1): photo helper copy removed */}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">{athleteName}</p>
-              <p className="mt-0.5 max-w-md text-xs text-muted-foreground text-pretty">
-                Your photo appears on rosters and huddle boards so coaches
-                recognize you. Upload is a demo here — production stores the
-                image.
-              </p>
             </div>
           </div>
 
@@ -160,9 +156,7 @@ export function ProfileForm({
               </Select>
             </Field>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Keep your details current — changes sync to your coaching team.
-          </p>
+          {/* Round 13 (P2): "changes sync" line removed */}
         </CardContent>
       </Card>
 
@@ -304,12 +298,10 @@ export function ProfileForm({
       {/* Socials + recruiting links */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+          {/* Round 13 (P3): card description removed */}
           <div className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-muted-foreground" aria-hidden />
             <h3 className="text-base">Social Media Links</h3>
-            <span className="ml-auto text-xs text-muted-foreground">
-              So the staff can find and share your highlights
-            </span>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {/* Round 8 (M42): the app supplies the @ — typed ones strip */}
@@ -426,17 +418,12 @@ export function ProfileForm({
           <Save className="h-4 w-4" />
           Save profile
         </Button>
+        {/* Round 13 (P4): footer helper line removed — the pill still confirms */}
         {saved ? (
           <Pill tone="success" icon={<CheckCircle2 className="h-3.5 w-3.5" />}>
             Profile saved — your coaches see the update
           </Pill>
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            {isParentView
-              ? "You're editing this on your child's behalf. Saves locally in this demo."
-              : "Changes appear on your card in the coach workspace. Saves locally in this demo."}
-          </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

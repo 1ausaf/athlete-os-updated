@@ -29,6 +29,8 @@ import { fmtDay } from "@/lib/demo/data";
 import { leanMassLb, type NutritionCheckIn } from "@/lib/demo/training";
 import { cn } from "@/lib/utils";
 
+import { appendSessionFeedback } from "../session-feedback";
+
 /* ------------------------------------------------------------------ */
 /* Delta math — "is it trending in the right direction?"               */
 /* ------------------------------------------------------------------ */
@@ -110,14 +112,20 @@ function DeltaBadge({
 
 export function WeeklyCheckIn({
   initialCheckIns,
+  athleteId,
 }: {
   /** History from the protocol, oldest → newest. */
   initialCheckIns: NutritionCheckIn[];
+  /** Round 13 (N3): keys the measurements → chat queue per athlete. */
+  athleteId: string;
 }) {
+  // Round 13 (N1): inputs start blank — placeholders hint the last values.
   const [checkIns, setCheckIns] = useState<NutritionCheckIn[]>(initialCheckIns);
   const [weightInput, setWeightInput] = useState("");
   const [bodyFatInput, setBodyFatInput] = useState("");
-  const [flash, setFlash] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  /** Round 13 (N3): prefilled chat message awaiting "notify the coaches?". */
+  const [pendingShare, setPendingShare] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -126,6 +134,22 @@ export function WeeklyCheckIn({
     },
     [],
   );
+
+  // Escape dismisses the notify-coaches dialog (N3).
+  useEffect(() => {
+    if (!pendingShare) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPendingShare(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [pendingShare]);
+
+  function showFlash(text: string) {
+    setFlash(text);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 4000);
+  }
 
   const weight = Number(weightInput);
   const bodyFat = Number(bodyFatInput);
@@ -138,22 +162,56 @@ export function WeeklyCheckIn({
     bodyFat > 0 &&
     bodyFat < 100;
 
+  /**
+   * Round 13 (N3): the prefilled chat body, deltas vs the previous logged
+   * entry — e.g. "Weekly measurements: 184.6 lb (−1.3 lb / −0.7%), body fat
+   * 11.2% (−0.3)".
+   */
+  function shareMessage(
+    w: number,
+    bf: number,
+    prevEntry: NutritionCheckIn | undefined,
+  ): string {
+    const sign = (d: Delta) =>
+      d.direction === "up" ? "+" : d.direction === "down" ? "−" : "±";
+    let body = `Weekly measurements: ${w.toFixed(1)} lb`;
+    const wd = prevEntry
+      ? deltaVsPrev(w, prevEntry.weightLb, (c) => c <= 0)
+      : null;
+    if (wd)
+      body += ` (${sign(wd)}${wd.abs.toFixed(1)} lb / ${sign(wd)}${wd.pct.toFixed(1)}%)`;
+    body += `, body fat ${bf.toFixed(1)}%`;
+    const bd = prevEntry
+      ? deltaVsPrev(bf, prevEntry.bodyFatPct, (c) => c < 0)
+      : null;
+    if (bd) body += ` (${sign(bd)}${bd.abs.toFixed(1)})`;
+    if (!prevEntry) body += " — first check-in";
+    return body;
+  }
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canSubmit) return;
+    const w = Math.round(weight * 10) / 10;
+    const bf = Math.round(bodyFat * 10) / 10;
+    const prevEntry = checkIns[checkIns.length - 1];
     setCheckIns((prev) => [
       ...prev,
-      {
-        date: new Date().toISOString(),
-        weightLb: Math.round(weight * 10) / 10,
-        bodyFatPct: Math.round(bodyFat * 10) / 10,
-      },
+      { date: new Date().toISOString(), weightLb: w, bodyFatPct: bf },
     ]);
     setWeightInput("");
     setBodyFatInput("");
-    setFlash(true);
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setFlash(false), 4000);
+    showFlash("Check-in logged — trend updated");
+    // N3: offer to drop the results into the athlete chat.
+    setPendingShare(shareMessage(w, bf, prevEntry));
+  }
+
+  /** N3 "Yes, send" — the queue merges into the chat (like session feedback). */
+  function sendShare() {
+    if (!pendingShare) return;
+    appendSessionFeedback(athleteId, pendingShare);
+    setPendingShare(null);
+    showFlash("Sent to your chat.");
   }
 
   /** Fat-fingered a check-in? Remove it — the trend recalculates. */
@@ -248,8 +306,9 @@ export function WeeklyCheckIn({
                 onChange={(e) => setBodyFatInput(e.target.value)}
               />
             </div>
+            {/* Round 13 (N2): "Log check-in" → "Log Measurements" */}
             <Button type="submit" variant="brand" disabled={!canSubmit}>
-              Log check-in
+              Log Measurements
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -263,11 +322,49 @@ export function WeeklyCheckIn({
             ) : null}
             {flash ? (
               <Pill tone="success" icon={<CheckCircle2 className="h-3 w-3" />}>
-                Check-in logged — trend updated
+                {flash}
               </Pill>
             ) : null}
           </div>
         </form>
+
+        {/* Round 13 (N3): after logging — offer to notify the coaches */}
+        {pendingShare ? (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-background/60 backdrop-blur-[2px]"
+              onClick={() => setPendingShare(null)}
+              aria-hidden
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Notify your coaches?"
+              className="absolute left-1/2 top-1/2 w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-glow"
+            >
+              <p className="text-base font-semibold text-pretty">
+                Would you like to notify the coaches of your results in the
+                chat?
+              </p>
+              <p className="tnum mt-1.5 rounded-lg border border-border bg-surface/50 p-2.5 text-sm text-muted-foreground text-pretty">
+                {pendingShare}
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPendingShare(null)}
+                >
+                  No thanks
+                </Button>
+                <Button type="button" variant="brand" size="sm" onClick={sendShare}>
+                  Yes, send
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {latest ? (
           <>
