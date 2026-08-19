@@ -22,6 +22,7 @@ import { staffById } from "@/lib/demo/staff";
 import {
   allTasks,
   appendLocalTask,
+  completeTask,
   readLocalTasks,
   removeLocalTask,
   setTaskDone,
@@ -182,6 +183,12 @@ export function TasksManager({
     setFormAssignee(t.assigneeId);
     setRecurrence(t.recurrence ?? "");
     setFormOpen(true);
+  }
+
+  /** Round 14 (V19): completion rolls recurring tasks to the next due date. */
+  function handleComplete(t: StaffTask) {
+    completeTask(t);
+    if (t.recurrence) showFlash("Done — next occurrence added");
   }
 
   function handleSave() {
@@ -380,6 +387,7 @@ export function TasksManager({
                 done={tab === "done"}
                 today={today}
                 deletable={localIds.has(t.id)}
+                onComplete={() => handleComplete(t)}
                 onEdit={
                   t.source === "manual" && tab === "todo"
                     ? () => openEdit(t)
@@ -466,12 +474,15 @@ function TaskRow({
   done,
   today,
   deletable,
+  onComplete,
   onEdit,
 }: {
   task: StaffTask;
   done: boolean;
   today: string;
   deletable: boolean;
+  /** V19 — completes via the lib store so recurring tasks roll forward. */
+  onComplete: () => void;
   /** K1 — present on manual to-dos only; reminders edit on the profile. */
   onEdit?: () => void;
 }) {
@@ -499,7 +510,7 @@ function TaskRow({
               type="button"
               aria-label={`Mark done: ${task.title}`}
               title="Mark done"
-              onClick={() => setTaskDone(task.id, true)}
+              onClick={onComplete}
               className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-full border-2 border-muted-foreground/40 transition-colors hover:border-brand hover:bg-brand/10"
             />
           )}

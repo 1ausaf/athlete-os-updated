@@ -720,24 +720,19 @@ function SessionRow({
       {/* Mobile line 4: coach + count + actions */}
       {/* Round 11: flex-wrap keeps the type chip + actions on-screen at 375px */}
       <div className="mt-1 flex flex-wrap items-center gap-2 xl:contents">
-        <span
-          className="flex shrink-0 items-center gap-2 xl:justify-self-center"
-          title={coachNames.join(" · ")}
-        >
-          <span className="flex -space-x-1.5">
-            {coachStaff.map((c) => (
+        {/* Round 14 (V9): avatars only — staff know each other; each avatar
+            carries a title tooltip with the coach's name. */}
+        <span className="flex shrink-0 -space-x-1.5 xl:justify-self-center">
+          {coachStaff.map((c) => (
+            <span key={c.id} title={c.name} className="inline-flex">
               <AthleteAvatar
-                key={c.id}
                 initials={c.initials}
                 hue={c.hue}
                 size="sm"
                 ring
               />
-            ))}
-          </span>
-          <span className="text-xs font-medium xl:hidden">
-            {coachNames.join(", ")}
-          </span>
+            </span>
+          ))}
         </span>
 
         {mode === "upcoming" ? (

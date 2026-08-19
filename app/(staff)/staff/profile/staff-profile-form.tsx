@@ -51,6 +51,9 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const [lastName, setLastName] = useState(member.lastName);
   const [title, setTitle] = useState(member.title);
   const [designations, setDesignations] = useState(member.designations ?? "");
+  // Round 14 (V16): free-text display name so coaches can go by last name
+  // ("Coach Mason", "Coach Clance") — seeded from the current display name.
+  const [displayName, setDisplayName] = useState(member.name);
   const [phone, setPhone] = useState(member.phone);
   const [email, setEmail] = useState(member.email);
   const [bio, setBio] = useState(member.bio);
@@ -68,8 +71,9 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const [ecPhone, setEcPhone] = useState(member.emergencyContact?.phone ?? "");
   const [push, setPush] = useState(member.notifications.push);
   const [emailNotif, setEmailNotif] = useState(member.notifications.email);
-  // R37 — staff get pinged when a member books or cancels; on by default.
-  const [bookingNotif, setBookingNotif] = useState(true);
+  // R37 / Round 14 (V17): scoped to sessions YOU coach and off by default —
+  // coaches shouldn't be pinged for every member booking in the gym.
+  const [bookingNotif, setBookingNotif] = useState(false);
   const [saved, setSaved] = useState(false);
   // F4/S5 — self-serve certification upload + expired-cert renewal.
   const [certs, setCerts] = useState<StaffCertification[]>(
@@ -81,11 +85,13 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
   const certFileRef = useRef<HTMLInputElement>(null);
   const uploadPanelRef = useRef<HTMLDivElement>(null);
 
-  // S2 — the display name flips to "Coach First Last" once both names exist.
-  const displayName =
-    firstName.trim() && lastName.trim()
+  // S2/V16 — the typed display name wins; empty falls back to
+  // "Coach First Last" once both names exist.
+  const shownName =
+    displayName.trim() ||
+    (firstName.trim() && lastName.trim()
       ? `Coach ${firstName.trim()} ${lastName.trim()}`
-      : member.name;
+      : member.name);
 
   function handleSave() {
     setSaved(true);
@@ -142,7 +148,7 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   storageKey={`aos-avatar-staff-${member.id}`}
                 />
                 <div className="min-w-0">
-                  <h3 className="text-lg font-bold">{displayName}</h3>
+                  <h3 className="text-lg font-bold">{shownName}</h3>
                   <p className="text-sm text-muted-foreground">
                     {title.trim()}
                     {designations.trim() ? ` · ${designations.trim()}` : ""}
@@ -171,6 +177,20 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                     onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
+                {/* V16 — go by last name if you like ("Coach Mason") */}
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Display Name
+                  </Label>
+                  <Input
+                    value={displayName}
+                    placeholder="e.g. Coach Mason"
+                    onChange={(e) => setDisplayName(e.target.value)}
+                  />
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    How your name appears across the workspace.
+                  </p>
+                </div>
                 <div className="grid gap-1.5">
                   <Label className="text-xs text-muted-foreground">Title</Label>
                   <Input
@@ -189,11 +209,6 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   />
                 </div>
               </div>
-              <p className="text-[0.7rem] text-muted-foreground">
-                With both names filled in, you show up as &ldquo;Coach{" "}
-                {firstName.trim() || "First"} {lastName.trim() || "Last"}&rdquo;
-                across the app.
-              </p>
             </CardContent>
           </Card>
 
@@ -335,8 +350,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   // S1 — the push hint names what actually notifies you.
                   ["Push notifications", push, setPush, "Chats you're subscribed to or actively involved in — straight to your phone."],
                   ["Email", emailNotif, setEmailNotif, "Daily digest + anything that needs a reply."],
-                  // R37 — booking activity, default on.
-                  ["Booking activity", bookingNotif, setBookingNotif, "When a member books or cancels a session."],
+                  // R37/V17 — your own sessions only, default off.
+                  ["Booking activity", bookingNotif, setBookingNotif, "Bookings for sessions you coach — when a member books or cancels."],
                 ] as const
               ).map(([label, value, set, hint]) => (
                 <label

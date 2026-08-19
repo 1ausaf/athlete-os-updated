@@ -19,6 +19,7 @@ import {
   renderChatBody,
   VoiceNoteBubble,
 } from "@/components/app/chat-composer";
+import { Pill } from "@/components/ui/pill";
 import { cn } from "@/lib/utils";
 import type { ChatAttachment } from "@/lib/demo/chat";
 import { relTime } from "@/lib/demo/data";
@@ -53,8 +54,8 @@ function fmtTime(iso: string): string {
 /** Round 12 (N18) — per-thread Subscribe checkbox state, persisted across
     visits ({[threadId]: boolean}; absent = the seed subscription). */
 const SUBS_KEY = "aos-thread-subs";
-/** Round 13 (S10c): the checkbox lives above the card now, so the two
-    components sync through this window event. */
+/** Round 13 (S10c): the checkbox lives outside the card (Round 14 V12:
+    below it), so the two components sync through this window event. */
 const SUBS_EVENT = "aos-thread-subs-changed";
 
 function readSubsMap(): Record<string, boolean> {
@@ -84,16 +85,21 @@ function writeSub(threadId: string, next: boolean): void {
   window.dispatchEvent(new Event(SUBS_EVENT));
 }
 
-/** S10c — the "Subscribe to Chat" control, rendered right under the
-    PageHeader; it writes the store the conversation below listens to. */
+/** S10c — the "Subscribe to Chat" control; Round 14 (V12): rendered right
+    BELOW the conversation card now, next to the who's-in-this-chat roster
+    disclosure (V14). It writes the store the conversation listens to. */
 export function ThreadSubscribeBar({
   threadId,
   seedSubscribed = false,
+  participants,
 }: {
   threadId: string;
   seedSubscribed?: boolean;
+  /** V14 — when provided, an info disclosure lists who's in the chat. */
+  participants?: ThreadParticipant[];
 }) {
   const [subscribed, setSubscribed] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   useEffect(() => {
     const refresh = () =>
@@ -103,18 +109,66 @@ export function ThreadSubscribeBar({
     return () => window.removeEventListener(SUBS_EVENT, refresh);
   }, [threadId, seedSubscribed]);
 
+  // Round 14 (V14): athlete / parents / coaches grouping — admins count as
+  // coaching staff for the roster.
+  const everyone = participants ?? [];
+  const rosterGroups = [
+    {
+      one: "Athlete",
+      many: "Athletes",
+      members: everyone.filter((p) => p.role === "athlete"),
+    },
+    {
+      one: "Parent",
+      many: "Parents",
+      members: everyone.filter((p) => p.role === "guardian"),
+    },
+    {
+      one: "Coach",
+      many: "Coaches",
+      members: everyone.filter((p) => p.role === "coach" || p.role === "admin"),
+    },
+  ].filter((g) => g.members.length > 0);
+
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
-      {subscribed ? (
-        <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
-          <BellRing className="h-3.5 w-3.5" />
-          Subscribed — you&apos;ll be notified of new messages in this chat.
-        </p>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+        {subscribed ? (
+          <p className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-ink">
+            <BellRing className="h-3.5 w-3.5" />
+            Subscribed — you&apos;ll be notified of new messages in this chat.
+          </p>
+        ) : null}
+        <SubscribeCheckbox
+          checked={subscribed}
+          onChange={(next) => writeSub(threadId, next)}
+        />
+        {rosterGroups.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setRosterOpen((o) => !o)}
+            aria-expanded={rosterOpen}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden />
+            Who&apos;s in this chat
+          </button>
+        ) : null}
+      </div>
+      {rosterOpen && rosterGroups.length > 0 ? (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs sm:flex-row sm:flex-wrap sm:gap-x-6">
+          {rosterGroups.map((g) => (
+            <div key={g.one} className="flex flex-wrap items-baseline gap-x-1.5">
+              <span className="font-semibold text-foreground">
+                {g.members.length === 1 ? g.one : g.many}:
+              </span>
+              <span className="text-muted-foreground">
+                {g.members.map((m) => m.name).join(", ")}
+              </span>
+            </div>
+          ))}
+        </div>
       ) : null}
-      <SubscribeCheckbox
-        checked={subscribed}
-        onChange={(next) => writeSub(threadId, next)}
-      />
     </div>
   );
 }
@@ -147,8 +201,8 @@ export function ThreadConversation({
   mentionNames?: string[];
 }) {
   const [messages, setMessages] = useState<ConvoMessage[]>(initialMessages);
-  // N18 — persistent subscription; Round 13 (S10c): the checkbox itself is
-  // the ThreadSubscribeBar above the card, synced here via SUBS_EVENT.
+  // N18 — persistent subscription; the checkbox itself is the
+  // ThreadSubscribeBar below the card (V12), synced here via SUBS_EVENT.
   const [subscribed, setSubscribed] = useState(false);
   // R35 — which message's read-receipt popover is open.
   const [receiptOpen, setReceiptOpen] = useState<string | null>(null);
@@ -249,15 +303,18 @@ export function ThreadConversation({
             <div
               key={m.id}
               className={cn(
-                "group flex items-end gap-2.5",
+                // Round 14 (V13): avatars top-align, like the athlete side.
+                "group flex items-start gap-2.5",
                 mine ? "flex-row-reverse" : "flex-row",
               )}
             >
+              {/* Round 14 (V13): mobile drops avatars — names alone. */}
               {!mine ? (
                 <AthleteAvatar
                   initials={initialsFor(m.senderName)}
                   hue={hueFor(m.senderId)}
                   size="sm"
+                  className="max-sm:hidden"
                 />
               ) : null}
               <div
@@ -266,10 +323,16 @@ export function ThreadConversation({
                   mine ? "items-end" : "items-start",
                 )}
               >
+                {/* Round 14 (V7/V11): bold name, no role suffix — parents
+                    keep the athlete-side chip so senders stay identifiable */}
                 {!mine ? (
-                  <span className="px-1 text-xs font-medium text-muted-foreground">
+                  <span className="flex items-center gap-1.5 px-1 text-xs font-semibold text-foreground">
                     {m.senderName}
-                    <span className="opacity-60"> · {m.senderRole}</span>
+                    {m.senderRole === "guardian" ? (
+                      <Pill tone="info" className="px-1.5 py-0 text-[0.62rem]">
+                        Parent
+                      </Pill>
+                    ) : null}
                   </span>
                 ) : null}
                 {removed ? (
@@ -284,7 +347,9 @@ export function ThreadConversation({
                         "rounded-2xl px-3.5 py-2 text-sm",
                         mine
                           ? "rounded-br-sm bg-brand/15 text-foreground"
-                          : "rounded-bl-sm border border-border bg-surface/60",
+                          : // Round 14 (V13): borderless tint on mobile;
+                            // sm+ restores the outlined desktop bubble.
+                            "rounded-bl-sm bg-muted/60 sm:border sm:border-border sm:bg-surface/60",
                       )}
                     >
                       {m.body ? renderChatBody(m.body) : null}
@@ -292,7 +357,9 @@ export function ThreadConversation({
                         <AttachmentView key={i} attachment={a} />
                       ))}
                     </div>
-                    <span className="flex items-center gap-1 px-1 text-[0.7rem] text-muted-foreground">
+                    {/* Round 14 (V8): same lighter timestamp gray as the
+                        athlete side — reads in both themes. */}
+                    <span className="flex items-center gap-1 px-1 text-[0.7rem] text-[#767676]">
                       {fmtTime(m.at)}
                       {staffSent ? (
                         <span
@@ -339,7 +406,9 @@ export function ThreadConversation({
                   onClick={() => removeMessage(m.id)}
                   aria-label={`Remove message from ${m.senderName} (admin)`}
                   title="Remove message (admin)"
-                  className="mb-5 rounded-md p-1.5 text-muted-foreground/70 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                  // Round 14 (V13): rows top-align now — center the admin
+                  // delete affordance against the message group instead.
+                  className="self-center rounded-md p-1.5 text-muted-foreground/70 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -349,8 +418,8 @@ export function ThreadConversation({
         })}
       </div>
 
-      {/* Composer pinned at the bottom of the pane — S10c: the Subscribe
-          checkbox moved up under the PageHeader */}
+      {/* Composer pinned at the bottom of the pane — Round 14 (V12): the
+          Subscribe checkbox sits just below the conversation card now */}
       {posting ? (
         <div className="shrink-0">
           <ChatComposer
@@ -366,7 +435,7 @@ export function ThreadConversation({
           <span className="inline-flex items-center gap-2">
             <Eye className="h-4 w-4 shrink-0" />
             View only — you&rsquo;re not subscribed to this chat. Subscribe to
-            Chat above to join and post.
+            Chat below to join and post.
           </span>
         </div>
       )}

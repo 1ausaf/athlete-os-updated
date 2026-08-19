@@ -3,16 +3,10 @@ import { Megaphone } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isAdmin, isStaff } from "@/lib/rbac";
 import { athleteById, threadById } from "@/lib/demo/data";
-import {
-  assignedStaffIds,
-  assignmentsForAthlete,
-  COACH_ROLE_LABEL,
-  staffMembers,
-} from "@/lib/demo/staff";
+import { assignedStaffIds, staffMembers } from "@/lib/demo/staff";
 
 import { ThreadConversation, ThreadSubscribeBar } from "./thread-conversation";
 
@@ -45,11 +39,6 @@ export default async function StaffThreadPage({ params }: PageProps) {
   const athleteParticipant = thread.participants.find(
     (p) => p.role === "athlete" && athleteById(p.id),
   );
-  const assignment = athleteParticipant
-    ? assignmentsForAthlete(athleteParticipant.id).find(
-        (a) => a.staffId === user.id,
-      )
-    : undefined;
   const involved = isBroadcast
     ? true
     : athleteParticipant
@@ -72,18 +61,9 @@ export default async function StaffThreadPage({ params }: PageProps) {
     // R34: iPhone got a too-short window — dvh sizing (with a vh fallback)
     // plus a 70dvh floor keeps the message area usably tall on mobile.
     <div className="flex min-h-[70dvh] h-[calc(100vh-7rem)] supports-[height:100dvh]:h-[calc(100dvh-7rem)] flex-col gap-4 md:h-[calc(100vh-9rem)] md:supports-[height:100dvh]:h-[calc(100dvh-9rem)]">
-      {/* Round 13 (S10a/b): participants only — no "Started …" prefix, and
-          the back button is gone (browser Back + breadcrumb cover it) */}
-      <PageHeader
-        title={thread.subject}
-        description={thread.participants.map((p) => p.name).join(", ")}
-      />
-
-      {/* S10c — Subscribe moved out of the chat box, up under the header */}
-      <ThreadSubscribeBar
-        threadId={thread.id}
-        seedSubscribed={SUBSCRIBED[user.id]?.includes(thread.id) ?? false}
-      />
+      {/* Round 14 (V14): the title stands alone — the participant roster
+          moved into the "Who's in this chat" disclosure below the chat */}
+      <PageHeader title={thread.subject} />
 
       {/* R8 (H3): the Rule-of-Two banner is gone — the admin auto-adds
           parents on every minor's chat, so there's nothing to police here. */}
@@ -97,30 +77,8 @@ export default async function StaffThreadPage({ params }: PageProps) {
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-5">
-          {/* R34 — hidden on phones: the header already lists everyone and
-              every pixel goes to the message area. */}
-          <div className="hidden flex-wrap items-center gap-1.5 md:flex">
-            <span className="eyebrow">Participants</span>
-            {thread.participants.map((p) => (
-              <Pill
-                key={p.id}
-                tone={p.role === "coach" ? "brand" : "neutral"}
-              >
-                {p.name}
-                <span className="opacity-60">· {p.role}</span>
-              </Pill>
-            ))}
-            {assignment ? (
-              <Pill tone="brand" className="ml-auto">
-                You · {COACH_ROLE_LABEL[assignment.role]}
-              </Pill>
-            ) : admin && !isBroadcast ? (
-              <Pill tone="info" className="ml-auto">
-                Admin oversight
-              </Pill>
-            ) : null}
-          </div>
-
+          {/* Round 14 (V11/V14): the participants pill row is gone — the
+              roster lives in the disclosure below the card. */}
           <ThreadConversation
             threadId={thread.id}
             initialMessages={thread.messages}
@@ -138,6 +96,14 @@ export default async function StaffThreadPage({ params }: PageProps) {
           />
         </CardContent>
       </Card>
+
+      {/* Round 14 (V12): Subscribe sits below the conversation now, with the
+          who's-in-this-chat roster disclosure (V14) beside it */}
+      <ThreadSubscribeBar
+        threadId={thread.id}
+        seedSubscribed={SUBSCRIBED[user.id]?.includes(thread.id) ?? false}
+        participants={thread.participants}
+      />
     </div>
   );
 }

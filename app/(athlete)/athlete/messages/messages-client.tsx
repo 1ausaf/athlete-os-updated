@@ -42,7 +42,7 @@ import { readSessionFeedback } from "../session-feedback";
 
 /**
  * Round 8 (M31): bubble timestamps — a bare time for today's messages,
- * "August 2, 2026 at 3:43 PM" for anything older.
+ * "Aug 2, 2026 at 3:43 PM" for anything older (Round 14 V8: short month).
  */
 function stampFor(iso: string): string {
   const d = new Date(iso);
@@ -53,7 +53,7 @@ function stampFor(iso: string): string {
   });
   if (d.toDateString() === now.toDateString()) return time;
   const day = d.toLocaleDateString("en-US", {
-    month: "long",
+    month: "short",
     day: "numeric",
     year: "numeric",
   });
@@ -389,9 +389,11 @@ function CoachChat({
                 ) : null}
                 <div className={cn("max-w-[78%]", mine && "text-right")}>
                   {!mine || fromParent ? (
+                    // Round 14 (V7): bold, full-contrast sender names so
+                    // messages attribute at a glance.
                     <div
                       className={cn(
-                        "mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground",
+                        "mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground",
                         mine && "justify-end",
                       )}
                     >
@@ -422,8 +424,9 @@ function CoachChat({
                       <AttachmentCard attachment={a} />
                     </div>
                   ))}
-                  {/* Round 8 (M31): today = time only; older = full date */}
-                  <div className="mt-1 text-[0.68rem] text-muted-foreground">
+                  {/* Round 8 (M31): today = time only; older = full date.
+                      Round 14 (V8): lighter fixed gray — reads in both themes. */}
+                  <div className="mt-1 text-[0.68rem] text-[#767676]">
                     {stampFor(m.at)}
                   </div>
                 </div>

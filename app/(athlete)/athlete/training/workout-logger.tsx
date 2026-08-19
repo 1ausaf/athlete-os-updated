@@ -1354,7 +1354,7 @@ export function WorkoutLogger({
           .session-print .py-2 { padding-top: 0.15rem !important; padding-bottom: 0.15rem !important; }
           .session-print .gap-3 { gap: 0.35rem !important; }
           .session-print .gap-5 { gap: 0.45rem !important; }
-          .session-print .print-set-row { padding-top: 1px !important; padding-bottom: 1px !important; }
+          .session-print .print-set-row { padding-top: 1px !important; padding-bottom: 1px !important; align-items: center !important; }
           .session-print .print-set-row input { height: 1rem !important; font-size: 7.5px !important; }
           .session-print .rounded-xl { border-radius: 0.4rem !important; }
           .session-print .print-set-head,
@@ -1558,13 +1558,15 @@ function ExerciseBlock({
             ) : null}
           </div>
           {ex.instructions ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            // Round 14 (V4): mt-1 like the lines below — the stack reads even.
+            <p className="mt-1 text-xs text-muted-foreground">
               {ex.instructions}
             </p>
           ) : null}
           {hist ? (
             // Round 8 (M15): Last/Best PRINTS — coaches want it on paper.
-            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+            // Round 14 (V4): gap-y-1 — a wrapped Best line keeps the 4px rhythm.
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
               <History className="h-3 w-3" aria-hidden />
               {/* Round 11 (M11): Last/Best follow the section's lb⇄kg toggle;
                   (M10): a live best from today's checked sets shows in place. */}
@@ -1704,12 +1706,15 @@ function ExerciseBlock({
           // Round 11 (M12): unit targets ("15 yd") — the box holds ONLY the
           // number; the unit renders as a suffix label beside the input.
           const targetParts = splitTarget(set.target);
+          // Round 14 (V2): rows bottom-align on mobile so the %/BW hint that
+          // stacks above the weight box can't push it below the result box —
+          // every input sits level; sm: keeps the centered desktop row.
           return (
             <div
               key={i}
-              className="print-set-row grid grid-cols-[1rem_minmax(3.5rem,1.5fr)_minmax(4.25rem,1fr)_3.25rem] items-center gap-x-1.5 border-t border-border/60 py-1.5 sm:grid-cols-[1.25rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] sm:gap-x-2"
+              className="print-set-row grid grid-cols-[1rem_minmax(3.5rem,1.5fr)_minmax(4.25rem,1fr)_3.25rem] items-end gap-x-1.5 border-t border-border/60 py-1.5 sm:grid-cols-[1.25rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] sm:items-center sm:gap-x-2"
             >
-              <span className="tnum text-xs font-semibold text-muted-foreground">
+              <span className="tnum self-center text-xs font-semibold text-muted-foreground">
                 {i + 1}
               </span>
               {/* Round 13 (T7): Target prints only — on screen it's the
@@ -1725,7 +1730,7 @@ function ExerciseBlock({
                   inputMode="decimal"
                   min={0}
                   aria-label={`Set ${i + 1} weight for ${name} in ${row.unit}`}
-                  className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                  className="tnum h-9 w-full min-w-0 px-1.5 text-sm font-semibold"
                   value={weightInUnit(row.weight, row.unit)}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -1754,7 +1759,7 @@ function ExerciseBlock({
                     inputMode="decimal"
                     min={0}
                     aria-label={`Set ${i + 1} weight for ${name} in ${row.unit} — prescribed ${set.load}%, editable`}
-                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                    className="tnum h-9 w-full min-w-0 px-1.5 text-sm font-semibold"
                     value={
                       row.weight != null
                         ? weightInUnit(row.weight, row.unit)
@@ -1791,7 +1796,7 @@ function ExerciseBlock({
                     min={0}
                     placeholder="load"
                     aria-label={`Set ${i + 1} added load for ${name} in ${row.unit} — optional, on top of bodyweight`}
-                    className="tnum h-8 w-full min-w-0 px-1.5 text-sm font-semibold"
+                    className="tnum h-9 w-full min-w-0 px-1.5 text-sm font-semibold"
                     value={
                       row.weight != null ? weightInUnit(row.weight, row.unit) : ""
                     }
@@ -1823,7 +1828,7 @@ function ExerciseBlock({
                     aria-label={`Set ${i + 1} result for ${name} in ${targetParts.unit}`}
                     placeholder={missed ? "Missed" : targetParts.value}
                     className={cn(
-                      "tnum h-8 w-full min-w-0 px-1.5 text-sm",
+                      "tnum h-9 w-full min-w-0 px-1.5 text-sm",
                       missed &&
                         "border-destructive/50 placeholder:text-destructive/70",
                     )}
@@ -1842,7 +1847,7 @@ function ExerciseBlock({
                   aria-label={`Set ${i + 1} result for ${name}`}
                   placeholder={missed ? "Missed" : set.target}
                   className={cn(
-                    "tnum h-8 w-full min-w-0 px-1.5 text-sm",
+                    "tnum h-9 w-full min-w-0 px-1.5 text-sm",
                     missed && "border-destructive/50 placeholder:text-destructive/70",
                   )}
                   value={row.result}
@@ -1851,7 +1856,7 @@ function ExerciseBlock({
               )}
 
               {/* Round 7: ✓ hit + ✗ miss, side by side. Never printed (M15). */}
-              <span className="no-print flex items-center justify-center gap-1">
+              <span className="no-print flex items-center justify-center gap-1 self-center">
                 {/* Round 11 (M9): ✓ confirms a typed value instead of
                     clearing it; only a second ✓ on a confirmed set un-logs. */}
                 <button

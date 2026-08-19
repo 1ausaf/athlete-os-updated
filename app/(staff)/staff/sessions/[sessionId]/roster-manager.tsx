@@ -308,15 +308,35 @@ function RosterRow({
   onRemoveConfirm: () => void;
   onRemoveCancel: () => void;
 }) {
+  // Round 14 (V10): the booking-state pill, rendered next to the name on
+  // phones and inside the right-hand action cluster on sm+.
+  const statePill = noShow ? (
+    <Pill tone="danger" dot>
+      No-show
+    </Pill>
+  ) : state === "pending" ? (
+    <Pill tone="warning" dot>
+      Pending
+    </Pill>
+  ) : state === "waitlisted" ? (
+    <Pill tone="info">Waitlisted</Pill>
+  ) : (
+    <Pill tone="success" dot>
+      Confirmed
+    </Pill>
+  );
+
   return (
-    // flex-wrap: the action cluster drops below the identity on phones so a
-    // row's min-content never exceeds a 375px viewport (R10 mobile pass).
+    // Round 14 (V10): on phones the row reads as two left-aligned lines —
+    // avatar + name (+state pill), then the actions on their own line
+    // (basis-full + justify-start). sm+ keeps actions right, as before.
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-soft">
       <AthleteAvatar initials={athlete.initials} hue={athlete.hue} size="md" />
       <div className="min-w-0 flex-1">
         {/* Line 1 — name + the flags that matter on the floor */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-semibold">{athlete.name}</span>
+          <span className="sm:hidden">{statePill}</span>
           {athlete.billingState === "overdue" ? (
             <Pill tone="danger">Payment overdue</Pill>
           ) : athlete.billingState === "pending" ? (
@@ -341,8 +361,8 @@ function RosterRow({
 
       {removalStep > 0 ? (
         // S5: two distinct confirmations before the booking is dropped.
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-          <span className="max-w-[240px] text-right text-xs font-medium text-destructive">
+        <div className="flex min-w-0 basis-full flex-wrap items-center justify-start gap-1.5 sm:basis-auto sm:justify-end">
+          <span className="max-w-[240px] text-left text-xs font-medium text-destructive sm:text-right">
             {removalStep === 1
               ? `Remove ${athlete.name} from this session?`
               : "Are you sure? Their spot will be released."}
@@ -363,44 +383,31 @@ function RosterRow({
           </button>
         </div>
       ) : (
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-          {noShow ? (
-            // R29 — the no-show flag outranks the booking state on the row.
-            <Pill tone="danger" dot>
-              No-show
-            </Pill>
-          ) : state === "pending" ? (
-            <>
-              <Pill tone="warning" dot>
-                Pending
-              </Pill>
-              <button
-                type="button"
-                onClick={onApprove}
-                className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Approve
-              </button>
-            </>
-          ) : state === "waitlisted" ? (
-            <>
-              <Pill tone="info">Waitlisted</Pill>
-              {/* Round 12 (N15): promote straight off the waitlist. */}
-              <button
-                type="button"
-                onClick={onApprove}
-                className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                Add to Attendees
-              </button>
-            </>
-          ) : (
-            <Pill tone="success" dot>
-              Confirmed
-            </Pill>
-          )}
+        <div className="flex min-w-0 basis-full flex-wrap items-center justify-start gap-1.5 sm:basis-auto sm:justify-end">
+          {/* R29 — the no-show flag outranks the booking state on the row.
+              V10: the pill lives beside the name on phones. */}
+          <span className="max-sm:hidden">{statePill}</span>
+          {!noShow && state === "pending" ? (
+            <button
+              type="button"
+              onClick={onApprove}
+              className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Approve
+            </button>
+          ) : null}
+          {!noShow && state === "waitlisted" ? (
+            // Round 12 (N15): promote straight off the waitlist.
+            <button
+              type="button"
+              onClick={onApprove}
+              className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Add to Attendees
+            </button>
+          ) : null}
           {/* R29 — toggle a no-show; matters most on past sessions.
               Round 12 (N14): grey when unset, red when the flag is ON. */}
           <button
