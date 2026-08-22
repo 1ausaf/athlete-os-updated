@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   CalendarClock,
   Check,
   CheckCircle2,
+  CreditCard,
+  MoreVertical,
+  Pencil,
   Plus,
   Receipt,
   Send,
@@ -53,12 +57,36 @@ function remainingCents(inv: Invoice): number {
 }
 
 /**
+ * Round 15 (W1): where the open row menu sits on screen. Placement is
+ * captured from the trigger's rect at open time; the menu renders through a
+ * portal (the table wrappers clip overflow) and drops UP near the viewport
+ * bottom so the last rows stay reachable.
+ */
+interface RowMenuState {
+  id: string;
+  top: number;
+  bottom: number;
+  right: number;
+  dropUp: boolean;
+}
+
+/** One status-filtered entry in the row's ⋯ overflow menu. */
+interface RowMenuItem {
+  label: string;
+  icon: ReactNode;
+  destructive?: boolean;
+  onSelect: () => void;
+}
+
+/**
  * Invoices panel: header + table + the round-5 "New invoice" flow (O2 — e.g.
  * a chiropractor pass-through billed straight to the client). Any open
  * invoice can still be marked paid manually (cash / e-transfer settled
  * outside Square) or canceled. Round 10: audit dates on every row (R45),
  * payment method + partial payments at mark-paid time (R47/R48), refunds
- * (R49) and receipts (R50). Local state, demo only.
+ * (R49) and receipts (R50). Round 15 (W1): the inline action cluster is now
+ * a per-row ⋯ overflow menu (messaging-inbox idiom) and open invoices gain
+ * an Edit… dialog for amount + due date. Local state, demo only.
  */
 export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
   const [rows, setRows] = useState<Invoice[]>(invoices);
@@ -66,13 +94,33 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
   // B1 — row actions ask for confirmation before the status flips.
   const [confirming, setConfirming] = useState<{
     inv: Invoice;
-    action: "paid" | "cancel" | "record" | "refund" | "push";
+    action: "paid" | "cancel" | "record" | "refund" | "push" | "edit";
   } | null>(null);
+  // W1 — which row's ⋯ overflow menu is open (plus where to draw it).
+  const [menuFor, setMenuFor] = useState<RowMenuState | null>(null);
   // R50 — receipt/refund confirmations flash at the bottom of the screen.
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<number>();
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  // W1 — the open row menu closes on Escape and on any scroll (its portal
+  // position is fixed, so it would drift from the row otherwise).
+  useEffect(() => {
+    if (!menuFor) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuFor(null);
+    }
+    function onScroll() {
+      setMenuFor(null);
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [menuFor]);
 
   function showFlash(message: string) {
     setFlash(message);
@@ -156,6 +204,74 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
     setConfirming(null);
   }
 
+  /**
+   * Round 15 (W1): the ⋯ menu's entries, filtered by status. Every entry
+   * reuses an existing handler/dialog — "Take Payment" is simply the menu
+   * label for the record-payment flow; only "Edit…" is new. Canceled and
+   * refunded rows get no menu (the trigger renders disabled).
+   */
+  function menuItemsFor(inv: Invoice): RowMenuItem[] {
+    const iconCls = "h-3.5 w-3.5 text-muted-foreground";
+    const isOpen =
+      inv.status === "due" ||
+      inv.status === "overdue" ||
+      inv.status === "upcoming";
+    const takePayment: RowMenuItem = {
+      label: "Take Payment",
+      icon: <CreditCard className={iconCls} />,
+      onSelect: () => setConfirming({ inv, action: "record" }),
+    };
+    const refund: RowMenuItem = {
+      label: "Refund…",
+      icon: <Undo2 className={iconCls} />,
+      onSelect: () => setConfirming({ inv, action: "refund" }),
+    };
+    const cancel: RowMenuItem = {
+      label: "Cancel",
+      icon: <XCircle className="h-3.5 w-3.5" />,
+      destructive: true,
+      onSelect: () => setConfirming({ inv, action: "cancel" }),
+    };
+    if (isOpen) {
+      return [
+        takePayment,
+        {
+          label: "Mark as Paid",
+          icon: <Check className={iconCls} />,
+          onSelect: () => setConfirming({ inv, action: "paid" }),
+        },
+        {
+          label: "Push Due Date",
+          icon: <CalendarClock className={iconCls} />,
+          onSelect: () => setConfirming({ inv, action: "push" }),
+        },
+        {
+          label: "Edit…",
+          icon: <Pencil className={iconCls} />,
+          onSelect: () => setConfirming({ inv, action: "edit" }),
+        },
+        cancel,
+      ];
+    }
+    if (inv.status === "partial") return [takePayment, refund, cancel];
+    if (inv.status === "paid") {
+      return [
+        {
+          label: "Send Receipt",
+          icon: <Send className={iconCls} />,
+          onSelect: () => showFlash(`Receipt sent to ${inv.athleteName}.`),
+        },
+        refund,
+      ];
+    }
+    return [];
+  }
+
+  // W1 — the invoice whose menu is open (menu markup lives in one portal).
+  const menuInv = menuFor
+    ? (rows.find((r) => r.id === menuFor.id) ?? null)
+    : null;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -191,16 +307,18 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
               <TableHead>Due</TableHead>
               <TableHead className="hidden md:table-cell">Method</TableHead>
               <TableHead className="text-right">Status</TableHead>
+              {/* W1 — the ⋯ overflow-menu column */}
+              <TableHead className="w-10">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((inv) => {
               const meta = statusMeta[inv.status];
               const isOverdue = inv.status === "overdue";
-              const isOpen =
-                inv.status === "due" ||
-                inv.status === "overdue" ||
-                inv.status === "upcoming";
+              // W1 — canceled/refunded rows have an empty menu.
+              const hasActions = menuItemsFor(inv).length > 0;
               // R45/R47/R48 — the resolved line under the status pill.
               const resolvedNote =
                 inv.status === "paid"
@@ -258,100 +376,51 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {inv.paidMethod ?? inv.method}
                   </TableCell>
+                  {/* W1 — the pill is information and stays on the row;
+                      the actions moved into the ⋯ menu next door. */}
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {isOpen ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            title="Settle manually — cash or e-transfer taken outside Square"
-                            onClick={() =>
-                              setConfirming({ inv, action: "paid" })
-                            }
-                          >
-                            <Check className="h-4 w-4" />
-                            Mark paid
-                          </Button>
-                          {/* A6 — client away: push the billing cycle back */}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            title="Push the due date back while the client is away"
-                            onClick={() =>
-                              setConfirming({ inv, action: "push" })
-                            }
-                          >
-                            <CalendarClock className="h-4 w-4" />
-                            Push due date
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive"
-                            title="Cancel this invoice"
-                            onClick={() =>
-                              setConfirming({ inv, action: "cancel" })
-                            }
-                          >
-                            <XCircle className="h-4 w-4" />
-                            Cancel
-                          </Button>
-                        </>
-                      ) : null}
-                      {/* R48 — top up a partially paid invoice */}
-                      {inv.status === "partial" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          title="Record another payment against the balance"
-                          onClick={() =>
-                            setConfirming({ inv, action: "record" })
-                          }
-                        >
-                          <Plus className="h-4 w-4" />
-                          Record payment
-                        </Button>
-                      ) : null}
-                      {/* R49/R50 — refund + re-send receipt on paid rows */}
-                      {inv.status === "paid" ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive"
-                            title="Refund this payment — full or partial"
-                            onClick={() =>
-                              setConfirming({ inv, action: "refund" })
-                            }
-                          >
-                            <Undo2 className="h-4 w-4" />
-                            Refund…
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                            title="Email the receipt again"
-                            onClick={() =>
-                              showFlash(`Receipt sent to ${inv.athleteName}.`)
-                            }
-                          >
-                            <Send className="h-4 w-4" />
-                            Send Receipt
-                          </Button>
-                        </>
-                      ) : null}
-                      <Pill tone={meta.tone} dot>
-                        {meta.label}
-                      </Pill>
-                    </div>
+                    <Pill tone={meta.tone} dot>
+                      {meta.label}
+                    </Pill>
                     {resolvedNote ? (
                       <div className="mt-1 text-[0.7rem] text-muted-foreground">
                         {resolvedNote}
                       </div>
                     ) : null}
+                  </TableCell>
+                  {/* W1 — per-row ⋯ overflow menu (inbox idiom); canceled /
+                      refunded rows have nothing to do, so it's disabled. */}
+                  <TableCell className="w-10 text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground"
+                      disabled={!hasActions}
+                      title={hasActions ? undefined : "No actions available"}
+                      aria-label={`Invoice actions for ${inv.athleteName}`}
+                      aria-haspopup="menu"
+                      aria-expanded={menuFor?.id === inv.id}
+                      onClick={(e) => {
+                        // Round 15 (W1): the table wrappers clip overflow, so
+                        // the menu renders through a portal — capture where
+                        // the trigger sits and drop up near the viewport
+                        // bottom so the last rows' menus stay reachable.
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setMenuFor((cur) =>
+                          cur?.id === inv.id
+                            ? null
+                            : {
+                                id: inv.id,
+                                top: r.bottom + 4,
+                                bottom: window.innerHeight - r.top + 4,
+                                right: Math.max(window.innerWidth - r.right, 8),
+                                dropUp: r.bottom + 200 > window.innerHeight,
+                              },
+                        );
+                      }}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               );
@@ -359,6 +428,50 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
           </TableBody>
         </Table>
       </div>
+
+      {/* W1 — the open row's ⋯ menu + its click-away layer. Portaled to the
+          body so the table's overflow wrappers can't clip it. */}
+      {menuFor && menuInv
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label="Close invoice menu"
+                className="fixed inset-0 z-20 cursor-default"
+                onClick={() => setMenuFor(null)}
+              />
+              <span
+                className="fixed z-30 block w-44 rounded-lg border border-border bg-card p-1 text-left shadow-raised"
+                style={
+                  menuFor.dropUp
+                    ? { right: menuFor.right, bottom: menuFor.bottom }
+                    : { right: menuFor.right, top: menuFor.top }
+                }
+              >
+                {menuItemsFor(menuInv).map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setMenuFor(null);
+                      item.onSelect();
+                    }}
+                    className={
+                      item.destructive
+                        ? "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-destructive transition-colors hover:bg-destructive/[0.08]"
+                        : "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+                    }
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </span>
+            </>,
+            document.body,
+          )
+        : null}
+
       <p className="text-xs text-muted-foreground">
         New invoices save locally in this demo — in production they charge
         through Square.
@@ -423,6 +536,19 @@ export function InvoicesPanel({ invoices }: { invoices: Invoice[] }) {
           inv={confirming.inv}
           onClose={() => setConfirming(null)}
           onConfirm={(weeks) => pushDueDate(confirming.inv, weeks)}
+        />
+      ) : null}
+
+      {/* Round 15 (W1) — edit an open invoice's amount / due date. */}
+      {confirming?.action === "edit" ? (
+        <EditInvoiceDialog
+          inv={confirming.inv}
+          onClose={() => setConfirming(null)}
+          onSave={(amountCents, dueDate) => {
+            patchRow(confirming.inv.id, { amountCents, dueDate });
+            showFlash("Invoice updated.");
+            setConfirming(null);
+          }}
         />
       ) : null}
 
@@ -683,6 +809,80 @@ function RefundDialog({
           onClick={() => onConfirm(cents)}
         >
           {full ? "Refund in full" : "Refund"}
+        </Button>
+      </div>
+    </BillingDialog>
+  );
+}
+
+/**
+ * Round 15 (W1) — edit an open invoice: just the amount and the due date,
+ * saved straight onto the row. Anything deeper (client, memo) is a cancel +
+ * re-issue in real billing systems, so it stays out of scope here.
+ */
+function EditInvoiceDialog({
+  inv,
+  onClose,
+  onSave,
+}: {
+  inv: Invoice;
+  onClose: () => void;
+  onSave: (amountCents: number, dueDate: string) => void;
+}) {
+  const [amount, setAmount] = useState((inv.amountCents / 100).toFixed(2));
+  const [due, setDue] = useState(() => {
+    const d = new Date(inv.dueDate);
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  });
+
+  const amountCents = Math.round(parseFloat(amount || "0") * 100);
+  const valid = amountCents > 0 && due.length > 0;
+
+  return (
+    <BillingDialog
+      title="Edit invoice"
+      subtitle={`${inv.athleteName} · ${inv.plan}`}
+      onClose={onClose}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Amount (CAD)</Label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            value={amount}
+            autoFocus
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Due date</Label>
+          <Input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The invoice stays open — the client sees the updated amount and date.
+      </p>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Keep
+        </Button>
+        <Button
+          variant="brand"
+          size="sm"
+          disabled={!valid}
+          onClick={() =>
+            onSave(amountCents, new Date(`${due}T12:00:00`).toISOString())
+          }
+        >
+          Save changes
         </Button>
       </div>
     </BillingDialog>

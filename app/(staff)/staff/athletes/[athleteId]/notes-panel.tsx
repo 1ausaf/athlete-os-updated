@@ -9,6 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { relTime, type MemberNote } from "@/lib/demo/data";
 
+/** Round 15 (W4): notes shown by default before the feed collapses behind "Show all". */
+const RECENT_NOTES_COUNT = 4;
+
 /**
  * The centerpiece of the athlete profile: this athlete's full note feed plus
  * an inline composer. Notes are free-form comments (Trello-style) — the
@@ -27,8 +30,12 @@ export function NotesPanel({
   const [draftHtml, setDraftHtml] = useState("");
   const [resetKey, setResetKey] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const canSave = draftHtml.trim().length > 0;
+  const hasOverflow = notes.length > RECENT_NOTES_COUNT;
+  const visibleNotes =
+    showAll || !hasOverflow ? notes : notes.slice(0, RECENT_NOTES_COUNT);
 
   function handleSave() {
     if (!canSave) return;
@@ -94,20 +101,39 @@ export function NotesPanel({
           </p>
         ) : (
           <div className="flex flex-col gap-3">
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="rounded-lg border border-border bg-surface/50 p-4"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold">{note.coach}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {relTime(note.date)}
-                  </span>
+            {/* Round 15 (W4): expanded history scrolls inside a capped area so the panel stays bounded */}
+            <div
+              className={
+                showAll && hasOverflow
+                  ? "flex max-h-[28rem] flex-col gap-3 overflow-y-auto pr-1 scrollbar-slim"
+                  : "flex flex-col gap-3"
+              }
+            >
+              {visibleNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className="rounded-lg border border-border bg-surface/50 p-4"
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold">{note.coach}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {relTime(note.date)}
+                    </span>
+                  </div>
+                  <RichTextView html={note.body} className="text-foreground/90" />
                 </div>
-                <RichTextView html={note.body} className="text-foreground/90" />
-              </div>
-            ))}
+              ))}
+            </div>
+            {hasOverflow ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? "Show fewer" : `Show all ${notes.length} notes`}
+              </Button>
+            ) : null}
           </div>
         )}
       </CardContent>

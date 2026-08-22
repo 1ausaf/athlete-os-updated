@@ -275,6 +275,34 @@ function birthdayLabel(dob: string | undefined, yearOfBirth: number): string {
   return `${month}-${day}-${d.getFullYear()} (${age})`;
 }
 
+/** Round 15 (W2): every member FIELD VALUE the Details card edits, as one
+ *  object so the draft/committed pair can be diffed and swapped wholesale.
+ *  Round 11 (M30): names seed from the display-name split, sex/birthday
+ *  from the record. */
+interface DetailsValues {
+  status: AthleteStatus;
+  followUp: string;
+  bucket: string;
+  focus: string;
+  firstName: string;
+  lastName: string;
+  sex: string;
+  birthDate: string;
+}
+
+function seedDetails(athlete: Athlete, dob?: string): DetailsValues {
+  return {
+    status: athlete.status,
+    followUp: athlete.followUpDate ? athlete.followUpDate.slice(0, 10) : "",
+    bucket: bucketLabel[athlete.bucket],
+    focus: athlete.sport,
+    firstName: athlete.name.split(" ")[0] ?? "",
+    lastName: athlete.name.split(" ").slice(1).join(" "),
+    sex: athlete.gender === "M" ? "Male" : "Female",
+    birthDate: dob ? dob.slice(0, 10) : "",
+  };
+}
+
 export function DetailsCard({
   athlete,
   dob,
@@ -285,22 +313,17 @@ export function DetailsCard({
   /** C15 — manage gears + Delete Member render for admin/owner only. */
   admin: boolean;
 }) {
-  const [status, setStatus] = useState<AthleteStatus>(athlete.status);
-  const [followUp, setFollowUp] = useState<string>(
-    athlete.followUpDate ? athlete.followUpDate.slice(0, 10) : "",
+  // Round 15 (W2): edits land in a DRAFT — the footer Save commits it
+  // (green flash), Discard reverts. The ManagedSelect gears (add/rename/
+  // delete OPTIONS) are separate and still apply instantly.
+  const [committed, setCommitted] = useState<DetailsValues>(() =>
+    seedDetails(athlete, dob),
   );
-  const [bucket, setBucket] = useState(bucketLabel[athlete.bucket]);
-  const [focus, setFocus] = useState(athlete.sport);
-  // Round 11 (M30): identity fields are admin-editable from the staff side —
-  // names seed from the display-name split, sex/birthday from the record.
-  const [firstName, setFirstName] = useState(
-    () => athlete.name.split(" ")[0] ?? "",
+  const [draft, setDraft] = useState<DetailsValues>(() =>
+    seedDetails(athlete, dob),
   );
-  const [lastName, setLastName] = useState(() =>
-    athlete.name.split(" ").slice(1).join(" "),
-  );
-  const [sex, setSex] = useState(athlete.gender === "M" ? "Male" : "Female");
-  const [birthDate, setBirthDate] = useState(dob ? dob.slice(0, 10) : "");
+  const [savedFlash, setSavedFlash] = useState(false);
+  const flashTimer = useRef<number | null>(null);
   const [deleted, setDeleted] = useState(false);
   // Delete Member is a two-step confirm: the first click ARMS the button for
   // ~4s ("Really delete?…"), the second click within that window deletes.
@@ -310,9 +333,28 @@ export function DetailsCard({
   useEffect(
     () => () => {
       if (armTimer.current) window.clearTimeout(armTimer.current);
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
     },
     [],
   );
+
+  const dirty = (Object.keys(draft) as (keyof DetailsValues)[]).some(
+    (k) => draft[k] !== committed[k],
+  );
+
+  function setField<K extends keyof DetailsValues>(
+    key: K,
+    value: DetailsValues[K],
+  ) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function saveDetails() {
+    setCommitted(draft);
+    setSavedFlash(true);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setSavedFlash(false), 2000);
+  }
 
   const focusDefaults = Array.from(
     new Set([...athletes.map((a) => a.sport), athlete.sport]),
@@ -344,8 +386,9 @@ export function DetailsCard({
         <div className="flex items-center gap-2">
           <IdCard className="h-5 w-5 text-muted-foreground" aria-hidden />
           <h3 className="text-base">Details</h3>
-          <Pill tone={STATUS_TONE[status]} dot className="ml-auto">
-            {statusLabel[status]}
+          {/* W2 — the pill reflects the SAVED status, not the draft */}
+          <Pill tone={STATUS_TONE[committed.status]} dot className="ml-auto">
+            {statusLabel[committed.status]}
           </Pill>
         </div>
 
@@ -353,9 +396,11 @@ export function DetailsCard({
           <label className="col-span-2 flex flex-col gap-0.5">
             <span className={FIELD_LABEL}>Status</span>
             <select
-              value={status}
+              value={draft.status}
               aria-label="Member status"
-              onChange={(e) => setStatus(e.target.value as AthleteStatus)}
+              onChange={(e) =>
+                setField("status", e.target.value as AthleteStatus)
+              }
               className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
             >
               {(Object.keys(statusLabel) as AthleteStatus[]).map((s) => (
@@ -366,7 +411,7 @@ export function DetailsCard({
             </select>
           </label>
 
-          {status === "paused" ? (
+          {draft.status === "paused" ? (
             <label className="col-span-2 flex items-center gap-2 rounded-lg border border-border bg-surface/50 p-2.5">
               <CalendarClock
                 className="h-4 w-4 shrink-0 text-muted-foreground"
@@ -377,8 +422,8 @@ export function DetailsCard({
               </span>
               <input
                 type="date"
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
+                value={draft.followUp}
+                onChange={(e) => setField("followUp", e.target.value)}
                 aria-label="Follow-up date"
                 className="tnum ml-auto rounded-md border border-input bg-card px-2 py-1 text-xs font-semibold"
               />
@@ -392,19 +437,19 @@ export function DetailsCard({
               <label className="flex flex-col gap-0.5">
                 <span className={FIELD_LABEL}>First name</span>
                 <Input
-                  value={firstName}
+                  value={draft.firstName}
                   aria-label="First name"
                   className="h-9"
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e) => setField("firstName", e.target.value)}
                 />
               </label>
               <label className="flex flex-col gap-0.5">
                 <span className={FIELD_LABEL}>Last name</span>
                 <Input
-                  value={lastName}
+                  value={draft.lastName}
                   aria-label="Last name"
                   className="h-9"
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => setField("lastName", e.target.value)}
                 />
               </label>
             </>
@@ -414,16 +459,16 @@ export function DetailsCard({
             label="Type"
             storageKey="aos-member-type-options"
             defaults={Object.values(bucketLabel)}
-            value={bucket}
-            onChange={setBucket}
+            value={draft.bucket}
+            onChange={(v) => setField("bucket", v)}
             manageable={admin}
           />
           <ManagedSelect
             label="Focus"
             storageKey="aos-member-focus-options"
             defaults={focusDefaults}
-            value={focus}
-            onChange={setFocus}
+            value={draft.focus}
+            onChange={(v) => setField("focus", v)}
             manageable={admin}
           />
 
@@ -431,9 +476,9 @@ export function DetailsCard({
             <label className="flex flex-col gap-0.5">
               <span className={FIELD_LABEL}>Sex</span>
               <select
-                value={sex}
+                value={draft.sex}
                 aria-label="Sex"
-                onChange={(e) => setSex(e.target.value)}
+                onChange={(e) => setField("sex", e.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
               >
                 {["Male", "Female", "Non-binary", "Prefer not to say"].map(
@@ -458,9 +503,9 @@ export function DetailsCard({
               <span className={FIELD_LABEL}>Birthday</span>
               <input
                 type="date"
-                value={birthDate}
+                value={draft.birthDate}
                 aria-label="Birthday"
-                onChange={(e) => setBirthDate(e.target.value)}
+                onChange={(e) => setField("birthDate", e.target.value)}
                 className="tnum h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium"
               />
             </label>
@@ -473,6 +518,40 @@ export function DetailsCard({
             </div>
           )}
         </div>
+
+        {/* Round 15 (W2): the explicit-save footer — appears the moment the
+            draft differs from the saved values; the flash reuses the same
+            slot so Save doesn't jump the layout */}
+        {dirty ? (
+          <div className="flex min-h-[2.875rem] flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/50 px-2.5 py-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Unsaved changes
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <Button
+                variant="brand"
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={saveDetails}
+              >
+                Save
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setDraft(committed)}
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        ) : savedFlash ? (
+          <div className="flex min-h-[2.875rem] items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-2.5 py-2 text-xs font-medium text-success">
+            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Details updated.
+          </div>
+        ) : null}
 
         {/* C15 — deleting a member is admin/owner only; Round 13 (S3): the
             status blurb + demo-save line are gone, so the footer only
@@ -792,6 +871,45 @@ export function LinksEditor({
   );
 }
 
+/** Round 15 (W3): the staff-editable contact values — seeded from the member
+ *  profile, merged from localStorage (aos-contact-{athleteId}) on mount and
+ *  written back on Save so edits survive reload. Guardian name/relation stay
+ *  on the profile; staff edit the per-guardian phone + email. */
+interface ContactInfo {
+  phone: string;
+  email: string;
+  address: string;
+  guardianPhone: string;
+  guardianEmail: string;
+  emergencyName: string;
+  emergencyRelation: string;
+  emergencyPhone: string;
+  instagram: string;
+  x: string;
+  hudl: string;
+}
+
+function seedContact(profile?: AthleteProfile): ContactInfo {
+  return {
+    phone: profile?.phone ?? "",
+    email: profile?.email ?? "",
+    address: profile
+      ? `${profile.address.street}, ${profile.address.city} ${profile.address.region} ${profile.address.postal}`
+      : "",
+    guardianPhone: profile?.guardian?.phone ?? "",
+    guardianEmail: profile?.guardian?.email ?? "",
+    emergencyName: profile?.emergencyContact?.name ?? "",
+    emergencyRelation: profile?.emergencyContact?.relation ?? "",
+    emergencyPhone: profile?.emergencyContact?.phone ?? "",
+    // C16 — the app renders the @ itself; stored handles may carry one or not.
+    instagram: profile?.instagram?.replace(/^@/, "") ?? "",
+    x: profile?.twitter?.replace(/^@/, "") ?? "",
+    hudl: profile?.hudl ?? "",
+  };
+}
+
+const CONTACT_LINK = "text-brand-ink underline-offset-2 hover:underline";
+
 export function ContactLinksCard({
   athlete,
   profile,
@@ -799,10 +917,70 @@ export function ContactLinksCard({
   athlete: Athlete;
   profile?: AthleteProfile;
 }) {
+  const storageKey = `aos-contact-${athlete.id}`;
   const guardian = profile?.guardian;
-  const emergency = profile?.emergencyContact;
-  // C16 — the app renders the @ itself; stored handles may carry one or not.
-  const igHandle = profile?.instagram?.replace(/^@/, "");
+  // Round 15 (W3): committed values + an edit-mode draft; Save persists.
+  const [info, setInfo] = useState<ContactInfo>(() => seedContact(profile));
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<ContactInfo>(() => seedContact(profile));
+  const [flash, setFlash] = useState(false);
+  const flashTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<ContactInfo>;
+        setInfo({ ...seedContact(profile), ...saved });
+      }
+    } catch {
+      /* corrupted storage — keep the profile seed */
+    }
+  }, [storageKey, profile]);
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+
+  function setDraftField<K extends keyof ContactInfo>(
+    key: K,
+    value: ContactInfo[K],
+  ) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function saveContact() {
+    const next = Object.fromEntries(
+      Object.entries(draft).map(([k, v]) => [k, v.trim()]),
+    ) as unknown as ContactInfo;
+    next.instagram = next.instagram.replace(/^@/, "");
+    next.x = next.x.replace(/^@/, "");
+    setInfo(next);
+    setEditing(false);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {
+      /* storage full/blocked — the edit still holds in-memory */
+    }
+    setFlash(true);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(false), 2000);
+  }
+
+  const hasMemberInfo =
+    info.phone ||
+    info.email ||
+    info.address ||
+    info.instagram ||
+    info.x ||
+    info.hudl;
+  // The emergency block renders when it isn't just the guardian repeated.
+  const showEmergency =
+    Boolean(info.emergencyName) &&
+    (!guardian || info.emergencyName !== guardian.name);
 
   return (
     <Card>
@@ -819,107 +997,321 @@ export function ContactLinksCard({
           <LinksEditor storageKey={`aos-links-${athlete.id}`} />
         </div>
 
-        {/* Contact — member on the left, parent/emergency on the right */}
+        {/* Contact — member on the left, parent/emergency on the right;
+            Round 15 (W3): the pencil flips the block into labeled inputs */}
         <div>
-          <span className="eyebrow">Contact</span>
-          <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1 text-sm">
-              <p className={FIELD_LABEL}>Member</p>
-              <p className="font-medium">{athlete.name}</p>
-              {profile ? (
-                <>
-                  {/* S7 — phones dial on tap */}
-                  <p>
-                    <a
-                      href={telHref(profile.phone)}
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      {profile.phone}
-                    </a>
-                  </p>
-                  {/* C16 — email is a mailto link */}
-                  <p className="break-words">
-                    <a
-                      href={`mailto:${profile.email}`}
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      {profile.email}
-                    </a>
-                  </p>
-                  <p className="text-pretty">
-                    {profile.address.street}, {profile.address.city}{" "}
-                    {profile.address.region} {profile.address.postal}
-                  </p>
-                  {/* C16 — "Instagram: @handle", selectable AND a real link */}
-                  {igHandle ? (
-                    <p>
-                      Instagram:{" "}
-                      <a
-                        href={`https://instagram.com/${igHandle}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="select-all text-brand-ink underline-offset-2 hover:underline"
-                      >
-                        @{igHandle}
-                      </a>
-                    </p>
-                  ) : null}
-                  {/* Round 13 (S6): HUDL reads like the Instagram row — a
-                      label plus a short "Profile" link, not the raw URL */}
-                  {profile.hudl ? (
-                    <p>
-                      HUDL:{" "}
-                      <a
-                        href={normalizeUrl(profile.hudl)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-brand-ink underline-offset-2 hover:underline"
-                      >
-                        Profile
-                      </a>
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-muted-foreground">No profile on file yet.</p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1 text-sm">
-              <p className={FIELD_LABEL}>Parent / Emergency contact</p>
-              {guardian ? (
-                <>
-                  <p className="font-medium">{guardian.name}</p>
-                  <p className="text-muted-foreground">{guardian.relation}</p>
-                  <p>
-                    <a
-                      href={telHref(guardian.phone)}
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      {guardian.phone}
-                    </a>
-                  </p>
-                  <p className="break-words">{guardian.email}</p>
-                </>
-              ) : emergency ? (
-                <>
-                  <p className="font-medium">{emergency.name}</p>
-                  <p className="text-muted-foreground">{emergency.relation}</p>
-                  <p>
-                    <a
-                      href={telHref(emergency.phone)}
-                      className="text-brand-ink underline-offset-2 hover:underline"
-                    >
-                      {emergency.phone}
-                    </a>
-                  </p>
-                </>
-              ) : (
-                <p className="text-muted-foreground">None on file.</p>
-              )}
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">Contact</span>
+            {!editing ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(info);
+                  setEditing(true);
+                }}
+                aria-label="Edit contact info"
+                title="Edit contact info"
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
+
+          {flash ? (
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5 text-xs font-medium text-success">
+              <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              Contact info updated.
+            </div>
+          ) : null}
+
+          {editing ? (
+            <div className="mt-2 flex flex-col gap-3 rounded-lg border border-brand/30 bg-brand/[0.03] p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-0.5">
+                  <span className={FIELD_LABEL}>Member phone</span>
+                  <Input
+                    value={draft.phone}
+                    placeholder="+1 (555) 555-0100"
+                    className="h-9"
+                    onChange={(e) => setDraftField("phone", e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className={FIELD_LABEL}>Member email</span>
+                  <Input
+                    type="email"
+                    value={draft.email}
+                    placeholder="member@example.com"
+                    className="h-9"
+                    onChange={(e) => setDraftField("email", e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5 sm:col-span-2">
+                  <span className={FIELD_LABEL}>Address</span>
+                  <Input
+                    value={draft.address}
+                    placeholder="Street, City Region Postal"
+                    className="h-9"
+                    onChange={(e) => setDraftField("address", e.target.value)}
+                  />
+                </label>
+              </div>
+
+              {guardian ? (
+                <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+                  <p className={FIELD_LABEL}>
+                    {guardian.name} · {guardian.relation}
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="flex flex-col gap-0.5">
+                      <span className={FIELD_LABEL}>Phone</span>
+                      <Input
+                        value={draft.guardianPhone}
+                        className="h-9"
+                        onChange={(e) =>
+                          setDraftField("guardianPhone", e.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="flex flex-col gap-0.5">
+                      <span className={FIELD_LABEL}>Email</span>
+                      <Input
+                        type="email"
+                        value={draft.guardianEmail}
+                        className="h-9"
+                        onChange={(e) =>
+                          setDraftField("guardianEmail", e.target.value)
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+                <p className={FIELD_LABEL}>Emergency contact</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>Name</span>
+                    <Input
+                      value={draft.emergencyName}
+                      className="h-9"
+                      onChange={(e) =>
+                        setDraftField("emergencyName", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>Relation</span>
+                    <Input
+                      value={draft.emergencyRelation}
+                      placeholder="Mother / Father / Guardian"
+                      className="h-9"
+                      onChange={(e) =>
+                        setDraftField("emergencyRelation", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>Phone</span>
+                    <Input
+                      value={draft.emergencyPhone}
+                      className="h-9"
+                      onChange={(e) =>
+                        setDraftField("emergencyPhone", e.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+                <p className={FIELD_LABEL}>Socials</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>Instagram handle</span>
+                    <Input
+                      value={draft.instagram}
+                      placeholder="@handle"
+                      className="h-9"
+                      onChange={(e) =>
+                        setDraftField("instagram", e.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>X handle</span>
+                    <Input
+                      value={draft.x}
+                      placeholder="@handle"
+                      className="h-9"
+                      onChange={(e) => setDraftField("x", e.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5">
+                    <span className={FIELD_LABEL}>HUDL URL</span>
+                    <Input
+                      value={draft.hudl}
+                      placeholder="hudl.com/profile/…"
+                      className="h-9"
+                      onChange={(e) => setDraftField("hudl", e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button variant="brand" size="sm" onClick={saveContact}>
+                  Save
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1 text-sm">
+                <p className={FIELD_LABEL}>Member</p>
+                <p className="font-medium">{athlete.name}</p>
+                {hasMemberInfo ? (
+                  <>
+                    {/* S7 — phones dial on tap */}
+                    {info.phone ? (
+                      <p>
+                        <a href={telHref(info.phone)} className={CONTACT_LINK}>
+                          {info.phone}
+                        </a>
+                      </p>
+                    ) : null}
+                    {/* C16 — email is a mailto link */}
+                    {info.email ? (
+                      <p className="break-words">
+                        <a
+                          href={`mailto:${info.email}`}
+                          className={CONTACT_LINK}
+                        >
+                          {info.email}
+                        </a>
+                      </p>
+                    ) : null}
+                    {info.address ? (
+                      <p className="text-pretty">{info.address}</p>
+                    ) : null}
+                    {/* C16 — "Instagram: @handle", selectable AND a real link */}
+                    {info.instagram ? (
+                      <p>
+                        Instagram:{" "}
+                        <a
+                          href={`https://instagram.com/${info.instagram}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn("select-all", CONTACT_LINK)}
+                        >
+                          @{info.instagram}
+                        </a>
+                      </p>
+                    ) : null}
+                    {info.x ? (
+                      <p>
+                        X:{" "}
+                        <a
+                          href={`https://x.com/${info.x}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn("select-all", CONTACT_LINK)}
+                        >
+                          @{info.x}
+                        </a>
+                      </p>
+                    ) : null}
+                    {/* Round 13 (S6): HUDL reads like the Instagram row — a
+                        label plus a short "Profile" link, not the raw URL */}
+                    {info.hudl ? (
+                      <p>
+                        HUDL:{" "}
+                        <a
+                          href={normalizeUrl(info.hudl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={CONTACT_LINK}
+                        >
+                          Profile
+                        </a>
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">
+                    No profile on file yet.
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col gap-1 text-sm">
+                <p className={FIELD_LABEL}>Parent / Emergency contact</p>
+                {guardian ? (
+                  <>
+                    <p className="font-medium">{guardian.name}</p>
+                    <p className="text-muted-foreground">{guardian.relation}</p>
+                    {info.guardianPhone ? (
+                      <p>
+                        <a
+                          href={telHref(info.guardianPhone)}
+                          className={CONTACT_LINK}
+                        >
+                          {info.guardianPhone}
+                        </a>
+                      </p>
+                    ) : null}
+                    {info.guardianEmail ? (
+                      <p className="break-words">
+                        <a
+                          href={`mailto:${info.guardianEmail}`}
+                          className={CONTACT_LINK}
+                        >
+                          {info.guardianEmail}
+                        </a>
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+                {showEmergency ? (
+                  <>
+                    {guardian ? (
+                      <p className={cn(FIELD_LABEL, "mt-1.5")}>Emergency</p>
+                    ) : null}
+                    <p className="font-medium">{info.emergencyName}</p>
+                    {info.emergencyRelation ? (
+                      <p className="text-muted-foreground">
+                        {info.emergencyRelation}
+                      </p>
+                    ) : null}
+                    {info.emergencyPhone ? (
+                      <p>
+                        <a
+                          href={telHref(info.emergencyPhone)}
+                          className={CONTACT_LINK}
+                        >
+                          {info.emergencyPhone}
+                        </a>
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+                {!guardian && !showEmergency ? (
+                  <p className="text-muted-foreground">None on file.</p>
+                ) : null}
+              </div>
+            </div>
+          )}
           <p className="mt-2 text-[0.7rem] text-muted-foreground">
-            Synced from the member&apos;s profile — they keep it current.
+            Seeded from the member&apos;s profile — edits here save on top
+            (locally in this demo).
           </p>
         </div>
       </CardContent>
