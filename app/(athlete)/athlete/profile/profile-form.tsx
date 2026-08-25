@@ -42,6 +42,11 @@ import type { AthleteProfile } from "@/lib/demo/data";
 
 /** Round 11 (M30): gender is self-serve — the select's option set. */
 const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"];
+
+/** Round 16 (Q1): phone inputs accept phone characters only — digits, spaces
+ *  and + ( ) - survive; everything else is stripped at the state-write point
+ *  so letters can't be typed or pasted. */
+const sanitizePhone = (v: string) => v.replace(/[^\d\s+()-]/g, "");
 export function ProfileForm({
   initial,
   athleteName,
@@ -178,8 +183,9 @@ export function ProfileForm({
             <Field label="Phone">
               <Input
                 type="tel"
+                inputMode="tel"
                 value={p.phone}
-                onChange={(e) => set("phone", e.target.value)}
+                onChange={(e) => set("phone", sanitizePhone(e.target.value))}
               />
             </Field>
           </div>
@@ -401,8 +407,11 @@ export function ProfileForm({
             <Field label="Phone">
               <Input
                 type="tel"
+                inputMode="tel"
                 value={p.emergencyContact?.phone ?? ""}
-                onChange={(e) => setEmergency({ phone: e.target.value })}
+                onChange={(e) =>
+                  setEmergency({ phone: sanitizePhone(e.target.value) })
+                }
               />
             </Field>
           </div>

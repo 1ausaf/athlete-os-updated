@@ -13,7 +13,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isStaff } from "@/lib/rbac";
-import { facility, invoices, money, plans, revenueTrend } from "@/lib/demo/data";
+import {
+  facility,
+  invoices,
+  money,
+  plans,
+  recurringSeriesSeed,
+  revenueTrend,
+} from "@/lib/demo/data";
 
 import { InvoicesPanel } from "./invoice-actions";
 import { PlansPanel } from "./plans-panel";
@@ -77,7 +84,7 @@ export default async function StaffBillingPage() {
       {/* Invoices + the new-invoice flow (O2) */}
       <Card>
         <CardContent className="p-5">
-          <InvoicesPanel invoices={invoices} />
+          <InvoicesPanel invoices={invoices} series={recurringSeriesSeed} />
         </CardContent>
       </Card>
 

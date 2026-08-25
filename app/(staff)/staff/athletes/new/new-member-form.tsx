@@ -53,6 +53,11 @@ const INPUT_CLS = "h-9 bg-surface text-sm";
 const SELECT_CLS =
   "h-9 w-full rounded-md border border-input bg-surface px-2.5 text-sm font-medium";
 
+/** Round 16 (Q1): phone inputs accept phone characters only — digits, spaces
+ *  and + ( ) - survive; everything else is stripped at the state-write point
+ *  so letters can't be typed or pasted. */
+const sanitizePhone = (v: string) => v.replace(/[^\d\s+()-]/g, "");
+
 export function NewMemberForm({
   focusOptions,
   groups,
@@ -263,10 +268,11 @@ export function NewMemberForm({
             <Field label="Phone" className="lg:col-span-2">
               <Input
                 type="tel"
+                inputMode="tel"
                 value={phone}
                 placeholder="+1 (416) 555-0100"
                 className={INPUT_CLS}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(sanitizePhone(e.target.value))}
               />
             </Field>
           </div>
@@ -395,9 +401,10 @@ export function NewMemberForm({
             <Field label="Phone">
               <Input
                 type="tel"
+                inputMode="tel"
                 value={guardianPhone}
                 className={INPUT_CLS}
-                onChange={(e) => setGuardianPhone(e.target.value)}
+                onChange={(e) => setGuardianPhone(sanitizePhone(e.target.value))}
               />
             </Field>
             <Field label="Email">
@@ -455,9 +462,12 @@ export function NewMemberForm({
             <Field label="Phone">
               <Input
                 type="tel"
+                inputMode="tel"
                 value={emergencyPhone}
                 className={INPUT_CLS}
-                onChange={(e) => setEmergencyPhone(e.target.value)}
+                onChange={(e) =>
+                  setEmergencyPhone(sanitizePhone(e.target.value))
+                }
               />
             </Field>
           </div>

@@ -157,8 +157,9 @@ export default async function AthleteBillingPage() {
           </CardContent>
         </Card>
 
-        {/* Payment method — card on file only. Cash handling is a back-office
-            action (staff mark an invoice paid manually); it never shows here. */}
+        {/* Payment method — card on file only. Cash handling stays a
+            back-office action (staff mark an invoice paid manually); Round 16
+            (Q6): the offline options are named below so members know how. */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
             <div className="flex items-center gap-2">
@@ -186,6 +187,10 @@ export default async function AthleteBillingPage() {
               <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
               Processing is handled by Square at standard market rates. LPS adds
               no platform markup on your payments.
+            </p>
+            <p className="text-xs text-muted-foreground text-pretty">
+              No card on file? Pay by EMT / e-transfer, cash or cheque at the
+              front desk — the staff records it against your invoice.
             </p>
           </CardContent>
         </Card>

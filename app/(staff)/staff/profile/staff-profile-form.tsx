@@ -38,6 +38,11 @@ function certStatusFor(expiresIso: string): StaffCertification["status"] {
   return "valid";
 }
 
+/** Round 16 (Q1): phone inputs accept phone characters only — digits, spaces
+ *  and + ( ) - survive; everything else is stripped at the state-write point
+ *  so letters can't be typed or pasted. */
+const sanitizePhone = (v: string) => v.replace(/[^\d\s+()-]/g, "");
+
 /**
  * The coach's own profile — self-service contact, bio, notifications and
  * records. Round 8: editable first/last/title/designations with a live
@@ -223,8 +228,9 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                 <div className="grid gap-1.5">
                   <Label className="text-xs text-muted-foreground">Phone</Label>
                   <Input
+                    inputMode="tel"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(sanitizePhone(e.target.value))}
                   />
                 </div>
                 <div className="grid gap-1.5">
@@ -324,9 +330,10 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                 <div className="grid gap-1.5 sm:col-span-2">
                   <Label className="text-xs text-muted-foreground">Phone</Label>
                   <Input
+                    inputMode="tel"
                     value={ecPhone}
                     placeholder="+1 (416) 555-0000"
-                    onChange={(e) => setEcPhone(e.target.value)}
+                    onChange={(e) => setEcPhone(sanitizePhone(e.target.value))}
                   />
                 </div>
               </div>

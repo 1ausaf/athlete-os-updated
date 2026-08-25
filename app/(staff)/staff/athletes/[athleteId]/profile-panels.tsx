@@ -871,6 +871,11 @@ export function LinksEditor({
   );
 }
 
+/** Round 16 (Q1): phone inputs accept phone characters only — digits, spaces
+ *  and + ( ) - survive; everything else is stripped at the state-write point
+ *  so letters can't be typed or pasted. */
+const sanitizePhone = (v: string) => v.replace(/[^\d\s+()-]/g, "");
+
 /** Round 15 (W3): the staff-editable contact values — seeded from the member
  *  profile, merged from localStorage (aos-contact-{athleteId}) on mount and
  *  written back on Save so edits survive reload. Guardian name/relation stay
@@ -1031,10 +1036,13 @@ export function ContactLinksCard({
                 <label className="flex flex-col gap-0.5">
                   <span className={FIELD_LABEL}>Member phone</span>
                   <Input
+                    inputMode="tel"
                     value={draft.phone}
                     placeholder="+1 (555) 555-0100"
                     className="h-9"
-                    onChange={(e) => setDraftField("phone", e.target.value)}
+                    onChange={(e) =>
+                      setDraftField("phone", sanitizePhone(e.target.value))
+                    }
                   />
                 </label>
                 <label className="flex flex-col gap-0.5">
@@ -1067,10 +1075,14 @@ export function ContactLinksCard({
                     <label className="flex flex-col gap-0.5">
                       <span className={FIELD_LABEL}>Phone</span>
                       <Input
+                        inputMode="tel"
                         value={draft.guardianPhone}
                         className="h-9"
                         onChange={(e) =>
-                          setDraftField("guardianPhone", e.target.value)
+                          setDraftField(
+                            "guardianPhone",
+                            sanitizePhone(e.target.value),
+                          )
                         }
                       />
                     </label>
@@ -1116,10 +1128,14 @@ export function ContactLinksCard({
                   <label className="flex flex-col gap-0.5">
                     <span className={FIELD_LABEL}>Phone</span>
                     <Input
+                      inputMode="tel"
                       value={draft.emergencyPhone}
                       className="h-9"
                       onChange={(e) =>
-                        setDraftField("emergencyPhone", e.target.value)
+                        setDraftField(
+                          "emergencyPhone",
+                          sanitizePhone(e.target.value),
+                        )
                       }
                     />
                   </label>
@@ -1837,8 +1853,9 @@ export function FinancialCard({
             </>
           ) : null}
           <p className="px-1 text-[0.7rem] text-muted-foreground">
+            {/* Round 16 (Q6): staff-facing offline-payment policy */}
             {admin
-              ? "Manage opens Billing — mark paid / cancel live there; Square handles cards."
+              ? "Manage opens Billing — mark paid / cancel live there. Square handles cards; EMT / e-transfer, cash and cheque are recorded as manual payments."
               : "Coaches see the billing status only — balances and actions are admin-only."}
           </p>
         </div>

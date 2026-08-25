@@ -13,11 +13,14 @@ export function BillingDialog({
   title,
   subtitle,
   onClose,
+  wide = false,
   children,
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
+  /** Round 16 (Q8): billing history needs a little more room. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -37,7 +40,11 @@ export function BillingDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-raised"
+        className={
+          wide
+            ? "w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-raised"
+            : "w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-raised"
+        }
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2 border-b border-border bg-surface/60 p-4">
