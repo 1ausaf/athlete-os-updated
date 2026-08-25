@@ -43,7 +43,9 @@ import { BillingDialog } from "./billing-dialog";
 const statusMeta: Record<Invoice["status"], { label: string; tone: PillTone }> =
   {
     paid: { label: "Paid", tone: "success" },
-    upcoming: { label: "Upcoming", tone: "neutral" },
+    // Round 16 (Q2): "upcoming" reads as Scheduled — queued to send.
+    upcoming: { label: "Scheduled", tone: "neutral" },
+    draft: { label: "Draft", tone: "neutral" },
     due: { label: "Due", tone: "warning" },
     overdue: { label: "Overdue", tone: "danger" },
     canceled: { label: "Canceled", tone: "neutral" },
