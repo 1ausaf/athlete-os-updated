@@ -156,7 +156,7 @@ export function SessionBooking({
   bookedThisWeek: number;
   /** e.g. "3×/week" */
   frequencyLabel: string;
-  /** Round 8 (M23): the plan line lives in the cadence card now. */
+  /** Round 8 (M23) → Round 18 (A6): no longer displayed on this page. */
   planName?: string;
   /** Billing past due — booking paused (FR-11). */
   overdue: boolean;
@@ -368,7 +368,6 @@ export function SessionBooking({
 
   const currentCycleBooked = cycleBooked.get(0) ?? 0;
   const cycleFull = currentCycleBooked >= cycleCap;
-  const remainingThisCycle = Math.max(0, cycleCap - currentCycleBooked);
   const cyclePct = Math.round(
     (Math.min(currentCycleBooked, cycleCap) / cycleCap) * 100,
   );
@@ -648,21 +647,14 @@ export function SessionBooking({
         </Card>
       ) : null}
 
-      {/* Billing-cycle meter — round 10 (R10): the cap is per 4-WEEK CYCLE
-          (frequency × 4), so a missed week can be made up inside the cycle.
-          The plan line still lives here instead of the page header (M23). */}
+      {/* Booking-cycle meter — round 10 (R10): the cap is per 4-WEEK CYCLE
+          (frequency × 4). Round 18 (A6): meter only — the plan line and the
+          descriptive sentence are gone; the cap logic is unchanged. */}
       <Card className="bg-brand-sheen">
         <CardContent className="flex flex-col gap-3 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-brand-ink" aria-hidden />
-              <span className="eyebrow">Billing cycle</span>
-            </div>
-            {planName ? (
-              <span className="text-xs text-muted-foreground">
-                {planName} · {frequencyLabel}
-              </span>
-            ) : null}
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-5 w-5 text-brand-ink" aria-hidden />
+            <span className="eyebrow">Booking cycle</span>
           </div>
           <div>
             <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
@@ -673,13 +665,6 @@ export function SessionBooking({
             </div>
             <Progress value={cyclePct} tone={cycleFull ? "success" : "brand"} />
           </div>
-          <p className="text-xs text-muted-foreground text-pretty">
-            {overdue
-              ? "Booking is paused while your balance is past due — clear it from Billing to resume."
-              : cycleFull
-                ? `You've used all ${cycleCap} sessions in this 4-week cycle — the next cycle is always open to book ahead.`
-                : `Your ${planName ?? `${frequencyLabel} plan`} allows ${cycleCap} sessions per 4-week cycle — missed days can be made up within the cycle. ${remainingThisCycle} left in this one.`}
-          </p>
         </CardContent>
       </Card>
 
@@ -844,7 +829,7 @@ export function SessionBooking({
       >
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg">Available times</h2>
+            <h2 className="text-lg">Available Times</h2>
             <Pill tone="neutral">next {groups.length} weeks</Pill>
           </div>
           <p className="text-sm text-muted-foreground text-pretty">

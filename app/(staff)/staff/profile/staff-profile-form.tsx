@@ -358,7 +358,8 @@ export function StaffProfileForm({ member }: { member: StaffMember }) {
                   ["Push notifications", push, setPush, "Chats you're subscribed to or actively involved in — straight to your phone."],
                   ["Email", emailNotif, setEmailNotif, "Daily digest + anything that needs a reply."],
                   // R37/V17 — your own sessions only, default off.
-                  ["Booking activity", bookingNotif, setBookingNotif, "Bookings for sessions you coach — when a member books or cancels."],
+                  // Round 18 (C7): client-approved wording, verbatim.
+                  ["Booking activity", bookingNotif, setBookingNotif, "When a member books or cancels in a session you are coaching in"],
                 ] as const
               ).map(([label, value, set, hint]) => (
                 <label

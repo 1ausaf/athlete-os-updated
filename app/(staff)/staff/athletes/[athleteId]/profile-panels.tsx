@@ -117,7 +117,11 @@ export function ManagedSelect({
   }, [options, loaded, storageKey]);
 
   // The current value always renders, even if its option was deleted.
-  const shown = options.includes(value) ? options : [value, ...options];
+  // Round 18 (D5): the DISPLAY sorts alphabetically (storage order stays
+  // as-is), so added/renamed options slot straight into order.
+  const shown = [
+    ...(options.includes(value) ? options : [value, ...options]),
+  ].sort((a, b) => a.localeCompare(b));
 
   function addOption() {
     const v = addDraft.trim();
@@ -175,7 +179,12 @@ export function ManagedSelect({
             <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-2 shadow-raised">
               <p className="eyebrow px-1.5 pb-1.5">{label} options</p>
               <ul className="flex flex-col gap-0.5">
-                {options.map((o, i) => (
+                {/* D5 — alphabetical here too; i stays the STORAGE index so
+                    rename/delete land on the right entry */}
+                {options
+                  .map((o, i) => [o, i] as const)
+                  .sort((a, b) => a[0].localeCompare(b[0]))
+                  .map(([o, i]) => (
                   <li
                     key={`${o}-${i}`}
                     className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/40"
@@ -928,7 +937,9 @@ export function ContactLinksCard({
   const [info, setInfo] = useState<ContactInfo>(() => seedContact(profile));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ContactInfo>(() => seedContact(profile));
-  const [flash, setFlash] = useState(false);
+  // Round 18 (D7): the flash carries a message now — save confirmation OR
+  // the member password-reset confirmation share the same slot.
+  const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -957,6 +968,12 @@ export function ContactLinksCard({
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
+  function showFlash(message: string) {
+    setFlash(message);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 2600);
+  }
+
   function saveContact() {
     const next = Object.fromEntries(
       Object.entries(draft).map(([k, v]) => [k, v.trim()]),
@@ -970,9 +987,7 @@ export function ContactLinksCard({
     } catch {
       /* storage full/blocked — the edit still holds in-memory */
     }
-    setFlash(true);
-    if (flashTimer.current) window.clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setFlash(false), 2000);
+    showFlash("Contact info updated.");
   }
 
   const hasMemberInfo =
@@ -1026,7 +1041,7 @@ export function ContactLinksCard({
           {flash ? (
             <div className="mt-2 flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5 text-xs font-medium text-success">
               <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Contact info updated.
+              <span className="min-w-0 flex-1">{flash}</span>
             </div>
           ) : null}
 
@@ -1267,6 +1282,21 @@ export function ContactLinksCard({
                     No profile on file yet.
                   </p>
                 )}
+                {/* Round 18 (D7): top-level twin of the Parent & Guardian
+                    card's reset — flashes above, demo only */}
+                {info.email ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 h-7 w-fit gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      showFlash(`Password reset sent to ${info.email}.`)
+                    }
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Reset Password
+                  </Button>
+                ) : null}
               </div>
               <div className="flex flex-col gap-1 text-sm">
                 <p className={FIELD_LABEL}>Parent / Emergency contact</p>

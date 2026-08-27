@@ -44,7 +44,12 @@ import {
 import { EnablePushButton } from "./push-permission";
 
 /** Local, mutable copy of a staff row (demo state lives in the browser). */
-type LocalStaff = StaffMember & { isLocal?: boolean };
+type LocalStaff = StaffMember & {
+  isLocal?: boolean;
+  /** Round 18 (D19): admin-set free-text display name — non-empty wins over
+   *  the derived "Coach First Last" (the R14 self-serve field, per staff). */
+  displayName?: string;
+};
 
 /** Roles the owner can hand out — there's exactly one owner. */
 const ASSIGNABLE_ROLES = STAFF_ROLE_ORDER.filter((r) => r !== "owner");
@@ -223,12 +228,35 @@ export function TeamManager() {
       const base = `${f} ${l}`.trim();
       const coachRole =
         s.role === "coach" || s.role === "coach-manager" || s.role === "intern";
+      // Round 18 (D19): a custom display name keeps winning over the parts.
+      const custom = s.displayName?.trim();
       return {
         ...s,
         firstName: first,
         lastName: last,
-        name: f && l ? (coachRole ? `Coach ${f} ${l}` : base) : s.name,
+        name:
+          custom ||
+          (f && l ? (coachRole ? `Coach ${f} ${l}` : base) : s.name),
         initials: base ? initialsFrom(base) : s.initials,
+      };
+    });
+  }
+
+  /** Round 18 (D19): free-text display name ("Coach Laylor") — the roster
+   *  row's shown name updates live; clearing falls back to the derived one. */
+  function setDisplayName(id: string, display: string) {
+    patchStaff(id, (s) => {
+      const d = display.trim();
+      if (d) return { ...s, displayName: display, name: d };
+      const f = s.firstName.trim();
+      const l = s.lastName.trim();
+      const base = `${f} ${l}`.trim();
+      const coachRole =
+        s.role === "coach" || s.role === "coach-manager" || s.role === "intern";
+      return {
+        ...s,
+        displayName: display,
+        name: f && l ? (coachRole ? `Coach ${f} ${l}` : base) : s.name,
       };
     });
   }
@@ -404,6 +432,9 @@ export function TeamManager() {
               onNameChange={(first, last) =>
                 setNameParts(member.id, first, last)
               }
+              onDisplayNameChange={(display) =>
+                setDisplayName(member.id, display)
+              }
               onToggleNotification={(channel) =>
                 toggleNotification(member.id, channel)
               }
@@ -484,6 +515,7 @@ function StaffRow({
   onToggle,
   onRoleChange,
   onNameChange,
+  onDisplayNameChange,
   onToggleNotification,
   onUploadVs,
   onAddCert,
@@ -494,6 +526,8 @@ function StaffRow({
   onRoleChange: (role: StaffRole) => void;
   /** R51 — admins edit first/last; the display name updates live. */
   onNameChange: (first: string, last: string) => void;
+  /** Round 18 (D19) — admin-set free-text display name ("Coach Laylor"). */
+  onDisplayNameChange: (display: string) => void;
   onToggleNotification: (channel: "push" | "email") => void;
   onUploadVs: () => void;
   onAddCert: (cert: { name: string; expires: string }) => void;
@@ -626,6 +660,24 @@ function StaffRow({
                   {member.firstName.trim() || "First"}{" "}
                   {member.lastName.trim() || "Last"}&rdquo; everywhere.
                 </p>
+                {/* Round 18 (D19): the R14 self-serve Display Name, now
+                    admin-editable per staff member — free text wins over the
+                    derived name; blank falls back to it. */}
+                <div className="mt-3 grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Display Name
+                  </Label>
+                  <Input
+                    value={member.displayName ?? ""}
+                    placeholder={`e.g. Coach ${member.lastName.trim() || "Laylor"}`}
+                    aria-label={`Display name for ${member.name}`}
+                    onChange={(e) => onDisplayNameChange(e.target.value)}
+                  />
+                  <p className="text-[0.7rem] text-muted-foreground">
+                    How their name shows across the workspace — leave blank to
+                    use the default above.
+                  </p>
+                </div>
                 <div className="mt-2 flex flex-col gap-1.5 text-sm">
                   <span className="inline-flex items-center gap-2">
                     <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

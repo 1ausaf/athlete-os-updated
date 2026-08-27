@@ -36,13 +36,15 @@ interface Entry {
 type RemovalStage = { id: string; step: 1 | 2 };
 
 /**
- * Round 5 (C33): coaches add + remove clients on a session directly —
- * additions land as pending until approved. Round 6 (S5): the add control is
- * a type-to-search picker, and removing someone takes two distinct
- * confirmations before the booking is actually dropped.
+ * Round 5 (C33): coaches add + remove clients on a session directly.
+ * Round 6 (S5): the add control is a type-to-search picker, and removing
+ * someone takes two distinct confirmations before the booking is dropped.
  * Round 10 (R29): each row gets a No-show toggle — past sessions included.
  * Round 10 (R32/R33): every change persists as a localStorage delta and
  * broadcasts, so the capacity count and the Briefing stay in sync.
+ * Round 18 (C3/C4/C5): additions land as CONFIRMED immediately, waitlisted
+ * members sit in their own block below with an Approve action that promotes
+ * them into the attendees, and both lists stay alphabetical.
  */
 export function RosterManager({
   sessionId,
@@ -123,11 +125,18 @@ export function RosterManager({
   }, [roster, noShow, sessionId, hydrated]);
 
   const byId = new Map(pool.map((a) => [a.id, a]));
+  // Round 18 (C5): both lists render alphabetically — every add/promote
+  // re-sorts because the order derives from state, never insertion order.
   const rows = roster
     .map((e) => ({ entry: e, athlete: byId.get(e.athleteId) }))
     .filter((r): r is { entry: Entry; athlete: RosterAthlete } =>
       Boolean(r.athlete),
-    );
+    )
+    .sort((a, b) => a.athlete.name.localeCompare(b.athlete.name));
+  // Round 18 (C4): waitlisted members render below the attendees; Approve
+  // moves them up into this list as Confirmed.
+  const attendees = rows.filter((r) => r.entry.state !== "waitlisted");
+  const waitlisted = rows.filter((r) => r.entry.state === "waitlisted");
 
   const available = pool
     .filter((a) => !roster.some((e) => e.athleteId === a.id))
@@ -139,7 +148,8 @@ export function RosterManager({
   );
 
   function addAthlete(id: string) {
-    setRoster((prev) => [...prev, { athleteId: id, state: "pending" }]);
+    // Round 18 (C3): additions land confirmed immediately — no approve step.
+    setRoster((prev) => [...prev, { athleteId: id, state: "confirmed" }]);
     setQuery("");
     setSearchOpen(false);
   }
@@ -179,7 +189,7 @@ export function RosterManager({
         <h2 className="text-lg">Attendees</h2>
         <span className="h-px flex-1 bg-border" />
         <span className="text-xs text-muted-foreground">
-          {rows.length} member{rows.length === 1 ? "" : "s"}
+          {attendees.length} member{attendees.length === 1 ? "" : "s"}
         </span>
 
         {/* S5: searchable add — type to filter, click a result to book.
@@ -251,13 +261,13 @@ export function RosterManager({
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {attendees.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border bg-surface/30 p-4 text-sm text-muted-foreground">
           No members booked on this session yet — add one above.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {rows.map(({ entry, athlete }) => (
+          {attendees.map(({ entry, athlete }) => (
             <RosterRow
               key={athlete.id}
               athlete={athlete}
@@ -274,10 +284,42 @@ export function RosterManager({
           ))}
         </div>
       )}
+
+      {/* Round 18 (C4): the waitlist sits below — Approve promotes the
+          member up into the attendees as Confirmed (persisted like any
+          approval, so it survives reload). */}
+      {waitlisted.length > 0 ? (
+        <>
+          <div className="flex items-center gap-3 pt-1">
+            <h3 className="text-sm font-semibold">Waitlist</h3>
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">
+              {waitlisted.length} waiting
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {waitlisted.map(({ entry, athlete }) => (
+              <RosterRow
+                key={athlete.id}
+                athlete={athlete}
+                state={entry.state}
+                noShow={noShow.has(athlete.id)}
+                removalStep={removal?.id === athlete.id ? removal.step : 0}
+                onApprove={() => approve(athlete.id)}
+                onToggleNoShow={() => toggleNoShow(athlete.id)}
+                onRemoveStart={() => setRemoval({ id: athlete.id, step: 1 })}
+                onRemoveAdvance={() => setRemoval({ id: athlete.id, step: 2 })}
+                onRemoveConfirm={() => removeAthlete(athlete.id)}
+                onRemoveCancel={() => setRemoval(null)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
       <p className="text-[0.7rem] text-muted-foreground">
-        Added members land as pending — approve to confirm the spot. Changes
-        update the capacity count and the Briefing. Saves locally in this
-        demo.
+        Added members are confirmed immediately — approving a waitlisted
+        member moves them into the attendees. Changes update the capacity
+        count and the Briefing. Saves locally in this demo.
       </p>
     </section>
   );
@@ -387,7 +429,10 @@ function RosterRow({
           {/* R29 — the no-show flag outranks the booking state on the row.
               V10: the pill lives beside the name on phones. */}
           <span className="max-sm:hidden">{statePill}</span>
-          {!noShow && state === "pending" ? (
+          {/* Round 12 (N15) / Round 18 (C4): pending AND waitlisted share
+              one Approve — waitlisted members promote up into the
+              attendees list as Confirmed. */}
+          {!noShow && (state === "pending" || state === "waitlisted") ? (
             <button
               type="button"
               onClick={onApprove}
@@ -395,17 +440,6 @@ function RosterRow({
             >
               <Check className="h-3.5 w-3.5" />
               Approve
-            </button>
-          ) : null}
-          {!noShow && state === "waitlisted" ? (
-            // Round 12 (N15): promote straight off the waitlist.
-            <button
-              type="button"
-              onClick={onApprove}
-              className="flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-xs font-semibold text-success transition-colors hover:bg-success/20"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              Add to Attendees
             </button>
           ) : null}
           {/* R29 — toggle a no-show; matters most on past sessions.

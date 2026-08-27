@@ -632,14 +632,25 @@ export function WorkoutLogger({
     setFeedbackOpen(true);
   }
 
-  /** Round 10 (R9): send the session feedback into the team chat. */
+  /**
+   * Round 10 (R9): send the session feedback into the team chat.
+   * Round 18 (A4): sending also JUMPS to the chat page — the queued message
+   * renders right there. Built from the current pathname so the parent
+   * persona's /parent/* prefix survives the /training → /messages swap.
+   */
   function sendSessionFeedback() {
     const text = feedbackText.trim();
     if (text === "") return;
     appendSessionFeedback(athleteId, `Session Feedback: ${text}`);
     setFeedbackOpen(false);
     setFeedbackText("");
-    flashLanding("Feedback sent to your coaching staff.");
+    router.push(pathname.replace(/\/training(?:\/.*)?$/, "/messages") as Route);
+  }
+
+  /** Round 18 (A4): Skip lands on Completed Workouts — the session just moved there. */
+  function skipFeedback() {
+    setFeedbackOpen(false);
+    selectTab("past");
   }
 
   function updateSet(key: string, idx: number, patch: Partial<SetLog>) {
@@ -864,7 +875,7 @@ export function WorkoutLogger({
                             Edit
                           </>
                         ) : (
-                          "Start Workout"
+                          "Start"
                         )}
                       </Button>
                     </li>
@@ -1061,11 +1072,7 @@ export function WorkoutLogger({
                 aria-label="How did the session go?"
               />
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setFeedbackOpen(false)}
-                >
+                <Button type="button" variant="ghost" onClick={skipFeedback}>
                   Skip
                 </Button>
                 <Button
@@ -1523,11 +1530,7 @@ function ExerciseBlock({
                 {lib.circuit.length} videos
               </Pill>
             ) : null}
-            {hist?.isRecentPr || livePr ? (
-              <Pill tone="brand" icon={<Trophy className="h-3 w-3" />}>
-                PR
-              </Pill>
-            ) : null}
+            {/* Round 18 (A2): no PR pill — the Best line below carries it */}
             {/* Round 8 (M17): no "Done" pill — the green block state says it */}
             {/* Round 13 (T8): per-section lb⇄kg toggle (A7) sits top-right in
                 the header row beside the name — no longer under Last/Best. */}
@@ -1709,12 +1712,15 @@ function ExerciseBlock({
           // Round 14 (V2): rows bottom-align on mobile so the %/BW hint that
           // stacks above the weight box can't push it below the result box —
           // every input sits level; sm: keeps the centered desktop row.
+          // Round 18 (A3): on those hint rows the set number and ✓/✗ center
+          // against the INPUT line, not the full row — each rides the bottom
+          // (self-end) inside an h-9 box matching the inputs.
           return (
             <div
               key={i}
               className="print-set-row grid grid-cols-[1rem_minmax(3.5rem,1.5fr)_minmax(4.25rem,1fr)_3.25rem] items-end gap-x-1.5 border-t border-border/60 py-1.5 sm:grid-cols-[1.25rem_minmax(0,1.6fr)_minmax(0,1fr)_3.5rem] sm:items-center sm:gap-x-2"
             >
-              <span className="tnum self-center text-xs font-semibold text-muted-foreground">
+              <span className="tnum flex h-9 items-center self-end text-xs font-semibold text-muted-foreground sm:h-auto sm:self-center">
                 {i + 1}
               </span>
               {/* Round 13 (T7): Target prints only — on screen it's the
@@ -1749,9 +1755,11 @@ function ExerciseBlock({
                    prefilled from the ref max, typing overrides it (the bar
                    was heavier/lighter than the math). The % hint stays. */
                 /* Round 13 (T6): the % hint stacks ABOVE the input on mobile
-                   so the override box keeps a workable width at 375px. */
+                   so the override box keeps a workable width at 375px.
+                   Round 18 (A3): pl-1.5 lines the hint up with the input's
+                   text inset ("in line with the l in load"). */
                 <span className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1.5">
-                  <span className="tnum shrink-0 text-[0.6rem] leading-none text-muted-foreground sm:text-xs sm:leading-normal">
+                  <span className="tnum shrink-0 pl-1.5 text-[0.6rem] leading-none text-muted-foreground sm:pl-0 sm:text-xs sm:leading-normal">
                     {set.load}%
                   </span>
                   <Input
@@ -1787,7 +1795,8 @@ function ExerciseBlock({
                 /* Round 13 (T6): "BW +" stacks ABOVE the input on mobile so
                    the added-load box keeps a workable width at 375px. */
                 <span className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-1">
-                  <span className="shrink-0 text-[0.6rem] font-semibold leading-none text-muted-foreground sm:text-xs sm:leading-normal">
+                  {/* Round 18 (A3): pl-1.5 — hint aligns with the input's text inset */}
+                  <span className="shrink-0 pl-1.5 text-[0.6rem] font-semibold leading-none text-muted-foreground sm:pl-0 sm:text-xs sm:leading-normal">
                     BW&nbsp;+
                   </span>
                   <Input
@@ -1856,7 +1865,7 @@ function ExerciseBlock({
               )}
 
               {/* Round 7: ✓ hit + ✗ miss, side by side. Never printed (M15). */}
-              <span className="no-print flex items-center justify-center gap-1 self-center">
+              <span className="no-print flex h-9 items-center justify-center gap-1 self-end sm:h-auto sm:self-center">
                 {/* Round 11 (M9): ✓ confirms a typed value instead of
                     clearing it; only a second ✓ on a confirmed set un-logs. */}
                 <button

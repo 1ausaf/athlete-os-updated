@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { requireUserWithProfile } from "@/lib/auth";
 import { isAdmin, isStaff } from "@/lib/rbac";
 import { athleteById, threads, type Thread } from "@/lib/demo/data";
-import { assignedStaffIds, assignmentsForAthlete } from "@/lib/demo/staff";
+import {
+  assignedStaffIds,
+  assignmentsForAthlete,
+  staffMembers,
+} from "@/lib/demo/staff";
 
 import { MessagingInbox, type InboxThread } from "./messaging-inbox";
 import { NewAnnouncementButton } from "./new-announcement";
@@ -46,6 +50,27 @@ export default async function StaffMessagingPage() {
   if (!isStaff(user)) redirect("/athlete/dashboard");
   const admin = isAdmin(user);
 
+  // Round 18 (D12): a chat "tags" you when any message body @mentions you —
+  // "@First" or "@Full Name", case-insensitive. Names come from the session
+  // user plus the staff record; the bare "@coach" token is skipped so a
+  // "Coach X" display name can't match every coach's mention.
+  const me = staffMembers.find((s) => s.id === user.id);
+  const mentionTokens = new Set<string>();
+  for (const full of [user.fullName, me?.name]) {
+    const t = full?.trim().toLowerCase();
+    if (t) mentionTokens.add(`@${t}`);
+  }
+  const firstName = (me?.firstName ?? user.fullName.split(/\s+/)[0] ?? "")
+    .trim()
+    .toLowerCase();
+  if (firstName && firstName !== "coach") mentionTokens.add(`@${firstName}`);
+  const tokens = [...mentionTokens];
+  const isTagged = (t: Thread): boolean =>
+    t.messages.some((m) => {
+      const body = m.body.toLowerCase();
+      return tokens.some((tok) => body.includes(tok));
+    });
+
   const rows: InboxThread[] = threads.map((t) => {
     const athleteId = threadAthleteId(t);
     const athleteName = athleteId
@@ -67,6 +92,7 @@ export default async function StaffMessagingPage() {
       athleteName,
       involved,
       subscribed: SUBSCRIBED[user.id]?.includes(t.id) ?? false,
+      tagged: isTagged(t),
       roleLabel: assignment ? ROLE_COLUMN_LABEL[assignment.role] : null,
     };
   });

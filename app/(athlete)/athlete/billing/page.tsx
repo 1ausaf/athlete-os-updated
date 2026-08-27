@@ -12,10 +12,28 @@ import {
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pill } from "@/components/ui/pill";
+import { Pill, type PillTone } from "@/components/ui/pill";
 import { requireAthleteContext } from "@/lib/demo/session";
-import { athleteProfileById, fmtDay, invoices, money2, plans } from "@/lib/demo/data";
+import {
+  athleteProfileById,
+  fmtDay,
+  invoices,
+  money2,
+  plans,
+  type Invoice,
+} from "@/lib/demo/data";
 import { billingMeta } from "@/lib/demo/status";
+import { cn } from "@/lib/utils";
+
+/** Round 18 (A10c): the open-balance statuses shown on the member page. */
+const OUTSTANDING_META: Record<
+  "due" | "overdue" | "partial",
+  { label: string; tone: PillTone }
+> = {
+  due: { label: "Due", tone: "warning" },
+  overdue: { label: "Overdue", tone: "danger" },
+  partial: { label: "Partially paid", tone: "info" },
+};
 
 export default async function AthleteBillingPage() {
   const { athlete, isParentView } = requireAthleteContext();
@@ -70,6 +88,14 @@ export default async function AthleteBillingPage() {
     Math.ceil((nextDate.getTime() - Date.now()) / 86_400_000),
   );
 
+  // Round 18 (A10c): this athlete's open balances, oldest due date first.
+  const outstanding = invoices
+    .filter(
+      (i): i is Invoice & { status: keyof typeof OUTSTANDING_META } =>
+        i.athleteId === athlete.id && !i.archived && i.status in OUTSTANDING_META,
+    )
+    .sort((a, b) => (a.dueDate > b.dueDate ? 1 : -1));
+
   // Only the two most recent settled receipts, tucked away by default.
   const pastReceipts = invoices
     .filter((i) => i.athleteId === athlete.id && i.status === "paid")
@@ -108,7 +134,9 @@ export default async function AthleteBillingPage() {
                     : `In ${daysUntil} day${daysUntil === 1 ? "" : "s"} · charged automatically via Square.`}
               </p>
             </div>
-            <div className="text-right">
+            {/* Round 18 (P3): left-aligned once it wraps under the date at
+                375px — right-aligned only beside it on sm+. */}
+            <div className="text-left sm:text-right">
               <span className="eyebrow">Amount</span>
               <div className="tnum font-display text-4xl font-extrabold tracking-tight sm:text-5xl">
                 {money2(nextAmount)}
@@ -121,13 +149,75 @@ export default async function AthleteBillingPage() {
         </CardContent>
       </Card>
 
+      {/* Round 18 (A10c): outstanding invoices — what's still owing and how
+          to settle it. Hidden entirely when nothing is open. */}
+      {outstanding.length > 0 ? (
+        <Card>
+          <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-muted-foreground" aria-hidden />
+              <h3 className="text-base">Outstanding Invoices</h3>
+              <Pill tone="warning" className="ml-auto">
+                <span className="tnum">{outstanding.length}</span>
+              </Pill>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {outstanding.map((inv) => {
+                const meta = OUTSTANDING_META[inv.status];
+                // Partial payments count against the balance (P3 rows are
+                // stacked + left-aligned at 375px; one row on sm+).
+                const owingCents =
+                  inv.amountCents -
+                  (inv.status === "partial" ? (inv.paidAmountCents ?? 0) : 0);
+                return (
+                  <li
+                    key={inv.id}
+                    className="flex flex-col items-start gap-1 rounded-lg border border-border bg-surface/50 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 sm:flex-1">
+                      <span className="truncate text-sm font-semibold">
+                        {inv.plan}
+                      </span>
+                      <Pill tone={meta.tone}>{meta.label}</Pill>
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs",
+                        inv.status === "overdue"
+                          ? "font-medium text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      Due {fmtDay(inv.dueDate)}
+                    </span>
+                    <span className="tnum text-sm font-semibold">
+                      {money2(owingCents)}
+                      {inv.status === "partial" ? (
+                        <span className="ml-1 text-xs font-medium text-muted-foreground">
+                          of {money2(inv.amountCents)}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Pay online from your invoice link, or e-transfer / cash at the
+              front desk — the staff records it against your invoice.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Membership — plan + cycle folded into one compact card */}
+        {/* Plan — membership + cycle folded into one compact card */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
             <div className="flex items-center gap-2">
               <Landmark className="h-5 w-5 text-muted-foreground" aria-hidden />
-              <h3 className="text-base">Membership</h3>
+              {/* Round 18 (A10b): "Membership" label → "Plan" */}
+              <h3 className="text-base">Plan</h3>
               <Pill tone={billing.tone} className="ml-auto" dot>
                 {billing.label}
               </Pill>
@@ -164,7 +254,7 @@ export default async function AthleteBillingPage() {
           <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
             <div className="flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-muted-foreground" aria-hidden />
-              <h3 className="text-base">Payment method</h3>
+              <h3 className="text-base">Payment Method</h3>
             </div>
             <div className="flex items-center gap-3 rounded-lg border border-border bg-surface/50 p-4">
               <span className="flex h-10 w-14 items-center justify-center rounded-md bg-brand/10 text-xs font-bold text-brand-ink">
@@ -213,20 +303,24 @@ export default async function AthleteBillingPage() {
             </p>
           ) : (
             pastReceipts.map((inv) => (
+              // Round 18 (P3): at 375px the amount + pill wrap onto their own
+              // LEFT-aligned line; sm+ keeps the single right-anchored row.
               <div
                 key={inv.id}
-                className="flex items-center gap-3 rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-xs text-muted-foreground"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border/60 bg-surface/50 px-3 py-2.5 text-xs text-muted-foreground"
               >
                 <span className="tnum font-medium text-foreground/80">
                   {fmtDay(inv.dueDate)}
                 </span>
-                <span className="truncate">
+                <span className="min-w-0 flex-1 truncate">
                   {inv.plan} · {inv.method}
                 </span>
-                <span className="tnum ml-auto font-semibold text-foreground/80">
-                  {money2(inv.amountCents)}
+                <span className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                  <span className="tnum font-semibold text-foreground/80">
+                    {money2(inv.amountCents)}
+                  </span>
+                  <Pill tone="neutral">paid</Pill>
                 </span>
-                <Pill tone="neutral">paid</Pill>
               </div>
             ))
           )}

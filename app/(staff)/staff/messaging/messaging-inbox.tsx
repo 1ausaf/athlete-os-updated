@@ -40,16 +40,20 @@ export interface InboxThread {
   involved: boolean;
   /** Follows the thread without being assigned (hardcoded demo set). */
   subscribed: boolean;
+  /** Round 18 (D12) — a message body @mentions the viewer. */
+  tagged: boolean;
   /** R8 (H4) — the viewer's relationship to the member ("—" when null). */
   roleLabel: string | null;
 }
 
-type InboxFilter = "involved" | "subscribed" | "everything";
+type InboxFilter = "involved" | "subscribed" | "tagged" | "everything";
 type SortKey = "name" | "role" | "activity" | "unread";
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: "involved", label: "Involved" },
   { key: "subscribed", label: "Subscribed" },
+  // Round 18 (D12) — chats where a message @mentions the signed-in staffer.
+  { key: "tagged", label: "Tagged" },
   { key: "everything", label: "All" },
 ];
 
@@ -240,6 +244,7 @@ export function MessagingInbox({
     () => ({
       involved: rows.filter((r) => r.involved).length,
       subscribed: rows.filter((r) => isSubscribed(r)).length,
+      tagged: rows.filter((r) => r.tagged).length,
       everything: rows.length,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,6 +256,7 @@ export function MessagingInbox({
     const matches = rows.filter((r) => {
       if (filter === "involved" && !r.involved) return false;
       if (filter === "subscribed" && !isSubscribed(r)) return false;
+      if (filter === "tagged" && !r.tagged) return false;
       if (!q) return true;
       const haystack = [
         r.thread.subject,
@@ -417,7 +423,9 @@ export function MessagingInbox({
                     ? "No assigned chats yet — a chat opens automatically when you're assigned to a member."
                     : filter === "subscribed" && counts.subscribed === 0
                       ? "You're not subscribed to any extra chats."
-                      : "No chats match."}
+                      : filter === "tagged" && counts.tagged === 0
+                        ? "No chats tag you right now."
+                        : "No chats match."}
                 </TableCell>
               </TableRow>
             ) : null}

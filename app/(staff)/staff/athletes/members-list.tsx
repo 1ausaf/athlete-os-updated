@@ -536,13 +536,14 @@ export function MembersList({
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
               {/* Round 13 (S1): the name column stays put while the table
-                  scrolls sideways on phones — opaque bg so rows slide under */}
+                  scrolls sideways on phones — opaque bg so rows slide under.
+                  Round 18 (C2): capped narrow so more columns show at 375px */}
               <SortHeader
                 label="Member"
                 active={sortKey === "name"}
                 dir={sortDir}
                 onClick={() => toggleSort("name")}
-                className="max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-muted"
+                className="max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:w-32 max-sm:max-w-[8.5rem] max-sm:bg-muted"
               />
               <SortHeader label="Focus" active={sortKey === "focus"} dir={sortDir} onClick={() => toggleSort("focus")} />
               <SortHeader label="Age" active={sortKey === "age"} dir={sortDir} onClick={() => toggleSort("age")} />
@@ -724,14 +725,15 @@ function MemberRow({
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
       {/* Round 13 (S1): sticky name cell on phones; avatar + plan line are
-          desktop-only so the column stays narrow */}
+          desktop-only so the column stays narrow. Round 18 (C2): a fixed
+          narrow content width on phones — long names truncate. */}
       <td
         className={cn(
-          "px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-background",
+          "px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:w-32 max-sm:max-w-[8.5rem] max-sm:bg-background",
           limited && "border-l-2 border-l-warning",
         )}
       >
-        <span className="flex items-center gap-2.5">
+        <span className="flex min-w-0 items-center gap-2.5 max-sm:w-[6.5rem]">
           <AthleteAvatar
             initials={athlete.initials}
             hue={athlete.hue}
@@ -739,8 +741,8 @@ function MemberRow({
             className="hidden sm:inline-flex"
           />
           <span className="min-w-0">
-            <span className="flex items-center gap-1.5 font-semibold">
-              {athlete.name}
+            <span className="flex min-w-0 items-center gap-1.5 font-semibold">
+              <span className="min-w-0 max-sm:truncate">{athlete.name}</span>
               {limited ? (
                 <span
                   title="Limited — see return-to-play notes"
@@ -822,9 +824,10 @@ function GroupRow({
       onClick={onOpen}
       className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-accent/40"
     >
-      {/* Round 13 (S1): same sticky/mobile treatment as member rows */}
-      <td className="px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-background">
-        <span className="flex items-center gap-2.5">
+      {/* Round 13 (S1): same sticky/mobile treatment as member rows.
+          Round 18 (C2): narrow on phones — group names may wrap to 2 lines */}
+      <td className="px-3 py-2.5 max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:w-32 max-sm:max-w-[8.5rem] max-sm:bg-background">
+        <span className="flex min-w-0 items-center gap-2.5 max-sm:w-[6.5rem]">
           <AthleteAvatar
             initials={group.initials}
             hue={group.hue}
@@ -832,7 +835,7 @@ function GroupRow({
             className="hidden sm:inline-flex"
           />
           <span className="min-w-0">
-            <span className="flex items-center gap-1.5 font-semibold">
+            <span className="flex items-center gap-1.5 font-semibold max-sm:line-clamp-2">
               Group: {group.name}
             </span>
             <span className="hidden text-xs text-muted-foreground sm:block">

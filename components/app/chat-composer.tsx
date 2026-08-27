@@ -221,7 +221,10 @@ export function ChatComposer({
         className="min-h-[5.5rem] w-full resize-y bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
 
-      <div className="flex flex-wrap items-center gap-1">
+      {/* Round 18 (C6): tighter gaps + divider at the default breakpoint so
+          Send stays on the SAME row at 375px even with the @ button; sm+
+          keeps the roomier spacing. */}
+      <div className="flex flex-wrap items-center gap-0.5 sm:gap-1">
         <button
           type="button"
           title="Bold (*text*)"
@@ -276,7 +279,7 @@ export function ChatComposer({
             ) : null}
           </span>
         ) : null}
-        <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+        <span className="h-5 w-px bg-border sm:mx-0.5" aria-hidden />
         {/* Round 13 (C4): Attach + Voice are icon-only — the words live in
             title/aria-label — so Send sits cleanly at the right. */}
         <button
@@ -324,8 +327,13 @@ export function ChatComposer({
           {hint ?? "Ctrl+Enter"}
         </span>
         {/* Round 13 (C4): the hint is sm+-only, so on mobile the button
-            claims the right edge itself. */}
-        <Button variant="brand" size="sm" className="max-sm:ml-auto" onClick={send}>
+            claims the right edge itself — C6: with slimmer padding there. */}
+        <Button
+          variant="brand"
+          size="sm"
+          className="max-sm:ml-auto max-sm:gap-1.5 max-sm:px-2"
+          onClick={send}
+        >
           <Send className="h-3.5 w-3.5" />
           Send
         </Button>

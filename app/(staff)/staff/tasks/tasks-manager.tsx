@@ -175,6 +175,15 @@ export function TasksManager({
 
   const canSave = title.trim().length > 0;
 
+  /** Round 18 (D13): adding while an assignee filter is active defaults the
+   *  form to that coach — otherwise the new task lands unassigned ("") and,
+   *  since "" matches EVERY filter, shows under everyone. */
+  function openAdd() {
+    resetForm();
+    if (assigneeFilter !== "all") setFormAssignee(assigneeFilter);
+    setFormOpen(true);
+  }
+
   /** K1 — the pencil reopens the add form pre-filled with the task. */
   function openEdit(t: StaffTask) {
     setEditingId(t.id);
@@ -256,7 +265,7 @@ export function TasksManager({
             variant="outline"
             size="sm"
             className="ml-auto"
-            onClick={() => setFormOpen(true)}
+            onClick={openAdd}
           >
             <Plus className="h-4 w-4" />
             Add Task
@@ -376,7 +385,8 @@ export function TasksManager({
                   Type
                 </span>
               </th>
-              <th className="w-16 px-3 py-2.5" aria-label="Actions" />
+              {/* Round 18 (C8): wide enough for pencil + trash at 32px each */}
+              <th className="w-20 px-3 py-2.5" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -577,13 +587,15 @@ function TaskRow({
             </Button>
           ) : (
             <>
+              {/* Round 18 (C8): 32px hit areas so the pencil is tappable
+                  once the table is scrolled across on a phone */}
               {onEdit ? (
                 <button
                   type="button"
                   aria-label={`Edit task: ${task.title}`}
                   title="Edit task"
                   onClick={onEdit}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -594,7 +606,7 @@ function TaskRow({
                   aria-label={`Delete task: ${task.title}`}
                   title="Delete task"
                   onClick={() => removeLocalTask(task.id)}
-                  className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

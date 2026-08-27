@@ -48,7 +48,8 @@ export default async function AthleteAssessmentPage() {
             {summaries.map((s) => {
               const inner = (
                 <>
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
+                  {/* Round 18 (A9): mobile rows drop the icon. */}
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink max-sm:hidden">
                     <ClipboardCheck className="h-5 w-5" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -59,14 +60,23 @@ export default async function AthleteAssessmentPage() {
                         {s.name}
                       </span>
                     </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                      <span>{ASSESSMENT_TYPE_LABEL[s.type]}</span>
-                      <span aria-hidden>·</span>
+                    {/* Round 18 (A9): mobile — no duplicate type line, and
+                        coach + date stack on their own lines; sm+ keeps the
+                        single dotted meta row. */}
+                    <span className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-0">
+                      <span className="max-sm:hidden">
+                        {ASSESSMENT_TYPE_LABEL[s.type]}
+                      </span>
+                      <span aria-hidden className="max-sm:hidden">
+                        ·
+                      </span>
                       <span className="inline-flex items-center gap-1">
                         <UserRound className="h-3 w-3" aria-hidden />
                         Performed by {s.performedBy}
                       </span>
-                      <span aria-hidden>·</span>
+                      <span aria-hidden className="max-sm:hidden">
+                        ·
+                      </span>
                       <span className="tnum">{fmtFullDay(s.date)}</span>
                     </span>
                   </span>

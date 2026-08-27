@@ -1417,6 +1417,15 @@ export const threads: Thread[] = [
         body: "Great session today — ankle looked stable on the bilateral landings. No swelling reported after.",
         at: at(-1, 17, 5),
       },
+      // Round 18 (D12): an @mention so the admin's Tagged tab demos.
+      {
+        id: "m1b",
+        senderId: "coach-ellis",
+        senderName: "Coach Ellis",
+        senderRole: "coach",
+        body: "Flagging for @Jeremy Choi — can you confirm the billing note on Maya's file before Thursday?",
+        at: at(-1, 18, 10),
+      },
       {
         id: "m2",
         senderId: "guardian-diane",
@@ -1679,6 +1688,9 @@ export const invoices: Invoice[] = [
   // Ren's Elite membership runs as a monthly recurring series (rs-ren).
   { id: "inv-12", athleteId: "ath-ren", athleteName: "Ren Tanaka", plan: "Elite — monthly", amountCents: 52000, issuedAt: at(-33), dueDate: at(-26), status: "paid", paidAt: at(-27), paidMethod: "Square", sentAt: at(-33), recurringSeriesId: "rs-ren", method: "Square" },
   { id: "inv-13", athleteId: "ath-ren", athleteName: "Ren Tanaka", plan: "Elite — monthly", amountCents: 52000, issuedAt: at(-3), dueDate: at(4), status: "due", sentAt: at(-3), recurringSeriesId: "rs-ren", method: "Square" },
+  // Round 18 (A10): a separate-item invoice so the athlete portal's
+  // Outstanding Invoices section demos for the default persona.
+  { id: "inv-14", athleteId: "ath-jordan", athleteName: "Jordan Vega", plan: "Team gear — Wolf Pack hoodie", amountCents: 4500, issuedAt: at(-2), dueDate: at(5), status: "due", sentAt: at(-2), method: "Square" },
 ];
 
 /** Round 16 (Q3): seeded recurring series — Ren's monthly Elite membership. */

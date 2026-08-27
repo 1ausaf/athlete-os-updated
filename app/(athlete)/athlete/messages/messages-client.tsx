@@ -209,16 +209,13 @@ export function MessagesClient({
         ]}
         active={tab}
         onSelect={selectTab}
+        // Round 18 (A7): unread pill only while unread — nothing once read.
         right={
           unread > 0 && !chatSeen ? (
             <Pill tone="brand" dot>
               {unread} unread
             </Pill>
-          ) : (
-            <Pill tone="success" dot>
-              All caught up
-            </Pill>
-          )
+          ) : null
         }
       />
 
@@ -326,8 +323,10 @@ function CoachChat({
       <CardContent className="flex flex-col gap-4 p-0 sm:p-5">
         {/* Team-channel header — presubscribed, no roster block (A11).
             Round 11 (M21–M23): just the member-facing title — the "Team
-            channel" pill and the who-sees-this sub-line are gone. */}
-        <div className="flex flex-col gap-2 border-b border-border pb-4">
+            channel" pill and the who-sees-this sub-line are gone.
+            Round 18 (A8): mobile — same inset as the bubbles/composer text
+            so the icon, bubbles and composer share one left line. */}
+        <div className="flex flex-col gap-2 border-b border-border pb-4 max-sm:px-2.5">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
               <Users className="h-5 w-5" />
@@ -356,10 +355,12 @@ function CoachChat({
           </div>
         ) : null}
 
-        {/* Conversation */}
+        {/* Conversation — Round 18 (A8): on mobile the list carries the same
+            horizontal inset as the composer's own padding (p-2.5), so bubble
+            edges line up with the channel icon and composer text. */}
         <div
           ref={listRef}
-          className="flex max-h-[480px] flex-col gap-4 overflow-y-auto sm:rounded-xl sm:border sm:border-border sm:bg-surface/30 sm:p-4"
+          className="flex max-h-[480px] flex-col gap-4 overflow-y-auto max-sm:px-2.5 sm:rounded-xl sm:border sm:border-border sm:bg-surface/30 sm:p-4"
         >
           {messages.length === 0 ? (
             <p className="m-auto max-w-xs py-8 text-center text-sm text-muted-foreground text-pretty">

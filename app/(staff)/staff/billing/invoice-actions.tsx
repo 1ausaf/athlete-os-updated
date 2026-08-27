@@ -51,6 +51,7 @@ import {
   fmtFullDay,
   money2,
   PAYMENT_METHODS,
+  plans,
   seriesCadenceLabel,
   seriesEndLabel,
   seriesNextRun,
@@ -2158,10 +2159,20 @@ function StatusGuideDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+// Round 18 (D16): the client picker lists everyone alphabetically —
+// athletes A→Z first, then teams A→Z.
+const athletesAZ = [...athletes].sort((a, b) => a.name.localeCompare(b.name));
+const teamsAZ = [...trainingGroups].sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
+
 /**
  * O2 — create a one-off invoice for any client (athlete or team). Round 16:
  * a "Repeats" cadence starts a recurring series (Q3) and an optional future
  * "Send on" date queues the invoice as Scheduled instead of sending (Q4).
+ * Round 18: typeable client filter (D16) plus membership-plan and discount
+ * pickers (D17) — both bake into the amount and plan label, so they compose
+ * with repeats and Send-on with no new model fields.
  */
 function NewInvoiceDialog({
   onClose,
@@ -2170,7 +2181,16 @@ function NewInvoiceDialog({
   onClose: () => void;
   onCreate: (invoice: Invoice, series?: RecurringSeries) => void;
 }) {
-  const [clientId, setClientId] = useState(athletes[0]?.id ?? "");
+  const [clientId, setClientId] = useState(athletesAZ[0]?.id ?? "");
+  // D16 — typing here filters the client select's options live.
+  const [clientQuery, setClientQuery] = useState("");
+  // D17 — "custom" keeps the free-form one-off behavior; a plan choice
+  // auto-fills the amount (still editable after).
+  const [planId, setPlanId] = useState("custom");
+  const [discount, setDiscount] = useState<"none" | "family" | "custom">(
+    "none",
+  );
+  const [customPct, setCustomPct] = useState("10");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [due, setDue] = useState(() => toDateInput(Date.now() + 7 * 86_400_000));
@@ -2188,7 +2208,40 @@ function NewInvoiceDialog({
     athletes.find((a) => a.id === clientId)?.name ??
     trainingGroups.find((g) => g.id === clientId)?.name ??
     "";
+  // D16 — the select shows only the clients matching the filter text.
+  const cq = clientQuery.trim().toLowerCase();
+  const athleteMatches = cq
+    ? athletesAZ.filter((a) => a.name.toLowerCase().includes(cq))
+    : athletesAZ;
+  const teamMatches = cq
+    ? teamsAZ.filter((g) => g.name.toLowerCase().includes(cq))
+    : teamsAZ;
+  const clientVisible =
+    athleteMatches.some((a) => a.id === clientId) ||
+    teamMatches.some((g) => g.id === clientId);
+  const plan = plans.find((p) => p.id === planId);
   const amountNum = parseFloat(amount || "0");
+  // D17 — the Amount field holds the pre-discount price; the discount is
+  // baked into what the invoice actually charges (amountCents).
+  const baseCents = Math.round(amountNum * 100);
+  const discountPct =
+    discount === "family"
+      ? 10
+      : discount === "custom"
+        ? Math.floor(Number(customPct) || 0)
+        : 0;
+  const discountValid =
+    discount !== "custom" || (discountPct >= 1 && discountPct <= 95);
+  const chargeCents =
+    discountPct > 0
+      ? Math.round((baseCents * (100 - discountPct)) / 100)
+      : baseCents;
+  const discountNote =
+    discount === "family"
+      ? "Sibling & family −10%"
+      : discount === "custom" && discountValid
+        ? `Custom −${discountPct}%`
+        : "";
   // Q4 — "Send on" must sit in the future (it's the automatic send date).
   const sendOnFuture =
     sendOn === "" || new Date(`${sendOn}T23:59:59`).getTime() > Date.now();
@@ -2202,7 +2255,10 @@ function NewInvoiceDialog({
       (endType !== "after" || endAfterN >= 1));
   const valid =
     clientName.length > 0 &&
+    clientVisible &&
     amountNum > 0 &&
+    chargeCents > 0 &&
+    discountValid &&
     due.length > 0 &&
     sendOnFuture &&
     repeatValid;
@@ -2215,12 +2271,17 @@ function NewInvoiceDialog({
   function create() {
     if (!valid) return;
     const now = new Date().toISOString();
+    // D17 — the plan label carries the memo and the discount note, e.g.
+    // "Academy · Sibling & family −10%"; nothing new stored on the model.
+    const labelParts = [plan ? plan.name : memo.trim() || "One-off invoice"];
+    if (plan && memo.trim()) labelParts.push(memo.trim());
+    if (discountNote) labelParts.push(discountNote);
     const base: Invoice = {
       id: `inv-local-${Date.now()}`,
       athleteId: clientId,
       athleteName: clientName,
-      plan: memo.trim() || "One-off invoice",
-      amountCents: Math.round(amountNum * 100),
+      plan: labelParts.join(" · "),
+      amountCents: chargeCents,
       issuedAt: now,
       dueDate: new Date(`${due}T12:00:00`).toISOString(),
       status: "due",
@@ -2275,27 +2336,116 @@ function NewInvoiceDialog({
     >
       <div className="grid gap-1.5">
         <Label className="text-xs text-muted-foreground">Client</Label>
+        {/* D16 — type-to-filter over the select below (works with keyboard
+            and touch; the select stays the actual picker). */}
+        <span className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={clientQuery}
+            placeholder="Type to filter clients…"
+            aria-label="Filter clients by name"
+            onChange={(e) => {
+              const q = e.target.value;
+              setClientQuery(q);
+              // Keep the selection on a visible option while typing.
+              const ql = q.trim().toLowerCase();
+              const first = [...athletesAZ, ...teamsAZ].filter(
+                (c) => ql === "" || c.name.toLowerCase().includes(ql),
+              );
+              if (first.length > 0 && !first.some((c) => c.id === clientId))
+                setClientId(first[0].id);
+            }}
+            className="h-9 w-full pl-8"
+          />
+        </span>
         <select
           value={clientId}
           aria-label="Invoice client"
           onChange={(e) => setClientId(e.target.value)}
           className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
         >
-          <optgroup label="Athletes">
-            {athletes.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Teams">
-            {trainingGroups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </optgroup>
+          {athleteMatches.length > 0 ? (
+            <optgroup label="Athletes">
+              {athleteMatches.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {teamMatches.length > 0 ? (
+            <optgroup label="Teams">
+              {teamMatches.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {athleteMatches.length + teamMatches.length === 0 ? (
+            <option value="" disabled>
+              No clients match “{clientQuery.trim()}”
+            </option>
+          ) : null}
         </select>
+      </div>
+
+      {/* D17 — plan auto-fills the amount; the discount recomputes it live
+          and both ride along into repeats + Send-on unchanged. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Plan</Label>
+          <select
+            value={planId}
+            aria-label="Membership plan"
+            onChange={(e) => {
+              setPlanId(e.target.value);
+              const p = plans.find((pl) => pl.id === e.target.value);
+              if (p) setAmount((p.priceCents / 100).toFixed(2));
+            }}
+            className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
+          >
+            <option value="custom">Custom / one-off</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} — {money2(p.priceCents)} · {p.cadence}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">Discount</Label>
+          <select
+            value={discount}
+            aria-label="Discount"
+            onChange={(e) =>
+              setDiscount(e.target.value as "none" | "family" | "custom")
+            }
+            className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
+          >
+            <option value="none">None</option>
+            <option value="family">Sibling & family — 10%</option>
+            <option value="custom">Custom…</option>
+          </select>
+          {discount === "custom" ? (
+            <span className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={95}
+                step={1}
+                value={customPct}
+                aria-label="Discount percent"
+                onChange={(e) => setCustomPct(e.target.value)}
+                className="h-9 w-20"
+              />
+              <span className="text-xs text-muted-foreground">
+                % off (1–95)
+              </span>
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
@@ -2309,6 +2459,15 @@ function NewInvoiceDialog({
             autoFocus
             onChange={(e) => setAmount(e.target.value)}
           />
+          {/* D17 — the discount math, live as either input changes. */}
+          {discountPct > 0 && baseCents > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              was {money2(baseCents)} − {discountPct}% ={" "}
+              <span className="font-semibold text-foreground">
+                {money2(chargeCents)}
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs text-muted-foreground">Due date</Label>

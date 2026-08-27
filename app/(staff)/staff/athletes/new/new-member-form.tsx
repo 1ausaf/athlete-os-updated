@@ -2,14 +2,22 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useState } from "react";
-import { ArrowLeft, CheckCircle2, KeyRound, Plus, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  KeyRound,
+  Pencil,
+  Plus,
+  Settings2,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { bucketLabel, type MemberBucket } from "@/lib/demo/data";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,6 +30,21 @@ const FIELD_LABEL =
   "text-[0.62rem] font-medium uppercase tracking-wide text-muted-foreground";
 
 const ADD_NEW = "__add-new__";
+
+/** Round 18 (D2): the default membership PLANS — the dropdown's option list
+ *  is managed (add/rename/delete) and persists to localStorage. */
+const PLAN_DEFAULTS = [
+  "2x/wk",
+  "2x/wk + Remote",
+  "3x/wk",
+  "3x/wk + Remote",
+  "4x/wk",
+  "4x/wk + Remote",
+  "2x/wk Remote",
+  "3x/wk Remote",
+  "4x/wk Remote",
+];
+const PLAN_STORAGE_KEY = "aos-plan-options";
 
 /** "Wolf-4821" — the volt-and-wolf brand's temporary password shape. */
 export function generateTempPassword(): string {
@@ -73,12 +96,13 @@ export function NewMemberForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
-  const [sex, setSex] = useState<"M" | "F">("M");
-  // Membership
+  // Round 18 (D3): Sex gains "Other".
+  const [sex, setSex] = useState<"M" | "F" | "O">("M");
+  // Membership — Round 18 (D2): membership type IS the plan, one managed
+  // dropdown (the old bucket select + free-text plan collapsed into it).
   const [focus, setFocus] = useState("");
   const [customFocus, setCustomFocus] = useState("");
-  const [bucket, setBucket] = useState<MemberBucket>("in-gym");
-  const [plan, setPlan] = useState("");
+  const [plan, setPlan] = useState(PLAN_DEFAULTS[0]);
   const [groupId, setGroupId] = useState(
     groups.some((g) => g.id === initialGroupId) ? initialGroupId : "",
   );
@@ -137,8 +161,7 @@ export function NewMemberForm({
     setSex("M");
     setFocus("");
     setCustomFocus("");
-    setBucket("in-gym");
-    setPlan("");
+    setPlan(PLAN_DEFAULTS[0]);
     setGroupId("");
     setGoals("");
     setPastInjuries("");
@@ -249,11 +272,13 @@ export function NewMemberForm({
               <select
                 value={sex}
                 aria-label="Sex"
-                onChange={(e) => setSex(e.target.value as "M" | "F")}
+                onChange={(e) => setSex(e.target.value as "M" | "F" | "O")}
                 className={SELECT_CLS}
               >
                 <option value="M">Male</option>
                 <option value="F">Female</option>
+                {/* Round 18 (D3) */}
+                <option value="O">Other</option>
               </select>
             </Field>
             <Field label="Email" className="lg:col-span-2">
@@ -307,28 +332,9 @@ export function NewMemberForm({
                 />
               </Field>
             ) : null}
-            <Field label="Membership type">
-              <select
-                value={bucket}
-                aria-label="Membership type"
-                onChange={(e) => setBucket(e.target.value as MemberBucket)}
-                className={SELECT_CLS}
-              >
-                {(Object.keys(bucketLabel) as MemberBucket[]).map((b) => (
-                  <option key={b} value={b}>
-                    {bucketLabel[b]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Plan">
-              <Input
-                value={plan}
-                placeholder="e.g. Pro Track — 3×/week"
-                className={INPUT_CLS}
-                onChange={(e) => setPlan(e.target.value)}
-              />
-            </Field>
+            {/* Round 18 (D2): one managed dropdown of plans replaces the
+                bucket select + free-text plan */}
+            <ManagedPlanSelect value={plan} onChange={setPlan} />
             <Field label="Group (optional)">
               <select
                 value={groupId}
@@ -488,5 +494,184 @@ export function NewMemberForm({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Round 18 (D2): Membership type — a dropdown of PLANS whose options  */
+/* are manageable (add / rename / delete) from a gear popover, a       */
+/* lightweight copy of the profile's ManagedSelect (P9). The page is   */
+/* admin-gated, so the gear always shows. Persists to localStorage.    */
+/* ------------------------------------------------------------------ */
+
+function ManagedPlanSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [options, setOptions] = useState<string[]>(PLAN_DEFAULTS);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [addDraft, setAddDraft] = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PLAN_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed) && parsed.length > 0) setOptions(parsed);
+      }
+    } catch {
+      /* corrupted storage — keep defaults */
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(options));
+    } catch {
+      /* storage full/blocked — options still work in-memory */
+    }
+  }, [options, loaded]);
+
+  // The current value always renders, even if its option was deleted.
+  const shown = options.includes(value) ? options : [value, ...options];
+
+  function addOption() {
+    const v = addDraft.trim();
+    setAddDraft("");
+    if (!v || options.includes(v)) return;
+    setOptions((prev) => [...prev, v]);
+  }
+
+  function commitRename(i: number) {
+    const next = editDraft.trim();
+    setEditIdx(null);
+    if (!next || next === options[i] || options.includes(next)) return;
+    const prevName = options[i];
+    setOptions((prev) => prev.map((o, j) => (j === i ? next : o)));
+    if (value === prevName) onChange(next);
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className={cn(FIELD_LABEL, "flex items-center justify-between")}>
+        Membership type
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label="Manage plan options"
+          title="Manage plan options — add, rename or delete"
+          className="rounded p-0.5 transition-colors hover:text-foreground"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </span>
+      <div className="relative">
+        <select
+          value={value}
+          aria-label="Membership type"
+          onChange={(e) => onChange(e.target.value)}
+          className={SELECT_CLS}
+        >
+          {shown.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        {open ? (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              aria-hidden
+              onClick={() => setOpen(false)}
+            />
+            <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-border bg-popover p-2 shadow-raised">
+              <p className="eyebrow px-1.5 pb-1.5">Plan options</p>
+              <ul className="flex flex-col gap-0.5">
+                {options.map((o, i) => (
+                  <li
+                    key={`${o}-${i}`}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent/40"
+                  >
+                    {editIdx === i ? (
+                      <input
+                        autoFocus
+                        value={editDraft}
+                        aria-label={`Rename ${o}`}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onBlur={() => commitRename(i)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter")
+                            (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditIdx(null);
+                        }}
+                        className="h-7 min-w-0 flex-1 rounded border border-input bg-surface px-1.5 text-sm focus:outline-none"
+                      />
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{o}</span>
+                        <button
+                          type="button"
+                          aria-label={`Rename ${o}`}
+                          title="Rename"
+                          onClick={() => {
+                            setEditIdx(i);
+                            setEditDraft(o);
+                          }}
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${o}`}
+                          title="Delete"
+                          onClick={() =>
+                            setOptions((prev) => prev.filter((_, j) => j !== i))
+                          }
+                          className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/60 pt-1.5">
+                <Input
+                  value={addDraft}
+                  placeholder="Add plan…"
+                  className="h-7 flex-1 text-xs"
+                  onChange={(e) => setAddDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addOption();
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2"
+                  disabled={!addDraft.trim()}
+                  aria-label="Add plan option"
+                  onClick={addOption}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }

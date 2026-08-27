@@ -106,6 +106,11 @@ const TONE_DOT: Record<SessionTypeTone, string> = {
   destructive: "bg-destructive",
 };
 
+/** Round 18 (D11): the "Coaches working this booking" chips read A→Z. */
+const STAFF_ALPHABETICAL = [...staffMembers].sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
+
 /** SessionTypeTone → Pill tone ("destructive" is Pill's "danger"). */
 const TONE_TO_PILL: Record<SessionTypeTone, PillTone> = {
   neutral: "neutral",
@@ -866,6 +871,19 @@ function BookingDialog({
   const [draft, setDraft] = useState<BookingDraft>(initial);
   // R43 — two-step confirm before a single occurrence is deleted.
   const [deleteArmed, setDeleteArmed] = useState(false);
+  // Round 18 (D10): a DIRTY dialog won't die to a stray backdrop click,
+  // Escape or the X — it asks "Discard this booking?" first. A pristine
+  // dialog still closes freely.
+  const initialRef = useRef(initial);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  function requestClose() {
+    if (JSON.stringify(draft) !== JSON.stringify(initialRef.current)) {
+      setConfirmDiscard(true);
+    } else {
+      onCancel();
+    }
+  }
 
   function patch(next: Partial<BookingDraft>) {
     setDraft((prev) => ({ ...prev, ...next }));
@@ -888,7 +906,7 @@ function BookingDialog({
     (draft.online ? true : draft.location.trim().length > 0);
 
   return (
-    <LocalDialog title={title} subtitle={subtitle} onClose={onCancel}>
+    <LocalDialog title={title} subtitle={subtitle} onClose={requestClose}>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1.5 sm:col-span-2">
           <Label className="text-xs text-muted-foreground">Booking name</Label>
@@ -982,7 +1000,7 @@ function BookingDialog({
           Coaches working this booking
         </Label>
         <div className="flex flex-wrap gap-1.5">
-          {staffMembers.map((s) => {
+          {STAFF_ALPHABETICAL.map((s) => {
             const on = draft.coaches.includes(s.name);
             return (
               <button
@@ -1106,13 +1124,46 @@ function BookingDialog({
         <span className="mr-auto text-[0.7rem] text-muted-foreground">
           Saves locally in this demo.
         </span>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={requestClose}>
           Cancel
         </Button>
         <Button variant="brand" size="sm" disabled={!valid} onClick={() => onSave(draft)}>
           Save booking
         </Button>
       </div>
+
+      {/* D10 — the small discard confirm; Escape lands here too when dirty */}
+      {confirmDiscard ? (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Discard this booking?"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-background/60 p-4 backdrop-blur-sm"
+          onClick={() => setConfirmDiscard(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-xl border border-border bg-card p-4 shadow-raised"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-bold">Discard this booking?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your changes haven&apos;t been saved.
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Keep editing
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onCancel}>
+                Discard
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </LocalDialog>
   );
 }
