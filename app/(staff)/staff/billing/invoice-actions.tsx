@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import {
   Archive,
   ArchiveRestore,
@@ -9,6 +11,7 @@ import {
   CalendarClock,
   Check,
   CheckCircle2,
+  Copy,
   CreditCard,
   FileDown,
   Info,
@@ -28,8 +31,8 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { TabBar } from "@/components/app/tab-bar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill } from "@/components/ui/pill";
@@ -48,6 +51,9 @@ import {
   fmtFullDay,
   money2,
   PAYMENT_METHODS,
+  seriesCadenceLabel,
+  seriesEndLabel,
+  seriesNextRun,
   type Invoice,
   type RecurringSeries,
 } from "@/lib/demo/data";
@@ -206,11 +212,23 @@ function dateRangeBounds(
   return [new Date(y - 1, 0, 1).getTime(), new Date(y, 0, 1).getTime()];
 }
 
-const cadenceLabel: Record<RecurringSeries["cadence"], string> = {
-  weekly: "Weekly",
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-};
+/**
+ * Round 17: a series whose end rule has been reached reads as Ended. Rows
+ * keep status "active" in local state, so the end rule is checked at render
+ * time (endAfter is only reachable in-demo via Duplicate/creation edges).
+ */
+function effectiveSeriesStatus(s: RecurringSeries): RecurringSeries["status"] {
+  if (s.status === "canceled" || s.status === "ended") return s.status;
+  if (s.endType === "after" && s.endAfter && s.generatedCount >= s.endAfter)
+    return "ended";
+  if (
+    s.endType === "on" &&
+    s.endDate &&
+    new Date(s.endDate).getTime() < Date.now()
+  )
+    return "ended";
+  return s.status;
+}
 
 /** yyyy-mm-dd for a `<input type="date">` value. */
 function toDateInput(t: number | string | Date): string {
@@ -218,15 +236,6 @@ function toDateInput(t: number | string | Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
-}
-
-/** Round 16 (Q3): the next generation date for a fresh local series. */
-function nextRunFrom(cadence: RecurringSeries["cadence"]): string {
-  const d = new Date();
-  if (cadence === "weekly") d.setDate(d.getDate() + 7);
-  else if (cadence === "monthly") d.setMonth(d.getMonth() + 1);
-  else d.setMonth(d.getMonth() + 3);
-  return d.toISOString();
 }
 
 function escHtml(s: string): string {
@@ -325,6 +334,14 @@ export function InvoicesPanel({
   invoices: Invoice[];
   series: RecurringSeries[];
 }) {
+  // Round 17: Square-style sub-tabs — Invoices | Recurring Series, backed
+  // by ?tab= so the view is shareable and Back walks tabs (M1 convention).
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<"invoices" | "recurring">(() =>
+    searchParams.get("tab") === "recurring" ? "recurring" : "invoices",
+  );
   const [rows, setRows] = useState<Invoice[]>(invoices);
   const [seriesRows, setSeriesRows] = useState<RecurringSeries[]>(series);
   const [creating, setCreating] = useState(false);
@@ -357,6 +374,23 @@ export function InvoicesPanel({
   const flashTimer = useRef<number>();
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  // Round 17 (M1): Back/Forward must restore the tab — pushes alone desync
+  // when the component stays mounted, so the tab derives from the URL.
+  useEffect(() => {
+    setTab(searchParams.get("tab") === "recurring" ? "recurring" : "invoices");
+  }, [searchParams]);
+
+  /** Round 17: tab changes push a history entry built off the pathname. */
+  function selectTab(next: "invoices" | "recurring") {
+    if (next === tab) return;
+    setTab(next);
+    setMenuFor(null); // an open row menu would float over the other tab
+    router.push(
+      (next === "recurring" ? `${pathname}?tab=recurring` : pathname) as Route,
+      { scroll: false },
+    );
+  }
 
   // W1 — the open row menu closes on Escape and on any scroll (its portal
   // position is fixed, so it would drift from the row otherwise).
@@ -558,6 +592,41 @@ export function InvoicesPanel({
     setSeriesAction(null);
   }
 
+  /** Round 17: copy any invoice into a fresh draft — same client and terms,
+   *  issued today and due in two weeks. Works on every status. */
+  function duplicateInvoice(inv: Invoice) {
+    const now = Date.now();
+    const copy: Invoice = {
+      id: `inv-copy-${now}`,
+      athleteId: inv.athleteId,
+      athleteName: inv.athleteName,
+      plan: inv.plan,
+      amountCents: inv.amountCents,
+      issuedAt: new Date(now).toISOString(),
+      dueDate: new Date(now + 14 * 86_400_000).toISOString(),
+      status: "draft",
+      method: inv.method,
+    };
+    setRows((prev) => [copy, ...prev]);
+    showFlash("Duplicated — saved as a draft.");
+  }
+
+  /** Round 17: clone a series as a fresh active one — the count resets and
+   *  no invoice goes out until its first run comes around. */
+  function duplicateSeries(s: RecurringSeries) {
+    const now = new Date();
+    const copy: RecurringSeries = {
+      ...s,
+      id: `rs-copy-${now.getTime()}`,
+      status: "active",
+      startedAt: now.toISOString(),
+      generatedCount: 0,
+      nextRun: seriesNextRun(s, now),
+    };
+    setSeriesRows((prev) => [copy, ...prev]);
+    showFlash("Series duplicated.");
+  }
+
   /**
    * Round 15 (W1) / Round 16 (Q5): the ⋯ menu's entries, filtered by status
    * and returned in groups (rendered with dividers) — workflow actions
@@ -617,6 +686,12 @@ export function InvoicesPanel({
         label: "Download PDF",
         icon: <FileDown className={iconCls} />,
         onSelect: () => downloadPdf(inv),
+      },
+      // Round 17 — Duplicate works on every status, archived included.
+      {
+        label: "Duplicate",
+        icon: <Copy className={iconCls} />,
+        onSelect: () => duplicateInvoice(inv),
       },
     ];
     if (inv.status !== "draft") {
@@ -699,6 +774,26 @@ export function InvoicesPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Round 17: Square-style sub-tabs — invoices vs the series manager. */}
+      <TabBar
+        tabs={[
+          {
+            value: "invoices" as const,
+            label: "Invoices",
+            count: rows.filter((r) => !r.archived).length,
+          },
+          {
+            value: "recurring" as const,
+            label: "Recurring Series",
+            count: seriesRows.filter((s) => s.status !== "canceled").length,
+          },
+        ]}
+        active={tab}
+        onSelect={selectTab}
+      />
+
+      {tab === "invoices" ? (
+      <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg">Invoices</h2>
@@ -975,6 +1070,13 @@ export function InvoicesPanel({
         </Table>
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        New invoices save locally in this demo — in production they charge
+        through Square.
+      </p>
+      </>
+      ) : null}
+
       {/* W1 — the open row's ⋯ menu + its click-away layer. Portaled to the
           body so the table's overflow wrappers can't clip it. */}
       {menuFor && menuInv
@@ -1030,124 +1132,175 @@ export function InvoicesPanel({
           )
         : null}
 
-      {/* Q3 — recurring series: the templates that generate invoices. */}
-      <Card className="shadow-none">
-        <CardContent className="flex flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="flex items-center gap-2 text-base font-bold">
-                <Repeat className="h-4 w-4 text-muted-foreground" />
-                Recurring series
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Each series drops a fresh invoice on its cadence — pause while
-                a client is away, cancel to stop for good (history stays).
-              </p>
-            </div>
-            <Pill tone="neutral">
-              {seriesRows.filter((s) => s.status === "active").length} active
-            </Pill>
-          </div>
-          <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border">
+      {/* Round 17: the series manager, grown into a members-style table. */}
+      {tab === "recurring" ? (
+      <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg">Recurring series</h2>
+          <p className="text-sm text-muted-foreground">
+            The templates that drop a fresh invoice on their cadence — pause
+            while a client is away, cancel to stop for good (history stays).
+          </p>
+        </div>
+        <Pill tone="neutral" icon={<Repeat className="h-3.5 w-3.5" />}>
+          {
+            seriesRows.filter((s) => effectiveSeriesStatus(s) === "active")
+              .length
+          }{" "}
+          active
+        </Pill>
+      </div>
+
+      {/* Round 17: mobile scrolls the table sideways (tasks-table idiom). */}
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead>Client</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Repeats</TableHead>
+              <TableHead>Next run</TableHead>
+              <TableHead>Ends</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {seriesRows.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">
-                No recurring series yet — pick a cadence under
-                &ldquo;Repeats&rdquo; when creating an invoice.
-              </p>
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
+                  No recurring series yet — choose Repeats… when creating an
+                  invoice.
+                </TableCell>
+              </TableRow>
             ) : null}
-            {seriesRows.map((s) => (
-              <div
-                key={s.id}
-                className={
-                  s.status === "canceled"
-                    ? "flex flex-wrap items-center gap-x-3 gap-y-2 p-3 opacity-60"
-                    : "flex flex-wrap items-center gap-x-3 gap-y-2 p-3"
-                }
-              >
-                <span className="min-w-0 flex-1 basis-40">
-                  <span className="block text-sm font-medium">
+            {seriesRows.map((s) => {
+              const status = effectiveSeriesStatus(s);
+              // Ended/canceled series keep Duplicate only — nothing else
+              // makes sense once the series stops generating.
+              const open = status === "active" || status === "paused";
+              return (
+                <TableRow
+                  key={s.id}
+                  className={open ? undefined : "opacity-60"}
+                >
+                  <TableCell className="whitespace-nowrap font-medium">
                     {s.athleteName}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {s.plan} · {money2(s.amountCents)} ·{" "}
-                    {cadenceLabel[s.cadence]}
-                  </span>
-                </span>
-                <span className="flex flex-col items-end gap-0.5">
-                  <Pill
-                    tone={
-                      s.status === "active"
-                        ? "success"
-                        : s.status === "paused"
-                          ? "warning"
-                          : "neutral"
-                    }
-                    dot
-                  >
-                    {s.status === "active"
-                      ? "Active"
-                      : s.status === "paused"
-                        ? "Paused"
-                        : "Canceled"}
-                  </Pill>
-                  <span className="text-[0.7rem] text-muted-foreground">
-                    {s.status === "active"
-                      ? `Next run ${fmtDay(s.nextRun)}`
-                      : s.status === "paused"
-                        ? "Nothing generates while paused"
-                        : "No further invoices"}
-                  </span>
-                </span>
-                {s.status !== "canceled" ? (
-                  <span className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => toggleSeries(s)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {s.plan}
+                  </TableCell>
+                  <TableCell className="tnum whitespace-nowrap text-right font-semibold">
+                    {money2(s.amountCents)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {seriesCadenceLabel(s)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {status === "active" ? fmtDay(s.nextRun) : "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {seriesEndLabel(s)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <Pill
+                      tone={
+                        status === "active"
+                          ? "success"
+                          : status === "paused"
+                            ? "warning"
+                            : "neutral"
+                      }
+                      dot
                     >
-                      {s.status === "active" ? (
+                      {status === "active"
+                        ? "Active"
+                        : status === "paused"
+                          ? "Paused"
+                          : status === "ended"
+                            ? "Ended"
+                            : "Canceled"}
+                    </Pill>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-right">
+                    <span className="flex items-center justify-end gap-1">
+                      {open ? (
                         <>
-                          <Pause className="h-3.5 w-3.5" />
-                          Pause
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => toggleSeries(s)}
+                          >
+                            {status === "active" ? (
+                              <>
+                                <Pause className="h-3.5 w-3.5" />
+                                Pause
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-3.5 w-3.5" />
+                                Resume
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            onClick={() =>
+                              setSeriesAction({ s, action: "edit" })
+                            }
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit…
+                          </Button>
                         </>
-                      ) : (
-                        <>
-                          <Play className="h-3.5 w-3.5" />
-                          Resume
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => setSeriesAction({ s, action: "edit" })}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit…
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={() => setSeriesAction({ s, action: "cancel" })}
-                    >
-                      <XCircle className="h-3.5 w-3.5" />
-                      Cancel
-                    </Button>
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                      ) : null}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => duplicateSeries(s)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Duplicate
+                      </Button>
+                      {open ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                          onClick={() =>
+                            setSeriesAction({ s, action: "cancel" })
+                          }
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Cancel
+                        </Button>
+                      ) : null}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       <p className="text-xs text-muted-foreground">
-        New invoices save locally in this demo — in production they charge
-        through Square.
+        {seriesRows.length} series — a paused series generates nothing until
+        resumed; canceled and ended series keep their invoice history.
       </p>
+      </>
+      ) : null}
 
       {creating ? (
         <NewInvoiceDialog
@@ -1249,9 +1402,9 @@ export function InvoicesPanel({
       {seriesAction?.action === "cancel" ? (
         <BillingDialog
           title="Cancel recurring series"
-          subtitle={`${seriesAction.s.athleteName} · ${
-            cadenceLabel[seriesAction.s.cadence]
-          } · ${money2(seriesAction.s.amountCents)}`}
+          subtitle={`${seriesAction.s.athleteName} · ${seriesCadenceLabel(
+            seriesAction.s,
+          )} · ${money2(seriesAction.s.amountCents)}`}
           onClose={() => setSeriesAction(null)}
         >
           <p className="text-sm">
@@ -1277,13 +1430,13 @@ export function InvoicesPanel({
         </BillingDialog>
       ) : null}
 
-      {/* Q3 — edit a series' amount + cadence. */}
+      {/* Q3/Round 17 — edit a series' amount, interval, and end rule. */}
       {seriesAction?.action === "edit" ? (
         <EditSeriesDialog
           s={seriesAction.s}
           onClose={() => setSeriesAction(null)}
-          onSave={(amountCents, cadence) => {
-            patchSeries(seriesAction.s.id, { amountCents, cadence });
+          onSave={(patch) => {
+            patchSeries(seriesAction.s.id, patch);
             showFlash("Series updated — applies from the next invoice.");
             setSeriesAction(null);
           }}
@@ -1627,7 +1780,109 @@ function EditInvoiceDialog({
   );
 }
 
-/** Round 16 (Q3) — edit a recurring series: amount + cadence only. */
+/**
+ * Round 17 — the flexible repeat controls shared by NewInvoiceDialog and
+ * EditSeriesDialog: "Repeat every [N] [week(s)|month(s)]" plus the end rule
+ * (never / on a date / after N invoices).
+ */
+function RepeatRuleFields({
+  count,
+  setCount,
+  unit,
+  setUnit,
+  endType,
+  setEndType,
+  endDate,
+  setEndDate,
+  endAfter,
+  setEndAfter,
+}: {
+  count: string;
+  setCount: (v: string) => void;
+  unit: RecurringSeries["intervalUnit"];
+  setUnit: (v: RecurringSeries["intervalUnit"]) => void;
+  endType: RecurringSeries["endType"];
+  setEndType: (v: RecurringSeries["endType"]) => void;
+  endDate: string;
+  setEndDate: (v: string) => void;
+  endAfter: string;
+  setEndAfter: (v: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-1.5">
+        <Label className="text-xs text-muted-foreground">Repeat every</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={count}
+            aria-label="Repeat every"
+            onChange={(e) => setCount(e.target.value)}
+            className="h-9 w-20"
+          />
+          <select
+            value={unit}
+            aria-label="Repeat unit"
+            onChange={(e) =>
+              setUnit(e.target.value as RecurringSeries["intervalUnit"])
+            }
+            className="h-9 flex-1 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
+          >
+            <option value="week">week(s)</option>
+            <option value="month">month(s)</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs text-muted-foreground">End series</Label>
+        <select
+          value={endType}
+          aria-label="End series"
+          onChange={(e) =>
+            setEndType(e.target.value as RecurringSeries["endType"])
+          }
+          className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
+        >
+          <option value="never">Never</option>
+          <option value="on">On a date</option>
+          <option value="after">After N invoices</option>
+        </select>
+        {endType === "on" ? (
+          <Input
+            type="date"
+            value={endDate}
+            aria-label="Series end date"
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        ) : null}
+        {endType === "after" ? (
+          <span className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={endAfter}
+              aria-label="Total invoices in the series"
+              onChange={(e) => setEndAfter(e.target.value)}
+              className="h-9 w-20"
+            />
+            <span className="text-xs text-muted-foreground">
+              invoices total
+            </span>
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Round 16 (Q3) / Round 17 — edit a recurring series: amount, interval, and
+ * end rule. An interval change recomputes the next run from today (least
+ * surprising); nothing already generated moves.
+ */
 function EditSeriesDialog({
   s,
   onClose,
@@ -1635,13 +1890,49 @@ function EditSeriesDialog({
 }: {
   s: RecurringSeries;
   onClose: () => void;
-  onSave: (amountCents: number, cadence: RecurringSeries["cadence"]) => void;
+  onSave: (patch: Partial<RecurringSeries>) => void;
 }) {
   const [amount, setAmount] = useState((s.amountCents / 100).toFixed(2));
-  const [cadence, setCadence] = useState<RecurringSeries["cadence"]>(s.cadence);
+  const [count, setCount] = useState(String(s.intervalCount));
+  const [unit, setUnit] = useState<RecurringSeries["intervalUnit"]>(
+    s.intervalUnit,
+  );
+  const [endType, setEndType] = useState<RecurringSeries["endType"]>(s.endType);
+  const [endDate, setEndDate] = useState(
+    s.endDate ? toDateInput(s.endDate) : "",
+  );
+  const [endAfter, setEndAfter] = useState(String(s.endAfter ?? 12));
 
   const amountCents = Math.round(parseFloat(amount || "0") * 100);
-  const valid = amountCents > 0;
+  const intervalCount = Math.floor(Number(count) || 0);
+  const afterN = Math.floor(Number(endAfter) || 0);
+  const valid =
+    amountCents > 0 &&
+    intervalCount >= 1 &&
+    (endType !== "on" || endDate.length > 0) &&
+    (endType !== "after" || afterN >= 1);
+
+  function save() {
+    const patch: Partial<RecurringSeries> = {
+      amountCents,
+      intervalCount,
+      intervalUnit: unit,
+      endType,
+      endDate:
+        endType === "on"
+          ? new Date(`${endDate}T12:00:00`).toISOString()
+          : undefined,
+      endAfter: endType === "after" ? afterN : undefined,
+    };
+    if (intervalCount !== s.intervalCount || unit !== s.intervalUnit) {
+      // Round 17: interval changed — recompute the next run from today.
+      patch.nextRun = seriesNextRun(
+        { ...s, intervalCount, intervalUnit: unit },
+        new Date(),
+      );
+    }
+    onSave(patch);
+  }
 
   return (
     <BillingDialog
@@ -1649,48 +1940,41 @@ function EditSeriesDialog({
       subtitle={`${s.athleteName} · ${s.plan}`}
       onClose={onClose}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label className="text-xs text-muted-foreground">Amount (CAD)</Label>
-          <Input
-            type="number"
-            min={0}
-            step="0.01"
-            value={amount}
-            autoFocus
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label className="text-xs text-muted-foreground">Cadence</Label>
-          <select
-            value={cadence}
-            aria-label="Series cadence"
-            onChange={(e) =>
-              setCadence(e.target.value as RecurringSeries["cadence"])
-            }
-            className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
-          >
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-          </select>
-        </div>
+      <div className="grid gap-1.5">
+        <Label className="text-xs text-muted-foreground">Amount (CAD)</Label>
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={amount}
+          autoFocus
+          onChange={(e) => setAmount(e.target.value)}
+        />
       </div>
+      <RepeatRuleFields
+        count={count}
+        setCount={setCount}
+        unit={unit}
+        setUnit={setUnit}
+        endType={endType}
+        setEndType={setEndType}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        endAfter={endAfter}
+        setEndAfter={setEndAfter}
+      />
       <p className="text-xs text-muted-foreground">
         Changes apply from the next generated invoice — nothing already sent
         moves.
+        {intervalCount !== s.intervalCount || unit !== s.intervalUnit
+          ? " The interval changed, so the next run recounts from today."
+          : ""}
       </p>
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button variant="outline" size="sm" onClick={onClose}>
           Keep
         </Button>
-        <Button
-          variant="brand"
-          size="sm"
-          disabled={!valid}
-          onClick={() => onSave(amountCents, cadence)}
-        >
+        <Button variant="brand" size="sm" disabled={!valid} onClick={save}>
           Save changes
         </Button>
       </div>
@@ -1890,7 +2174,14 @@ function NewInvoiceDialog({
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [due, setDue] = useState(() => toDateInput(Date.now() + 7 * 86_400_000));
-  const [repeat, setRepeat] = useState<"" | RecurringSeries["cadence"]>("");
+  // Round 17: flexible repeat settings — interval + end rule.
+  const [repeats, setRepeats] = useState(false);
+  const [repeatCount, setRepeatCount] = useState("1");
+  const [repeatUnit, setRepeatUnit] =
+    useState<RecurringSeries["intervalUnit"]>("month");
+  const [endType, setEndType] = useState<RecurringSeries["endType"]>("never");
+  const [endDate, setEndDate] = useState("");
+  const [endAfter, setEndAfter] = useState("12");
   const [sendOn, setSendOn] = useState("");
 
   const clientName =
@@ -1901,8 +2192,25 @@ function NewInvoiceDialog({
   // Q4 — "Send on" must sit in the future (it's the automatic send date).
   const sendOnFuture =
     sendOn === "" || new Date(`${sendOn}T23:59:59`).getTime() > Date.now();
+  // Round 17 — the repeat settings must be coherent before creating.
+  const repeatCountN = Math.floor(Number(repeatCount) || 0);
+  const endAfterN = Math.floor(Number(endAfter) || 0);
+  const repeatValid =
+    !repeats ||
+    (repeatCountN >= 1 &&
+      (endType !== "on" || endDate.length > 0) &&
+      (endType !== "after" || endAfterN >= 1));
   const valid =
-    clientName.length > 0 && amountNum > 0 && due.length > 0 && sendOnFuture;
+    clientName.length > 0 &&
+    amountNum > 0 &&
+    due.length > 0 &&
+    sendOnFuture &&
+    repeatValid;
+  // Preview label ("weekly" / "every 4 weeks") for the footer line.
+  const cadencePreview = seriesCadenceLabel({
+    intervalCount: repeatCountN || 1,
+    intervalUnit: repeatUnit,
+  } as RecurringSeries).toLowerCase();
 
   function create() {
     if (!valid) return;
@@ -1919,21 +2227,30 @@ function NewInvoiceDialog({
       method: "Square",
       sentAt: now,
     };
-    if (repeat) {
-      // Q3 — the cadence spins up a local series; the first invoice goes
-      // out immediately, flagged as part of it.
+    if (repeats) {
+      // Q3/Round 17 — the repeat settings spin up a local series; the
+      // first invoice goes out immediately, flagged as part of it.
       const s: RecurringSeries = {
         id: `rs-local-${Date.now()}`,
         athleteId: clientId,
         athleteName: clientName,
         plan: base.plan,
         amountCents: base.amountCents,
-        cadence: repeat,
-        nextRun: nextRunFrom(repeat),
+        intervalCount: repeatCountN,
+        intervalUnit: repeatUnit,
+        endType,
+        endDate:
+          endType === "on"
+            ? new Date(`${endDate}T12:00:00`).toISOString()
+            : undefined,
+        endAfter: endType === "after" ? endAfterN : undefined,
+        generatedCount: 1,
+        nextRun: "",
         status: "active",
         startedAt: now,
         method: "Square",
       };
+      s.nextRun = seriesNextRun(s, new Date());
       onCreate({ ...base, recurringSeriesId: s.id }, s);
       return;
     }
@@ -2006,20 +2323,18 @@ function NewInvoiceDialog({
         <div className="grid gap-1.5">
           <Label className="text-xs text-muted-foreground">Repeats</Label>
           <select
-            value={repeat}
+            value={repeats ? "repeats" : ""}
             aria-label="Repeats"
             onChange={(e) => {
-              const v = e.target.value as "" | RecurringSeries["cadence"];
-              setRepeat(v);
+              const on = e.target.value === "repeats";
+              setRepeats(on);
               // A repeating invoice sends its first copy now — no schedule.
-              if (v) setSendOn("");
+              if (on) setSendOn("");
             }}
             className="h-9 rounded-md border border-input bg-card px-2.5 text-sm font-medium"
           >
             <option value="">Doesn&apos;t repeat</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
+            <option value="repeats">Repeats…</option>
           </select>
         </div>
         <div className="grid gap-1.5">
@@ -2030,12 +2345,27 @@ function NewInvoiceDialog({
             type="date"
             value={sendOn}
             min={toDateInput(Date.now() + 86_400_000)}
-            disabled={repeat !== ""}
+            disabled={repeats}
             aria-label="Send on date"
             onChange={(e) => setSendOn(e.target.value)}
           />
         </div>
       </div>
+      {/* Round 17: the flexible repeat settings appear once Repeats… is on. */}
+      {repeats ? (
+        <RepeatRuleFields
+          count={repeatCount}
+          setCount={setRepeatCount}
+          unit={repeatUnit}
+          setUnit={setRepeatUnit}
+          endType={endType}
+          setEndType={setEndType}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          endAfter={endAfter}
+          setEndAfter={setEndAfter}
+        />
+      ) : null}
       <div className="grid gap-1.5">
         <Label className="text-xs text-muted-foreground">Memo</Label>
         <Input
@@ -2048,10 +2378,8 @@ function NewInvoiceDialog({
         <span className="text-xs text-muted-foreground">
           {!sendOnFuture
             ? "Send-on must be a future date."
-            : repeat
-              ? `First invoice sends now — repeats ${cadenceLabel[
-                  repeat
-                ].toLowerCase()}.`
+            : repeats
+              ? `First invoice sends now — repeats ${cadencePreview}.`
               : sendOn
                 ? `Queues as Scheduled — sends ${fmtDay(
                     new Date(`${sendOn}T12:00:00`).toISOString(),

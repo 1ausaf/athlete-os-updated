@@ -322,19 +322,56 @@ export interface Invoice {
 }
 
 /** Round 16 (Q3): a recurring invoice series — the template that generates
- *  invoices on a cadence (Square-style). */
+ *  invoices on a cadence (Square-style).
+ *  Round 17: flexible repeats — "every N week(s)/month(s)" plus an explicit
+ *  end rule (never / on a date / after N invoices). */
 export interface RecurringSeries {
   id: string;
   athleteId: string;
   athleteName: string;
   plan: string;
   amountCents: number;
-  cadence: "weekly" | "monthly" | "quarterly";
+  /** Repeat every {intervalCount} {intervalUnit}(s), e.g. every 4 weeks. */
+  intervalCount: number;
+  intervalUnit: "week" | "month";
+  /** How the series ends. */
+  endType: "never" | "on" | "after";
+  /** endType "on": last generation date (inclusive). */
+  endDate?: string;
+  /** endType "after": total number of invoices to generate. */
+  endAfter?: number;
+  /** Invoices generated so far — drives "3 of 12 sent". */
+  generatedCount: number;
   /** Next generation date while active. */
   nextRun: string;
-  status: "active" | "paused" | "canceled";
+  status: "active" | "paused" | "canceled" | "ended";
   startedAt: string;
   method: Invoice["method"];
+}
+
+/** Round 17: "Weekly", "Monthly", "Every 4 weeks", "Every 3 months". */
+export function seriesCadenceLabel(s: RecurringSeries): string {
+  if (s.intervalCount === 1) {
+    return s.intervalUnit === "week" ? "Weekly" : "Monthly";
+  }
+  return `Every ${s.intervalCount} ${s.intervalUnit}s`;
+}
+
+/** Round 17: "Never ends", "Ends Mar 1, 2027", "Ends after 12 invoices". */
+export function seriesEndLabel(s: RecurringSeries): string {
+  if (s.endType === "on" && s.endDate) return `Ends ${fmtDay(s.endDate)}`;
+  if (s.endType === "after" && s.endAfter) {
+    return `Ends after ${s.endAfter} invoices (${s.generatedCount} sent)`;
+  }
+  return "Never ends";
+}
+
+/** Round 17: the run date after `from` for a series' interval. */
+export function seriesNextRun(s: RecurringSeries, from: Date): string {
+  const d = new Date(from);
+  if (s.intervalUnit === "week") d.setDate(d.getDate() + 7 * s.intervalCount);
+  else d.setMonth(d.getMonth() + s.intervalCount);
+  return d.toISOString();
 }
 
 /** Payment methods offered when marking an invoice paid (round 10, R47).
@@ -1652,11 +1689,32 @@ export const recurringSeriesSeed: RecurringSeries[] = [
     athleteName: "Ren Tanaka",
     plan: "Elite — monthly",
     amountCents: 52000,
-    cadence: "monthly",
+    intervalCount: 1,
+    intervalUnit: "month",
+    endType: "never",
+    generatedCount: 3,
     nextRun: at(27),
     status: "active",
     startedAt: at(-63),
     method: "Square",
+  },
+  // Round 17: a bounded series so the end rules demo — every 4 weeks,
+  // 12 sessions-block invoices total.
+  {
+    id: "rs-sofia",
+    athleteId: "ath-sofia",
+    athleteName: "Sofia Lindén",
+    plan: "Pro Track — 4-week block",
+    amountCents: 34000,
+    intervalCount: 4,
+    intervalUnit: "week",
+    endType: "after",
+    endAfter: 12,
+    generatedCount: 5,
+    nextRun: at(9),
+    status: "active",
+    startedAt: at(-140),
+    method: "Card on file",
   },
 ];
 
