@@ -595,7 +595,8 @@ export const athletes: Athlete[] = [
     gender: "M",
     bucket: "in-gym",
     status: "active",
-    programDueInDays: 0,
+    // Round 19: past-due — feeds the Intelligence "(1 Overdue)" program count.
+    programDueInDays: -3,
     nutrition: "none",
     coach: "Coach Ellis",
     planName: "Academy — 4×/week",

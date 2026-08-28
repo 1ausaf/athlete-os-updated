@@ -102,6 +102,9 @@ export interface StaffMember {
   certifications: StaffCertification[];
   vulnerableSector: { status: "on-file" | "due"; uploadedAt?: string };
   notifications: { push: boolean; email: boolean };
+  /** Round 19: last sign-in stamp — the Intelligence staff table shows it.
+   *  Absent = never logged in (freshly added staff). */
+  lastLogin?: string;
 }
 
 /** Level-3+ coaches, coach managers, admins and owners manage programming
@@ -132,6 +135,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-200) },
     notifications: { push: true, email: true },
+    lastLogin: at(0, 7, 42),
   },
   {
     id: "admin-victoria",
@@ -151,6 +155,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-160) },
     notifications: { push: true, email: true },
+    lastLogin: at(0, 9, 15),
   },
   {
     id: "coach-clance",
@@ -173,6 +178,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-320) },
     notifications: { push: true, email: false },
+    lastLogin: at(-1, 18, 5),
   },
   {
     id: "coach-ellis",
@@ -198,6 +204,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-90) },
     notifications: { push: true, email: true },
+    lastLogin: at(0, 6, 55),
   },
   {
     id: "coach-nadia",
@@ -220,6 +227,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "due" },
     notifications: { push: false, email: true },
+    lastLogin: at(-2, 12, 30),
   },
   {
     id: "coach-mason",
@@ -240,6 +248,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-45) },
     notifications: { push: true, email: true },
+    lastLogin: at(-4, 15, 10),
   },
   {
     // Round 5: the intern tier — messages + notes only, masked client details.
@@ -261,6 +270,7 @@ export const staffMembers: StaffMember[] = [
     ],
     vulnerableSector: { status: "on-file", uploadedAt: at(-20) },
     notifications: { push: true, email: false },
+    lastLogin: at(-9, 10, 20),
   },
 ];
 

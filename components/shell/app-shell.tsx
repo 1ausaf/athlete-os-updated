@@ -37,7 +37,7 @@ const SECTION_TITLES: Record<string, string> = {
   programming: "Programs",
   messaging: "Chats",
   analytics: "Analytics",
-  compliance: "Compliance",
+  intelligence: "Intelligence",
   team: "Team",
 };
 

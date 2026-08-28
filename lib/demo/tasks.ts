@@ -77,6 +77,25 @@ export const taskSeeds: StaffTask[] = [
     source: "manual",
     createdBy: "Coach Clance",
   },
+  // Round 19: overdue open tasks so the Intelligence staff table has signal.
+  {
+    id: "task-seed-5",
+    title: "Renew First Aid + CPR-C — certification expired",
+    due: isoDay(-6),
+    assigneeId: "coach-nadia",
+    done: false,
+    source: "manual",
+    createdBy: "Jeremy Choi",
+  },
+  {
+    id: "task-seed-6",
+    title: "Submit August floor-hours timesheet",
+    due: isoDay(-2),
+    assigneeId: "coach-mason",
+    done: false,
+    source: "manual",
+    createdBy: "Victoria Flores",
+  },
   {
     id: "task-seed-4",
     title: "Weekly floor walkthrough — rack pins + bands",
@@ -230,6 +249,18 @@ export function dueSoonCount(): number {
   const cutoff = isoDay(1);
   return allTasks().filter((t) => !t.done && t.due !== "" && t.due <= cutoff)
     .length;
+}
+
+/** Round 19: open tasks past their due date, counted per assignee. */
+export function overdueTaskCounts(): Record<string, number> {
+  const today = isoDay(0);
+  const counts: Record<string, number> = {};
+  for (const t of allTasks()) {
+    if (t.done || t.due === "" || t.due >= today || t.assigneeId === "")
+      continue;
+    counts[t.assigneeId] = (counts[t.assigneeId] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /** Round 13 (K1): per-task field edits (title/due/assignee/recurrence). */

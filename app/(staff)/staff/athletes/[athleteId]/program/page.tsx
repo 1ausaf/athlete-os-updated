@@ -38,7 +38,7 @@ export default async function ProgramBuilderPage({
 
   const profileHref = `/staff/athletes/${athlete.id}` as Route;
   const duePill =
-    athlete.programDueInDays === 0 ? (
+    athlete.programDueInDays <= 0 ? (
       <Pill tone="danger" dot>
         Program update due now
       </Pill>

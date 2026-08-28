@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Route } from "next";
 import {
   CalendarRange,
   ClipboardList,
@@ -8,13 +9,13 @@ import {
   LineChart,
   ListTodo,
   MessagesSquare,
-  ShieldCheck,
+  Radar,
   UserCog,
   UserRound,
   Users,
 } from "lucide-react";
 
-import { athletes, complianceRows, threads } from "@/lib/demo/data";
+import { athletes, threads } from "@/lib/demo/data";
 import { dueSoonCount, TASKS_EVENT } from "@/lib/demo/tasks";
 import { canManageMemberships, canViewBilling, isAdmin } from "@/lib/rbac";
 import type { AppUser } from "@/types/user";
@@ -47,8 +48,14 @@ export function StaffNav({ user }: { user: AppUser }) {
     window.addEventListener("aos-staff-read-changed", recount);
     return () => window.removeEventListener("aos-staff-read-changed", recount);
   }, []);
-  const gaps = complianceRows.filter((r) => r.status === "gap").length;
   const programsDue = athletes.filter((a) => a.programDueInDays <= 5).length;
+  // Round 19: the Intelligence badge counts at-risk members — slipping
+  // attendance or a past-due program.
+  const atRisk = athletes.filter(
+    (a) =>
+      a.status === "active" &&
+      (a.attendancePct < 80 || a.programDueInDays < 0),
+  ).length;
 
   // Round 14 (V18): tasks due within a day — post-mount (localStorage-backed).
   const [tasksDueSoon, setTasksDueSoon] = useState(0);
@@ -79,17 +86,16 @@ export function StaffNav({ user }: { user: AppUser }) {
     // Round 14 (V18): the badge counts tasks overdue or due within a day.
     { href: "/staff/tasks", label: "Tasks", icon: ListTodo, badge: tasksDueSoon || undefined },
     { href: "/staff/analytics", label: "Analytics", icon: LineChart },
+    // Round 19: Compliance became Intelligence and opened up to coaches —
+    // members-only for them; owners/admins also get the staff workload tab.
+    {
+      // Cast until typedRoutes regenerates with the new segment.
+      href: "/staff/intelligence" as Route,
+      label: "Intelligence",
+      icon: Radar,
+      badge: atRisk || undefined,
+    },
   ];
-
-  // Round 6: coaches don't need Compliance — owners/admins keep it.
-  if (isAdmin(user)) {
-    items.push({
-      href: "/staff/compliance",
-      label: "Compliance",
-      icon: ShieldCheck,
-      badge: gaps || undefined,
-    });
-  }
 
   if (canViewBilling(user) || canManageMemberships(user)) {
     items.push({ href: "/staff/billing", label: "Billing", icon: CreditCard });
