@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
@@ -66,6 +67,20 @@ const MAX_PINS = 5;
 const READ_STORAGE_KEY = "lps-staff-messaging-read";
 const READ_EVENT = "aos-staff-read-changed";
 
+/** Round 19.1 — the ⋮ menu portals to the body (the table's overflow wrapper
+    clips absolute children — with a single visible row, e.g. the Tagged
+    filter, the menu never showed at all). Anchor captured at click time. */
+interface MenuAnchor {
+  id: string;
+  top: number;
+  bottom: number;
+  right: number;
+  dropUp: boolean;
+}
+
+/** Estimated menu height — flips the menu upward near the viewport bottom. */
+const MENU_EST_PX = 96;
+
 /** H2 — rows carry just the member/group name (broadcasts use the subject). */
 function displayName(row: InboxThread): string {
   return row.athleteName ?? row.thread.subject;
@@ -100,7 +115,7 @@ export function MessagingInbox({
   const [readLoaded, setReadLoaded] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
   const [pinsLoaded, setPinsLoaded] = useState(false);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<MenuAnchor | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<number>();
 
@@ -239,6 +254,11 @@ export function MessagingInbox({
       setSortDir(key === "name" || key === "role" ? "asc" : "desc");
     }
   }
+
+  // The open menu's row — the menu itself renders in a body portal below.
+  const menuRow = menuFor
+    ? (rows.find((r) => r.thread.id === menuFor.id) ?? null)
+    : null;
 
   const counts = useMemo(
     () => ({
@@ -400,17 +420,24 @@ export function MessagingInbox({
                 row={row}
                 unread={unreadOf(row)}
                 isPinned={pinned.includes(row.thread.id)}
-                menuOpen={menuFor === row.thread.id}
+                menuOpen={menuFor?.id === row.thread.id}
                 onOpen={() =>
                   router.push(`/staff/messaging/${row.thread.id}` as Route)
                 }
-                onToggleMenu={() =>
+                onToggleMenu={(rect) =>
                   setMenuFor((cur) =>
-                    cur === row.thread.id ? null : row.thread.id,
+                    cur?.id === row.thread.id
+                      ? null
+                      : {
+                          id: row.thread.id,
+                          top: rect.bottom + 4,
+                          bottom: window.innerHeight - rect.top + 4,
+                          right: Math.max(window.innerWidth - rect.right, 8),
+                          dropUp:
+                            rect.bottom + MENU_EST_PX > window.innerHeight,
+                        },
                   )
                 }
-                onMarkRead={(read) => markRead(row.thread.id, read)}
-                onTogglePin={() => togglePin(row.thread.id)}
               />
             ))}
             {visible.length === 0 ? (
@@ -433,15 +460,65 @@ export function MessagingInbox({
         </Table>
       </div>
 
-      {/* Click-away layer for the row menus (sits below the open menu). */}
-      {menuFor ? (
-        <button
-          type="button"
-          aria-label="Close thread menu"
-          className="fixed inset-0 z-20 cursor-default"
-          onClick={() => setMenuFor(null)}
-        />
-      ) : null}
+      {/* The open row's ⋮ menu + its click-away layer — portaled to the body
+          so the table's overflow wrapper can't clip it (bit the single-row
+          Tagged view before). */}
+      {menuFor && menuRow
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label="Close thread menu"
+                className="fixed inset-0 z-20 cursor-default"
+                onClick={() => setMenuFor(null)}
+              />
+              <span
+                className="fixed z-30 block w-44 rounded-lg border border-border bg-card p-1 text-left shadow-raised"
+                style={
+                  menuFor.dropUp
+                    ? { right: menuFor.right, bottom: menuFor.bottom }
+                    : { right: menuFor.right, top: menuFor.top }
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => markRead(menuFor.id, unreadOf(menuRow) > 0)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  {unreadOf(menuRow) > 0 ? (
+                    <>
+                      <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      Mark as read
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                      Mark as unread
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => togglePin(menuFor.id)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  {pinned.includes(menuFor.id) ? (
+                    <>
+                      <PinOff className="h-3.5 w-3.5 text-muted-foreground" />
+                      Unpin
+                    </>
+                  ) : (
+                    <>
+                      <Pin className="h-3.5 w-3.5 text-muted-foreground" />
+                      Pin chat
+                    </>
+                  )}
+                </button>
+              </span>
+            </>,
+            document.body,
+          )
+        : null}
 
       {/* X1 — tiny flash when the 5-pin cap is hit. */}
       {flash ? (
@@ -504,17 +581,14 @@ function InboxRow({
   menuOpen,
   onOpen,
   onToggleMenu,
-  onMarkRead,
-  onTogglePin,
 }: {
   row: InboxThread;
   unread: number;
   isPinned: boolean;
   menuOpen: boolean;
   onOpen: () => void;
-  onToggleMenu: () => void;
-  onMarkRead: (read: boolean) => void;
-  onTogglePin: () => void;
+  /** Receives the trigger's rect so the parent can position the portal. */
+  onToggleMenu: (rect: DOMRect) => void;
 }) {
   const { thread } = row;
   const lastMessage = thread.messages[thread.messages.length - 1];
@@ -578,55 +652,17 @@ function InboxRow({
         className="w-10 text-right"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="relative inline-block">
-          <button
-            type="button"
-            aria-label={`Chat options for ${displayName(row)}`}
-            aria-expanded={menuOpen}
-            onClick={onToggleMenu}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-          {menuOpen ? (
-            <span className="absolute right-0 top-full z-30 mt-1 block w-44 rounded-lg border border-border bg-card p-1 text-left shadow-raised">
-              <button
-                type="button"
-                onClick={() => onMarkRead(unread > 0)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
-              >
-                {unread > 0 ? (
-                  <>
-                    <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                    Mark as read
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    Mark as unread
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={onTogglePin}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors hover:bg-accent"
-              >
-                {isPinned ? (
-                  <>
-                    <PinOff className="h-3.5 w-3.5 text-muted-foreground" />
-                    Unpin
-                  </>
-                ) : (
-                  <>
-                    <Pin className="h-3.5 w-3.5 text-muted-foreground" />
-                    Pin chat
-                  </>
-                )}
-              </button>
-            </span>
-          ) : null}
-        </span>
+        <button
+          type="button"
+          aria-label={`Chat options for ${displayName(row)}`}
+          aria-expanded={menuOpen}
+          onClick={(e) =>
+            onToggleMenu(e.currentTarget.getBoundingClientRect())
+          }
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
       </TableCell>
     </TableRow>
   );

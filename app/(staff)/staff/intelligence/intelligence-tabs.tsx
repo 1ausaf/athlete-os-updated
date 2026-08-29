@@ -4,18 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  ArrowUpDown,
-  BadgeCheck,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { TabBar } from "@/components/app/tab-bar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Pill } from "@/components/ui/pill";
 import {
   Table,
   TableBody,
@@ -57,6 +48,8 @@ export interface StaffIntelRow {
   programCount: number;
   programOverdue: number;
   manageCount: number;
+  /** Managed members with no note in the last 14 days — needs a touchpoint. */
+  manageNeedsNote: number;
   licensesExpired: boolean;
 }
 
@@ -104,16 +97,24 @@ function loginStamp(iso: string): string {
   return `${date} · ${time}`;
 }
 
+interface ChatStat {
+  /** Chats this staff member is in (participant, assigned, or broadcast). */
+  threads: number;
+  /** How many of those chats have unread messages. */
+  unreadThreads: number;
+}
+
 /**
- * Round 19: unread messages per staff member, over the threads they're in.
- * Involvement = staff listed as participants plus every coach assigned to an
- * athlete in the thread; broadcasts reach the whole staff. Honors the inbox
- * read-overrides so "Mark all as read" zeroes the column too.
+ * Round 19: per-staff chat load — total chats they're involved in plus how
+ * many of those carry unread messages. Involvement = staff listed as
+ * participants plus every coach assigned to an athlete in the thread;
+ * broadcasts reach the whole staff. Honors the inbox read-overrides so
+ * "Mark all as read" clears the unread bracket too.
  */
-function chatUnreadCounts(
+function chatStats(
   overrides: Record<string, "read" | "unread">,
-): Record<string, number> {
-  const counts: Record<string, number> = {};
+): Record<string, ChatStat> {
+  const stats: Record<string, ChatStat> = {};
   for (const t of threads) {
     // Same semantics as the inbox: "unread" re-flags a fully-read thread.
     const unread =
@@ -122,7 +123,6 @@ function chatUnreadCounts(
         : overrides[t.id] === "unread"
           ? Math.max(1, t.unread)
           : t.unread;
-    if (unread === 0) continue;
     const involved = new Set<string>();
     if (t.kind === "broadcast") {
       for (const s of staffMembers) involved.add(s.id);
@@ -134,9 +134,13 @@ function chatUnreadCounts(
         }
       }
     }
-    for (const id of involved) counts[id] = (counts[id] ?? 0) + unread;
+    for (const id of involved) {
+      const s = (stats[id] ??= { threads: 0, unreadThreads: 0 });
+      s.threads += 1;
+      if (unread > 0) s.unreadThreads += 1;
+    }
   }
-  return counts;
+  return stats;
 }
 
 /**
@@ -237,8 +241,8 @@ export function IntelligenceTabs({
 
   // Live columns — unread chats + overdue tasks live in this browser's
   // localStorage, so they layer in post-mount (house pattern).
-  const [chatCounts, setChatCounts] = useState<Record<string, number>>(() =>
-    chatUnreadCounts({}),
+  const [chatCounts, setChatCounts] = useState<Record<string, ChatStat>>(() =>
+    chatStats({}),
   );
   useEffect(() => {
     const recount = () => {
@@ -246,9 +250,9 @@ export function IntelligenceTabs({
         const overrides = JSON.parse(
           window.localStorage.getItem("lps-staff-messaging-read") ?? "{}",
         ) as Record<string, "read" | "unread">;
-        setChatCounts(chatUnreadCounts(overrides));
+        setChatCounts(chatStats(overrides));
       } catch {
-        setChatCounts(chatUnreadCounts({}));
+        setChatCounts(chatStats({}));
       }
     };
     recount();
@@ -272,8 +276,11 @@ export function IntelligenceTabs({
           return r.programCount;
         case "manage":
           return r.manageCount;
-        case "chat":
-          return chatCounts[r.id] ?? 0;
+        case "chat": {
+          // Unread chats lead the ordering; total involvement breaks ties.
+          const s = chatCounts[r.id];
+          return s ? s.unreadThreads * 100 + s.threads : 0;
+        }
         case "tasks":
           return taskCounts[r.id] ?? 0;
         case "licenses":
@@ -294,16 +301,6 @@ export function IntelligenceTabs({
       return cmp !== 0 ? dir * cmp : a.name.localeCompare(b.name);
     });
   }, [staffRows, staffKey, staffDir, chatCounts, taskCounts]);
-
-  // Staff-records summary (C23) — detail lives on the Team page.
-  const staffCerts = staffMembers.flatMap((s) => s.certifications);
-  const certsExpiring = staffCerts.filter(
-    (c) => c.status === "expiring",
-  ).length;
-  const certsExpired = staffCerts.filter((c) => c.status === "expired").length;
-  const vsChecksDue = staffMembers.filter(
-    (s) => s.vulnerableSector.status === "due",
-  ).length;
 
   const membersBlock = (
     <div className="flex flex-col gap-3">
@@ -500,7 +497,7 @@ export function IntelligenceTabs({
           </TableHeader>
           <TableBody>
             {staffSorted.map((r) => {
-              const chat = chatCounts[r.id] ?? 0;
+              const chat = chatCounts[r.id] ?? { threads: 0, unreadThreads: 0 };
               const tasks = taskCounts[r.id] ?? 0;
               const login = lastLoginOf(r.id);
               return (
@@ -515,7 +512,7 @@ export function IntelligenceTabs({
                       {r.title}
                     </div>
                   </TableCell>
-                  <TableCell className="tnum whitespace-nowrap text-sm">
+                  <TableCell className="tnum whitespace-nowrap text-sm text-muted-foreground">
                     {r.programCount}
                     {r.programOverdue > 0 ? (
                       <span className="font-semibold text-destructive">
@@ -524,16 +521,23 @@ export function IntelligenceTabs({
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell className="tnum text-sm">
+                  <TableCell className="tnum whitespace-nowrap text-sm text-muted-foreground">
                     {r.manageCount}
+                    {r.manageNeedsNote > 0 ? (
+                      <span className="font-semibold text-destructive">
+                        {" "}
+                        ({r.manageNeedsNote})
+                      </span>
+                    ) : null}
                   </TableCell>
-                  <TableCell
-                    className={cn(
-                      "tnum text-sm",
-                      chat === 0 && "text-muted-foreground",
-                    )}
-                  >
-                    {chat}
+                  <TableCell className="tnum whitespace-nowrap text-sm text-muted-foreground">
+                    {chat.threads}
+                    {chat.unreadThreads > 0 ? (
+                      <span className="font-semibold text-destructive">
+                        {" "}
+                        ({chat.unreadThreads})
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -572,52 +576,11 @@ export function IntelligenceTabs({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Program counts the members each coach writes programs for — red when
-        one of those programs is past due. Chat and Tasks are live: unread
-        messages in threads they&apos;re in, and overdue open tasks. Click a
-        row to manage the person in Team.
+        Red brackets need attention: Program — programs past due; Manage —
+        members with no note in the last 14 days; Chat — chats with unread
+        messages (of the chats they&apos;re in). Tasks reads red when overdue
+        work is open. Click a row to manage the person in Team.
       </p>
-
-      {/* Staff records — the summary card keeps its home under this tab. */}
-      <Card>
-        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-brand/20 bg-brand/10 text-brand-ink">
-              <BadgeCheck className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-lg">Staff records</h2>
-              <p className="text-sm text-muted-foreground">
-                Certifications and vulnerable-sector checks across the coaching
-                staff.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-            <Pill tone={certsExpiring > 0 ? "warning" : "success"} dot>
-              {certsExpiring} certification{certsExpiring === 1 ? "" : "s"}{" "}
-              expiring
-            </Pill>
-            {certsExpired > 0 ? (
-              <Pill tone="danger" dot>
-                {certsExpired} expired
-              </Pill>
-            ) : null}
-            <Pill tone={vsChecksDue > 0 ? "danger" : "success"} dot>
-              {vsChecksDue} vulnerable-sector check
-              {vsChecksDue === 1 ? "" : "s"} due
-            </Pill>
-            {admin ? (
-              <Button asChild variant="outline" size="sm" className="ml-1">
-                <Link href={"/staff/team" as Route}>
-                  Manage in Team
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 

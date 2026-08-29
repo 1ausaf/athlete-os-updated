@@ -70,24 +70,28 @@ export default async function StaffIntelligencePage({
   const activeById = new Map(
     athletes.filter((a) => a.status === "active").map((a) => [a.id, a]),
   );
+  // Managed members with no note in the last 14 days need a touchpoint.
+  const noteCutoffMs = toMs - 14 * DAY_MS;
   const staffRows: StaffIntelRow[] = staffMembers.map((s) => {
     const programming = coachAssignments
       .filter((a) => a.role === "programming" && a.staffId === s.id)
       .map((a) => activeById.get(a.athleteId))
       .filter((a): a is (typeof athletes)[number] => Boolean(a));
-    const manageCount = coachAssignments.filter(
-      (a) =>
-        a.role === "management" &&
-        a.staffId === s.id &&
-        activeById.has(a.athleteId),
-    ).length;
+    const managing = coachAssignments
+      .filter((a) => a.role === "management" && a.staffId === s.id)
+      .map((a) => activeById.get(a.athleteId))
+      .filter((a): a is (typeof athletes)[number] => Boolean(a));
     return {
       id: s.id,
       name: s.name,
       title: s.title,
       programCount: programming.length,
       programOverdue: programming.filter((a) => a.programDueInDays < 0).length,
-      manageCount,
+      manageCount: managing.length,
+      manageNeedsNote: managing.filter(
+        (a) =>
+          !a.notes.some((n) => new Date(n.date).getTime() >= noteCutoffMs),
+      ).length,
       licensesExpired: s.certifications.some((c) => c.status === "expired"),
     };
   });
