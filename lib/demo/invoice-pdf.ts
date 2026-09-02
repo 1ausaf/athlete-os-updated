@@ -63,7 +63,21 @@ const STATUS_LABEL: Record<Invoice["status"], string> = {
   refunded: "Refunded",
 };
 
-export function invoicePdfBlob(inv: Invoice): Blob {
+export interface InvoicePdfBrand {
+  name: string;
+  supportLine: string;
+}
+
+/** Round 20: defaults keep demo output byte-for-byte identical. */
+const DEFAULT_BRAND: InvoicePdfBrand = {
+  name: "LPS Athletic",
+  supportLine: "billing@lpsathletic.com - LPS Athletic, North York, ON",
+};
+
+export function invoicePdfBlob(
+  inv: Invoice,
+  brand: InvoicePdfBrand = DEFAULT_BRAND,
+): Blob {
   const owing =
     inv.status === "partial"
       ? inv.amountCents - (inv.paidAmountCents ?? 0)
@@ -72,7 +86,7 @@ export function invoicePdfBlob(inv: Invoice): Blob {
         : inv.amountCents;
 
   const lines: PdfLine[] = [
-    { text: "LPS ATHLETIC", bold: true, size: 20 },
+    { text: brand.name.toUpperCase(), bold: true, size: 20 },
     { text: "Athlete Operating System - Invoice", size: 10 },
     { text: `Invoice ${inv.id.toUpperCase()}`, bold: true, size: 14, gap: 18 },
     { text: `Status: ${STATUS_LABEL[inv.status]}`, gap: 6 },
@@ -96,7 +110,7 @@ export function invoicePdfBlob(inv: Invoice): Blob {
     lines.push({ text: `Refunded: ${money2(inv.refundedCents)}` });
   }
   lines.push({
-    text: "Questions? billing@lpsathletic.com - LPS Athletic, North York, ON",
+    text: `Questions? ${brand.supportLine}`,
     size: 9,
     gap: 24,
   });

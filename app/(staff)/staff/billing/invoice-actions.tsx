@@ -59,6 +59,7 @@ import {
   type RecurringSeries,
 } from "@/lib/demo/data";
 import { invoicePdfBlob } from "@/lib/demo/invoice-pdf";
+import { useTenant } from "@/components/tenant/tenant-provider";
 import { trainingGroups } from "@/lib/demo/training";
 
 import { BillingDialog } from "./billing-dialog";
@@ -248,7 +249,21 @@ function escHtml(s: string): string {
  * lets the browser's print dialog take over — fully self-contained, no
  * print CSS bleeding into the app.
  */
-function printableInvoiceHtml(inv: Invoice): string {
+interface InvoiceBrand {
+  name: string;
+  supportLine: string;
+}
+
+/** Round 20: tenant-branded print/PDF output (demo values are unchanged). */
+const DEMO_INVOICE_BRAND: InvoiceBrand = {
+  name: "LPS Athletic",
+  supportLine: "billing@lpsathletic.com — LPS Athletic, North York, ON",
+};
+
+function printableInvoiceHtml(
+  inv: Invoice,
+  brand: InvoiceBrand = DEMO_INVOICE_BRAND,
+): string {
   const rows: [string, string][] = [
     ["Billed to", inv.athleteName],
     ["Plan", inv.plan],
@@ -271,7 +286,7 @@ function printableInvoiceHtml(inv: Invoice): string {
     .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`)
     .join("");
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Invoice ${escHtml(inv.id.toUpperCase())} — LPS Athletic</title>
+<html><head><meta charset="utf-8"><title>Invoice ${escHtml(inv.id.toUpperCase())} — ${escHtml(brand.name)}</title>
 <style>
   body{font-family:Helvetica,Arial,sans-serif;color:#16181d;margin:48px auto;max-width:620px;padding:0 24px}
   h1{font-size:22px;letter-spacing:.04em;margin:0}
@@ -284,12 +299,12 @@ function printableInvoiceHtml(inv: Invoice): string {
   .foot{color:#667085;font-size:11px;margin-top:32px}
 </style></head>
 <body>
-  <h1>LPS ATHLETIC</h1>
+  <h1>${escHtml(brand.name.toUpperCase())}</h1>
   <p class="sub">Athlete Operating System — Invoice</p>
   <h2>Invoice ${escHtml(inv.id.toUpperCase())}</h2>
   <table>${body}</table>
   <p class="amount">${escHtml(money2(inv.amountCents))} <span style="font-size:12px;color:#667085;font-weight:400">CAD</span></p>
-  <p class="foot">Questions? billing@lpsathletic.com — LPS Athletic, North York, ON</p>
+  <p class="foot">Questions? ${escHtml(brand.supportLine)}</p>
   <script>window.onload = function () { window.print(); };</script>
 </body></html>`;
 }
@@ -371,6 +386,7 @@ export function InvoicesPanel({
   // Q9 — the ⓘ status-guide dialog.
   const [guideOpen, setGuideOpen] = useState(false);
   // R50 — receipt/refund confirmations flash at the bottom of the screen.
+  const tenant = useTenant();
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimer = useRef<number>();
 
@@ -550,7 +566,9 @@ export function InvoicesPanel({
 
   /** Q5 — hand-built PDF from lib/demo/invoice-pdf, saved via a blob URL. */
   function downloadPdf(inv: Invoice) {
-    const url = URL.createObjectURL(invoicePdfBlob(inv));
+    const url = URL.createObjectURL(
+      invoicePdfBlob(inv, { name: tenant.name, supportLine: tenant.supportLine }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = `${inv.id}-lps-invoice.pdf`;
@@ -568,7 +586,12 @@ export function InvoicesPanel({
       showFlash("Pop-up blocked — allow pop-ups to print, or Download PDF.");
       return;
     }
-    w.document.write(printableInvoiceHtml(inv));
+    w.document.write(
+      printableInvoiceHtml(inv, {
+        name: tenant.name,
+        supportLine: tenant.supportLine,
+      }),
+    );
     w.document.close();
     w.focus();
   }

@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getResolvedTenant } from "@/lib/tenant/context";
 import type { MessageSendErrorCode } from "@/lib/ui/messages";
 import { messageSendErrorMessage } from "@/lib/ui/messages";
 import type { Database } from "@/types/db";
@@ -311,17 +312,21 @@ export async function createThreadWithParticipants(
     return { ok: false, message: "You must be signed in as the thread creator." };
   }
 
+  const tenant = await getResolvedTenant();
+  if (!tenant) {
+    return { ok: false, message: "Could not resolve the workspace for this request." };
+  }
+
   const deduped = [...new Set(params.participantProfileIds.filter(Boolean))];
   if (!deduped.includes(params.creatorProfileId)) {
     deduped.push(params.creatorProfileId);
   }
 
-  // RPC args are valid; Database self-reference can widen `rpc` args to `undefined`.
   const { data, error } = await supabase.rpc(
     "create_message_thread_with_participants",
-    // @ts-expect-error -- see create_message_thread_with_participants in types/db
     {
-      p_title: params.title ?? null,
+      p_tenant_id: tenant.id,
+      p_title: params.title ?? "",
       p_participant_profile_ids: deduped,
     },
   );
@@ -369,15 +374,30 @@ export async function sendMessage(
 
   const supabase = createSupabaseServerClient();
 
+  const { data: threadRaw, error: threadErr } = await supabase
+    .from("message_threads")
+    .select("id, tenant_id")
+    .eq("id", params.threadId)
+    .maybeSingle();
+
+  if (threadErr || !threadRaw) {
+    return {
+      ok: false,
+      code: "MESSAGE_FORBIDDEN",
+      message: messageSendErrorMessage("MESSAGE_FORBIDDEN"),
+    };
+  }
+
+  const thread = threadRaw as Pick<MessageThreadRow, "id" | "tenant_id">;
+
   const row: Database["public"]["Tables"]["messages"]["Insert"] = {
     thread_id: params.threadId,
     sender_profile_id: params.senderProfileId,
+    tenant_id: thread.tenant_id,
     body: trimmed,
   };
 
-  const { error } =
-    // @ts-expect-error -- insert payload is valid; see messages Insert in types/db
-    await supabase.from("messages").insert([row]);
+  const { error } = await supabase.from("messages").insert([row]);
 
   if (error) {
     return { ok: false, ...mapSendError(error.message ?? "") };

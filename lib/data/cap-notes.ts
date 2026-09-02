@@ -93,6 +93,22 @@ export async function createCapNoteForAthlete(
   params: CreateCapNoteParams,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const supabase = createSupabaseServerClient();
+
+  const { data: athleteRaw, error: athleteErr } = await supabase
+    .from("athletes")
+    .select("id, tenant_id")
+    .eq("id", params.athleteId)
+    .maybeSingle();
+
+  if (athleteErr || !athleteRaw) {
+    return { ok: false, message: "Athlete not found." };
+  }
+
+  const athlete = athleteRaw as Pick<
+    Database["public"]["Tables"]["athletes"]["Row"],
+    "id" | "tenant_id"
+  >;
+
   const body = encodeCapBody({
     context: params.context,
     action: params.action,
@@ -104,15 +120,12 @@ export async function createCapNoteForAthlete(
   const row: Database["public"]["Tables"]["cap_notes"]["Insert"] = {
     athlete_id: params.athleteId,
     author_profile_id: params.authorProfileId,
+    tenant_id: athlete.tenant_id,
     body,
     note_week_start: noteWeekStart,
   };
 
-  const { error } =
-    // Supabase client can infer `.insert` as `never[]` when `Database` is self-referential.
-    // Row shape matches `cap_notes` Insert.
-    // @ts-expect-error -- insert payload is valid; see cap_notes Insert in types/db
-    await supabase.from("cap_notes").insert([row]);
+  const { error } = await supabase.from("cap_notes").insert([row]);
 
   if (error) return { ok: false, message: error.message };
   return { ok: true };

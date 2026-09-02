@@ -44,22 +44,41 @@ export function WolfMark({
   );
 }
 
-/** Full lockup: mark + wordmark, with the "AOS" system suffix. */
+/**
+ * Full lockup: mark + wordmark, with the "AOS" system suffix. Tenant-aware
+ * since Round 20 — a tenant logo replaces the wolf mark, and `name` replaces
+ * the wordmark; defaults preserve the original LPS lockup everywhere else.
+ */
 export function BrandLockup({
   className,
   subtitle = "Athlete OS",
   markClassName = "h-8 w-8",
+  name = "LPS Athletic",
+  logoUrl = null,
 }: {
   className?: string;
   subtitle?: string | null;
   markClassName?: string;
+  name?: string;
+  logoUrl?: string | null;
 }) {
   return (
     <span className={cn("flex items-center gap-2.5", className)}>
-      <WolfMark className={markClassName} />
+      {logoUrl ? (
+        // Tenant logos are plain fixed-size images from Supabase Storage.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt=""
+          aria-hidden
+          className={cn("shrink-0 rounded-xl object-contain", markClassName)}
+        />
+      ) : (
+        <WolfMark className={markClassName} />
+      )}
       <span className="flex flex-col leading-none">
         <span className="font-display text-[0.95rem] font-extrabold uppercase tracking-tight">
-          LPS Athletic
+          {name}
         </span>
         {subtitle ? (
           <span className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.24em] text-muted-foreground">

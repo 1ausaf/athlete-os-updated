@@ -135,7 +135,7 @@ async function countRosterBookingsForSession(
 
 type SessionBookMeta = Pick<
   Database["public"]["Tables"]["sessions"]["Row"],
-  "id" | "capacity" | "starts_at" | "status"
+  "id" | "capacity" | "starts_at" | "status" | "tenant_id"
 >;
 
 export async function createBookingForAthlete(params: {
@@ -161,7 +161,7 @@ export async function createBookingForAthlete(params: {
 
   const { data: sessionRaw, error: sErr } = await supabase
     .from("sessions")
-    .select("id, capacity, starts_at, status")
+    .select("id, capacity, starts_at, status, tenant_id")
     .eq("id", params.sessionId)
     .maybeSingle();
 
@@ -204,6 +204,7 @@ export async function createBookingForAthlete(params: {
   const row = {
     athlete_id: athleteId,
     session_id: params.sessionId,
+    tenant_id: session.tenant_id,
     status: "confirmed" as Database["public"]["Enums"]["booking_status"],
     payment_status:
       "authorized" as Database["public"]["Enums"]["payment_status"],

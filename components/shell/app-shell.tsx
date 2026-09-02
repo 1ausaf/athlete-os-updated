@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { BrandLockup, WolfMark } from "@/components/brand/logo";
+import { useTenant } from "@/components/tenant/tenant-provider";
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
 import { PersonaSwitcher } from "@/components/app/persona-switcher";
 import { SidebarContext } from "@/components/shell/sidebar-context";
@@ -92,6 +93,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const pathname = usePathname();
+  const tenant = useTenant();
   const [collapsed, setCollapsed] = useState(false);
   // Round 10 (R2): the mobile drawer closes after any navigation, and a thin
   // brand progress bar runs while the next page loads.
@@ -185,11 +187,15 @@ export function AppShell({
             collapsed ? "justify-center px-0" : "px-5",
           )}
         >
-          <Link href="/" aria-label="LPS Athletic home">
+          <Link href="/" aria-label={`${tenant.name} home`}>
             {collapsed ? (
               <WolfMark className="h-8 w-8" />
             ) : (
-              <BrandLockup subtitle={workspaceLabel} />
+              <BrandLockup
+                subtitle={workspaceLabel}
+                name={tenant.name}
+                logoUrl={tenant.logoUrl}
+              />
             )}
           </Link>
         </div>
@@ -261,14 +267,23 @@ export function AppShell({
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <div className="flex h-16 items-center border-b border-border px-5">
-                <BrandLockup subtitle={workspaceLabel} />
+                <BrandLockup
+                  subtitle={workspaceLabel}
+                  name={tenant.name}
+                  logoUrl={tenant.logoUrl}
+                />
               </div>
               {nav}
             </SheetContent>
           </Sheet>
 
           <div className="flex md:hidden">
-            <BrandLockup subtitle={null} markClassName="h-8 w-8" />
+            <BrandLockup
+              subtitle={null}
+              markClassName="h-8 w-8"
+              name={tenant.name}
+              logoUrl={tenant.logoUrl}
+            />
           </div>
 
           {/* Round 11 (M2): breadcrumb "Member Portal / Chat" lives up here so

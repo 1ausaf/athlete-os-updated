@@ -326,7 +326,7 @@ export async function updateBillingStatusFromEvent(
   const { data: membershipRows, error } = await supabase
     .from("memberships")
     .select(
-      "id, athlete_id, plan_id, status, valid_from, valid_to, payment_status, created_at, updated_at",
+      "id, athlete_id, tenant_id, plan_id, status, valid_from, valid_to, payment_status, created_at, updated_at",
     )
     .eq("athlete_id", athleteId)
     .order("valid_from", { ascending: false })
@@ -340,6 +340,7 @@ export async function updateBillingStatusFromEvent(
     MembershipRow,
     | "id"
     | "athlete_id"
+    | "tenant_id"
     | "plan_id"
     | "status"
     | "valid_from"
