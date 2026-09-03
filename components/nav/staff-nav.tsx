@@ -6,6 +6,7 @@ import {
   CalendarRange,
   ClipboardList,
   CreditCard,
+  Database,
   LineChart,
   ListTodo,
   MessagesSquare,
@@ -22,7 +23,14 @@ import type { AppUser } from "@/types/user";
 
 import { ShellNav, type ShellNavItem } from "./shell-nav";
 
-export function StaffNav({ user }: { user: AppUser }) {
+export function StaffNav({
+  user,
+  liveRoster = false,
+}: {
+  user: AppUser;
+  /** Round 20: the real imported roster — only on deployments that can read it. */
+  liveRoster?: boolean;
+}) {
   // Round 12 (N17): the Chats badge honors the inbox read-overrides, so
   // "Mark all as read" clears it too.
   const [unread, setUnread] = useState(() =>
@@ -74,6 +82,15 @@ export function StaffNav({ user }: { user: AppUser }) {
       icon: Users,
       badge: programsDue || undefined,
     },
+    ...(liveRoster
+      ? [
+          {
+            href: "/staff/roster" as Route,
+            label: "Live Roster",
+            icon: Database,
+          } satisfies ShellNavItem,
+        ]
+      : []),
     { href: "/staff/programming", label: "Programs", icon: ClipboardList },
     { href: "/staff/sessions", label: "Bookings", icon: CalendarRange },
     {
