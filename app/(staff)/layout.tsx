@@ -6,7 +6,8 @@ import { AppShell } from "@/components/shell/app-shell";
 import { BrandStyle } from "@/components/tenant/brand-style";
 import { TenantProvider } from "@/components/tenant/tenant-provider";
 import { requireUserWithProfile } from "@/lib/auth";
-import { liveRosterConfigured } from "@/lib/data/members";
+import { getAuthContext } from "@/lib/authz/context";
+import { demoLiveRosterAllowed } from "@/lib/data/members";
 import { getDemoRole } from "@/lib/demo/session";
 import { isStaff } from "@/lib/rbac";
 import {
@@ -33,6 +34,7 @@ export default async function StaffWorkspaceLayout({
   if (!isStaff(user)) {
     redirect("/athlete/dashboard");
   }
+  const ctx = await getAuthContext();
 
   return (
     <TenantProvider tenant={tenantPublic}>
@@ -41,7 +43,17 @@ export default async function StaffWorkspaceLayout({
         user={user}
         role={getDemoRole()}
         workspaceLabel="Team Workspace"
-        nav={<StaffNav user={user} liveRoster={liveRosterConfigured()} />}
+        nav={
+          <StaffNav
+            user={user}
+            liveRoster={
+              ctx?.mode === "tenant"
+                ? ctx.isRealAuth && ctx.permissions.has("roster:view")
+                : demoLiveRosterAllowed()
+            }
+          />
+        }
+        realAuth={ctx?.isRealAuth ?? false}
         fullWidth
       >
         {children}

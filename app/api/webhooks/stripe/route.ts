@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { updateBillingStatusFromEvent } from "@/lib/data/billing";
+// eslint-disable-next-line no-restricted-imports -- allowed importer: the stripe_webhook_events idempotency ledger is service-role-only (no user session on webhooks)
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import { createLogger } from "@/lib/log";
+import { verifyStripeSignature } from "@/lib/security/webhooks";
 
 const log = createLogger("webhooks/stripe");
 
@@ -9,15 +12,13 @@ const STRIPE_SECRET =
   process.env.STRIPE_WEBHOOK_SIGNING_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
 
 /**
- * Stripe webhook entry point.
- *
- * TODO: Use `stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SIGNING_SECRET)`
- * with the **raw** body string (not re-stringified JSON).
- * TODO: Resolve Stripe `customer` / `subscription` metadata → athlete profile id.
+ * Stripe webhook entry point. Fail closed in EVERY environment: no secret
+ * configured ⇒ 503; missing/invalid signature ⇒ 400. Event-id idempotency
+ * via the stripe_webhook_events ledger (service-role only).
  */
 export async function POST(request: Request) {
   log.info("POST received");
-  if (!STRIPE_SECRET && process.env.NODE_ENV === "production") {
+  if (!STRIPE_SECRET) {
     log.error("webhook_not_configured_missing_secret");
     return NextResponse.json(
       { ok: false, error: "Webhook not configured" },
@@ -27,11 +28,13 @@ export async function POST(request: Request) {
 
   const rawBody = await request.text();
   const signature = request.headers.get("stripe-signature") ?? "";
-  // TODO: verify signature with Stripe SDK before trusting `rawBody`.
 
-  if (!signature && process.env.NODE_ENV === "production") {
-    log.warn("missing_signature");
-    return NextResponse.json({ ok: false, error: "Missing signature" }, { status: 400 });
+  if (!signature || !verifyStripeSignature(rawBody, signature, STRIPE_SECRET)) {
+    log.warn("invalid_signature");
+    return NextResponse.json(
+      { ok: false, error: "Invalid signature" },
+      { status: 400 },
+    );
   }
 
   let parsed: unknown;
@@ -51,6 +54,34 @@ export async function POST(request: Request) {
   const eventType = typeof envelope.type === "string" ? envelope.type : "unknown";
   const data = envelope.data as Record<string, unknown> | undefined;
   const obj = data?.object as Record<string, unknown> | undefined;
+
+  // Idempotency: each Stripe event id is processed exactly once.
+  const eventId = typeof envelope.id === "string" ? envelope.id : null;
+  if (eventId) {
+    try {
+      const supabase = createSupabaseServiceRoleClient();
+      const { error: ledgerError } = await supabase
+        .from("stripe_webhook_events")
+        .insert({ id: eventId, type: eventType });
+      if (ledgerError?.code === "23505") {
+        log.info("duplicate_event_skipped", { eventId });
+        return NextResponse.json({ received: true });
+      }
+      if (ledgerError) {
+        log.error("ledger_insert_failed", ledgerError.code ?? "unknown");
+        return NextResponse.json(
+          { ok: false, error: "Server configuration error" },
+          { status: 503 },
+        );
+      }
+    } catch (e) {
+      log.error("ledger_unavailable", e instanceof Error ? e.message : "unknown");
+      return NextResponse.json(
+        { ok: false, error: "Server configuration error" },
+        { status: 503 },
+      );
+    }
+  }
 
   const athleteProfileId =
     extractMetadataString(obj, "athlete_profile_id") ??

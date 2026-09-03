@@ -127,6 +127,10 @@ export async function createCapNoteForAthlete(
 
   const { error } = await supabase.from("cap_notes").insert([row]);
 
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    // Raw DB detail stays server-side; callers get a safe generic message.
+    console.error("[cap-notes] insert failed:", error.message);
+    return { ok: false, message: "Couldn't save the note." };
+  }
   return { ok: true };
 }

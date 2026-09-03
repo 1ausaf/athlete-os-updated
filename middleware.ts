@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 import { DEMO_ROLE_COOKIE } from "@/lib/demo/personas";
 import {
@@ -27,7 +28,41 @@ import {
 /** Paths that belong to the app, not the marketing site. */
 const APP_PREFIXES = ["/athlete", "/parent", "/staff", "/auth", "/invoice", "/api"];
 
-export function middleware(request: NextRequest) {
+/**
+ * Supabase session refresh (tenant hosts only) — the documented
+ * @supabase/ssr middleware pattern: getUser() revalidates/rotates tokens
+ * and the refreshed cookies ride the response, keeping server components
+ * and the browser in sync. Demo hosts skip it (persona-only, no sessions).
+ */
+async function passWithSessionRefresh(
+  request: NextRequest,
+  requestHeaders: Headers,
+): Promise<NextResponse> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  if (!url || !anonKey) return response;
+
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll: () => request.cookies.getAll(),
+      setAll: (cookiesToSet) => {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value),
+        );
+        response = NextResponse.next({ request: { headers: requestHeaders } });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options),
+        );
+      },
+    },
+  });
+  // Result unused on purpose — the call itself performs the refresh.
+  await supabase.auth.getUser();
+  return response;
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   const info = classifyHost(
@@ -42,7 +77,10 @@ export function middleware(request: NextRequest) {
   else requestHeaders.delete(TENANT_SLUG_HEADER);
 
   const withHeaders = { request: { headers: requestHeaders } };
-  const pass = () => NextResponse.next(withHeaders);
+  const pass = () =>
+    info.mode === "tenant"
+      ? passWithSessionRefresh(request, requestHeaders)
+      : NextResponse.next(withHeaders);
 
   // Canonical apex: www.powa.com → powa.com.
   if (info.mode === "platform" && info.isWww) {

@@ -3,6 +3,7 @@ import "server-only";
 import { getAthleteIdForProfileId } from "@/lib/data/athletes";
 import { membershipPaymentStatusAllowsBooking } from "@/lib/data/membership-payment-rules";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+// eslint-disable-next-line no-restricted-imports -- allowed importer: webhook billing writes have no user session; queries are tenant-pinned below
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 import type { Database } from "@/types/db";
 
@@ -306,13 +307,23 @@ export async function updateBillingStatusFromEvent(
   event: BillingWebhookEvent,
 ): Promise<void> {
   const supabase = createSupabaseServiceRoleClient();
-  const athleteId = await getAthleteIdForProfileId(
-    event.athleteProfileId,
-    supabase,
-  );
-  if (!athleteId) {
+
+  // Resolve the athlete WITH its tenant so every query below is tenant-pinned
+  // even under the service role (webhooks bypass RLS entirely).
+  const { data: athleteRaw, error: athleteErr } = await supabase
+    .from("athletes")
+    .select("id, tenant_id")
+    .eq("profile_id", event.athleteProfileId)
+    .maybeSingle();
+
+  if (athleteErr || !athleteRaw) {
     return;
   }
+
+  const athlete = athleteRaw as Pick<
+    Database["public"]["Tables"]["athletes"]["Row"],
+    "id" | "tenant_id"
+  >;
 
   const nextPaymentStatus = mapNormalizedEventToPaymentStatus(
     event.eventType,
@@ -328,7 +339,8 @@ export async function updateBillingStatusFromEvent(
     .select(
       "id, athlete_id, tenant_id, plan_id, status, valid_from, valid_to, payment_status, created_at, updated_at",
     )
-    .eq("athlete_id", athleteId)
+    .eq("athlete_id", athlete.id)
+    .eq("tenant_id", athlete.tenant_id)
     .order("valid_from", { ascending: false })
     .limit(25);
 
@@ -364,5 +376,6 @@ export async function updateBillingStatusFromEvent(
       payment_status: nextPaymentStatus,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", chosen.id);
+    .eq("id", chosen.id)
+    .eq("tenant_id", athlete.tenant_id);
 }

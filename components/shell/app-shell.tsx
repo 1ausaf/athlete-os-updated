@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
+import { LogOut } from "lucide-react";
+
+import { signOutAction } from "@/app/(auth)/auth/sign-out/actions";
 import { BrandLockup, WolfMark } from "@/components/brand/logo";
 import { useTenant } from "@/components/tenant/tenant-provider";
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
@@ -76,6 +79,8 @@ export interface AppShellProps {
   headerExtra?: ReactNode;
   /** Staff workspace runs edge-to-edge; the athlete portal stays centered. */
   fullWidth?: boolean;
+  /** True for a genuine Supabase session — swaps persona chrome for sign-out. */
+  realAuth?: boolean;
   children: ReactNode;
 }
 
@@ -90,6 +95,7 @@ export function AppShell({
   role,
   headerExtra,
   fullWidth = false,
+  realAuth = false,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -307,7 +313,22 @@ export function AppShell({
               badges) from pushing the page wider than the viewport on phones */}
           <div className="ml-auto flex min-w-0 items-center gap-2 overflow-x-auto">
             {headerExtra}
-            <PersonaSwitcher current={role} options={personaOptions} />
+            {/* Persona switcher is demo chrome; real sessions sign out. */}
+            {!realAuth ? (
+              <PersonaSwitcher current={role} options={personaOptions} />
+            ) : (
+              <form action={signOutAction}>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign out</span>
+                </Button>
+              </form>
+            )}
             <ThemeToggle />
             {/* Round 8 (M2): the name + avatar go to the profile. */}
             <Link

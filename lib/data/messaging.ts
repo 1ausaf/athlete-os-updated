@@ -91,10 +91,11 @@ function mapSendError(raw: string): {
       message: messageSendErrorMessage("MESSAGE_FORBIDDEN"),
     };
   }
-  const fallback = messageSendErrorMessage("MESSAGE_GENERIC");
+  // Unrecognized errors fall back to the generic message — raw DB detail
+  // never reaches the client (call sites log it server-side).
   return {
     code: "MESSAGE_GENERIC",
-    message: raw?.trim() ? raw : fallback,
+    message: messageSendErrorMessage("MESSAGE_GENERIC"),
   };
 }
 
@@ -115,7 +116,9 @@ function mapCreateThreadErrorMessage(raw: string): string {
   if (lower.includes("violates row-level security")) {
     return "You do not have permission to create this thread.";
   }
-  return raw || "Could not create thread.";
+  // Unrecognized errors fall back to the generic message — raw DB detail
+  // never reaches the client (call sites log it server-side).
+  return "Could not create thread.";
 }
 
 export async function listThreadsForUser(
@@ -332,6 +335,8 @@ export async function createThreadWithParticipants(
   );
 
   if (error) {
+    // Raw DB detail stays server-side; the mapper only emits known-safe text.
+    console.error("[messaging] create thread failed:", error.message);
     return { ok: false, message: mapCreateThreadErrorMessage(error.message) };
   }
 
@@ -400,6 +405,8 @@ export async function sendMessage(
   const { error } = await supabase.from("messages").insert([row]);
 
   if (error) {
+    // Raw DB detail stays server-side; the mapper only emits known-safe text.
+    console.error("[messaging] send failed:", error.message);
     return { ok: false, ...mapSendError(error.message ?? "") };
   }
 

@@ -2,32 +2,47 @@ import { NextResponse } from "next/server";
 
 import { updateBillingStatusFromEvent } from "@/lib/data/billing";
 import { createLogger } from "@/lib/log";
+import { verifySquareSignature } from "@/lib/security/webhooks";
 
 const log = createLogger("webhooks/square");
 
 /**
- * Square webhook entry point.
- *
- * TODO: Verify `x-square-hmacsha256-signature` using `SQUARE_WEBHOOK_SIGNATURE_KEY`
- * (Square’s notification subscription signature key) and the raw request body.
- * TODO: Map Square `customer_id` / `subscription_id` → `athletes.profile_id` via a lookup table.
+ * Square webhook entry point. Fail closed in EVERY environment: no
+ * signature key ⇒ 503; missing/invalid HMAC over (notification URL + raw
+ * body) ⇒ 400. SQUARE_WEBHOOK_NOTIFICATION_URL must match the URL
+ * registered with Square exactly.
  */
 export async function POST(request: Request) {
   log.info("POST received");
   const signatureKey =
     process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? process.env.SQUARE_WEBHOOK_SECRET;
-  if (!signatureKey && process.env.NODE_ENV === "production") {
+  if (!signatureKey) {
     log.error("webhook_not_configured_missing_secret");
     return NextResponse.json(
       { ok: false, error: "Webhook not configured" },
       { status: 503 },
     );
   }
-  // TODO: const rawBody = await request.text(); validate HMAC vs rawBody before JSON.parse.
+
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-square-hmacsha256-signature") ?? "";
+  const notificationUrl =
+    process.env.SQUARE_WEBHOOK_NOTIFICATION_URL ?? request.url;
+
+  if (
+    !signature ||
+    !verifySquareSignature(rawBody, signature, signatureKey, notificationUrl)
+  ) {
+    log.warn("invalid_signature");
+    return NextResponse.json(
+      { ok: false, error: "Invalid signature" },
+      { status: 400 },
+    );
+  }
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody) as unknown;
   } catch (e) {
     log.error("invalid_json", e instanceof Error ? e.message : "parse_error");
     return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });

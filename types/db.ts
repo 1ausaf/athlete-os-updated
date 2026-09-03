@@ -112,6 +112,53 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          created_at: string
+          id: string
+          ip_address: string | null
+          metadata: Json
+          resource_id: string | null
+          resource_type: string | null
+          tenant_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json
+          resource_id?: string | null
+          resource_type?: string | null
+          tenant_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json
+          resource_id?: string | null
+          resource_type?: string | null
+          tenant_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_accounts: {
         Row: {
           athlete_id: string
@@ -549,6 +596,99 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      members_backup_20260903: {
+        Row: {
+          create_parent_login: boolean | null
+          created_at: string | null
+          current_limitations: string | null
+          date_of_birth: string | null
+          date_of_birth_raw: string | null
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          emergency_contact_relation: string | null
+          first_name: string | null
+          focus: string | null
+          goals: string | null
+          group_name: string | null
+          guardian_email: string | null
+          guardian_name: string | null
+          guardian_phone: string | null
+          guardian_relation: string | null
+          id: string | null
+          imported_at: string | null
+          last_name: string | null
+          membership_type: string | null
+          past_injuries: string | null
+          phone: string | null
+          plan: string | null
+          sex: string | null
+          source_row: number | null
+          tenant_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          create_parent_login?: boolean | null
+          created_at?: string | null
+          current_limitations?: string | null
+          date_of_birth?: string | null
+          date_of_birth_raw?: string | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relation?: string | null
+          first_name?: string | null
+          focus?: string | null
+          goals?: string | null
+          group_name?: string | null
+          guardian_email?: string | null
+          guardian_name?: string | null
+          guardian_phone?: string | null
+          guardian_relation?: string | null
+          id?: string | null
+          imported_at?: string | null
+          last_name?: string | null
+          membership_type?: string | null
+          past_injuries?: string | null
+          phone?: string | null
+          plan?: string | null
+          sex?: string | null
+          source_row?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          create_parent_login?: boolean | null
+          created_at?: string | null
+          current_limitations?: string | null
+          date_of_birth?: string | null
+          date_of_birth_raw?: string | null
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relation?: string | null
+          first_name?: string | null
+          focus?: string | null
+          goals?: string | null
+          group_name?: string | null
+          guardian_email?: string | null
+          guardian_name?: string | null
+          guardian_phone?: string | null
+          guardian_relation?: string | null
+          id?: string | null
+          imported_at?: string | null
+          last_name?: string | null
+          membership_type?: string | null
+          past_injuries?: string | null
+          phone?: string | null
+          plan?: string | null
+          sex?: string | null
+          source_row?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       membership_plans: {
         Row: {
@@ -1235,14 +1375,6 @@ export type Database = {
     }
     Functions: {
       accept_tenant_invitation: { Args: { p_token: string }; Returns: string }
-      booking_frequency_ok_for_confirm: {
-        Args: {
-          p_athlete_id: string
-          p_booking_id: string
-          p_session_id: string
-        }
-        Returns: boolean
-      }
       create_message_thread_with_participants: {
         Args: {
           p_participant_profile_ids: string[]
@@ -1271,27 +1403,6 @@ export type Database = {
           tenant_id: string
           theme: Json
         }[]
-      }
-      is_assigned_coach_for_athlete: {
-        Args: { p_athlete_id: string }
-        Returns: boolean
-      }
-      is_thread_participant: {
-        Args: { p_profile_id: string; p_thread_id: string }
-        Returns: boolean
-      }
-      member_tenant_ids: { Args: never; Returns: string[] }
-      profile_is_minor: { Args: { p_profile_id: string }; Returns: boolean }
-      profile_owns_athlete: { Args: { p_athlete_id: string }; Returns: boolean }
-      role_tenant_ids: {
-        Args: { p_roles: Database["public"]["Enums"]["user_role"][] }
-        Returns: string[]
-      }
-      staff_tenant_ids: { Args: never; Returns: string[] }
-      tenant_entitlements: { Args: { p_tenant_id: string }; Returns: Json }
-      validate_thread_rule_of_two: {
-        Args: { p_thread_id: string }
-        Returns: undefined
       }
     }
     Enums: {

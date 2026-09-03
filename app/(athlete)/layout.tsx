@@ -5,6 +5,7 @@ import { AthleteNav } from "@/components/nav/athlete-nav";
 import { AppShell } from "@/components/shell/app-shell";
 import { BrandStyle } from "@/components/tenant/brand-style";
 import { TenantProvider } from "@/components/tenant/tenant-provider";
+import { getAuthContext } from "@/lib/authz/context";
 import { getDemoRole, requireAthleteContext } from "@/lib/demo/session";
 import {
   getTenantBranding,
@@ -29,6 +30,7 @@ export default async function AthletePortalLayout({
 
   // Athletes see themselves; parents see the selected child; staff redirect.
   const ctx = requireAthleteContext();
+  const authCtx = await getAuthContext();
 
   return (
     <TenantProvider tenant={tenantPublic}>
@@ -40,6 +42,7 @@ export default async function AthletePortalLayout({
           ctx.isParentView ? `Member Portal · ${ctx.athlete.name}` : "Member Portal"
         }
         nav={<AthleteNav user={ctx.user} athlete={ctx.athlete} />}
+        realAuth={authCtx?.isRealAuth ?? false}
         headerExtra={
           ctx.isParentView ? (
             <ChildSwitcher

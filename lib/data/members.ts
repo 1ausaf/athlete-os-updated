@@ -1,5 +1,6 @@
 import "server-only";
 
+// eslint-disable-next-line no-restricted-imports -- allowed importer: members table is service-role-only in the DB (minors' PII); reads are staff-gated server-side
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
@@ -34,6 +35,15 @@ export function liveRosterConfigured(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
+}
+
+/**
+ * Demo hosts run persona auth over a public URL, so real PII there is an
+ * EXPLICIT opt-in: credentials present AND ALLOW_DEMO_LIVE_ROSTER=1.
+ * Tenant hosts ignore this — they require a real staff session instead.
+ */
+export function demoLiveRosterAllowed(): boolean {
+  return liveRosterConfigured() && process.env.ALLOW_DEMO_LIVE_ROSTER === "1";
 }
 
 function ageFrom(dob: string | null): number | null {

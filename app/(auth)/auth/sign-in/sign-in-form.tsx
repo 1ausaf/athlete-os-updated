@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
+import Script from "next/script";
 import { Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
+import { useFormState, useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +18,90 @@ import {
 } from "@/lib/demo/accounts";
 import { cn } from "@/lib/utils";
 
-export function SignInForm() {
+import { signInToTenantAction, type SignInState } from "./actions";
+
+/**
+ * Two forms behind one surface:
+ * - tenantHost: REAL Supabase sign-in via the server action (tenant from
+ *   the trusted hostname, membership-gated, generic errors, optional
+ *   Turnstile when configured).
+ * - demo hosts: the original persona sign-in over fictional data, verbatim.
+ */
+export function SignInForm({ tenantHost = false }: { tenantHost?: boolean }) {
+  if (tenantHost) return <TenantSignInForm />;
+  return <DemoSignInForm />;
+}
+
+const SIGN_IN_INITIAL: SignInState = { error: null };
+
+function TenantSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="brand" className="w-full" disabled={pending}>
+      {pending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Signing in…
+        </>
+      ) : (
+        "Sign in"
+      )}
+    </Button>
+  );
+}
+
+function TenantSignInForm() {
+  const [state, formAction] = useFormState(signInToTenantAction, SIGN_IN_INITIAL);
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="email">Email</Label>
+        <Input id="email" name="email" type="email" autoComplete="email" required />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Password</Label>
+          <Link
+            // Cast until typedRoutes regenerates with the new segment.
+            href={"/auth/reset" as Route}
+            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </div>
+
+      {turnstileSiteKey ? (
+        <>
+          <Script
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+            strategy="lazyOnload"
+          />
+          <div className="cf-turnstile" data-sitekey={turnstileSiteKey} />
+        </>
+      ) : null}
+
+      {state.error ? (
+        <p className="text-sm font-medium text-destructive" role="alert">
+          {state.error}
+        </p>
+      ) : null}
+
+      <TenantSubmit />
+    </form>
+  );
+}
+
+function DemoSignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
