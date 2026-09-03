@@ -80,13 +80,25 @@ export const getTenantBranding = cache(async (): Promise<TenantBranding> => {
   };
 });
 
-/** Nested-layout metadata for tenant hosts; empty on demo/platform. */
+/** Nested-layout metadata: the portal carries the workspace's identity —
+ *  the tenant's on tenant hosts, LPS Athletic's on demo hosts (the root
+ *  layout's POWA metadata covers only the platform marketing surface). */
 export async function tenantMetadata(): Promise<{
   title?: { default: string; template: string };
   icons?: string;
 }> {
   const b = await getTenantBranding();
-  if (!b.isTenantHost) return {};
+  if (!b.isTenantHost) {
+    if (getTenantMode() === "demo") {
+      return {
+        title: {
+          default: "LPS Athletic — Athlete Operating System",
+          template: "%s · AOS",
+        },
+      };
+    }
+    return {};
+  }
   return {
     title: { default: `${b.name} — Athlete OS`, template: `%s · ${b.name}` },
     ...(b.iconUrl ? { icons: b.iconUrl } : {}),

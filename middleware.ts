@@ -27,9 +27,6 @@ import {
 /** Paths that belong to the app, not the marketing site. */
 const APP_PREFIXES = ["/athlete", "/parent", "/staff", "/auth", "/invoice", "/api"];
 
-/** Marketing-only paths that tenant hosts must not serve. */
-const MARKETING_PATHS = ["/about", "/pricing", "/style-guide"];
-
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -67,9 +64,6 @@ export function middleware(request: NextRequest) {
   if (info.mode === "tenant") {
     // Tenant hosts never serve the platform marketing site.
     if (pathname === "/") {
-      return NextResponse.redirect(new URL("/auth/sign-in", request.url));
-    }
-    if (MARKETING_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
       return NextResponse.redirect(new URL("/auth/sign-in", request.url));
     }
   }

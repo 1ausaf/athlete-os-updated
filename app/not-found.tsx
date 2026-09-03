@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Home } from "lucide-react";
+import { Home, LogIn } from "lucide-react";
 
 import { WolfMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -35,9 +35,9 @@ export default function NotFound() {
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="/about">
-              <ArrowLeft className="h-4 w-4" />
-              About the platform
+            <Link href="/auth/sign-in">
+              <LogIn className="h-4 w-4" />
+              Sign in
             </Link>
           </Button>
         </div>

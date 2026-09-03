@@ -1,11 +1,12 @@
-import Link from "next/link";
 import {
   ArrowRight,
   CalendarCheck2,
   ClipboardList,
   CreditCard,
   Dumbbell,
+  Globe,
   Layers,
+  Palette,
   ShieldCheck,
   Sparkles,
   Users,
@@ -13,6 +14,7 @@ import {
 
 import { EnterDemoButton } from "@/components/app/enter-demo";
 import { AthleteAvatar } from "@/components/app/athlete-avatar";
+import { WolfMark } from "@/components/brand/logo";
 import { Pill } from "@/components/ui/pill";
 import {
   Card,
@@ -26,7 +28,7 @@ const stats = [
   { value: "<3 min", label: "Huddle prep", hint: "from 10–15 min across 3 tools" },
   { value: "4 → 1", label: "Tools unified", hint: "Amelia · TrainHeroic · Trello · Square" },
   { value: "100%", label: "Rule-of-Two coverage", hint: "every coach–minor thread" },
-  { value: "50", label: "Requirements mapped", hint: "P0–P2 across 7 domains" },
+  { value: "1", label: "System, your brand", hint: "your colors, your domain" },
 ];
 
 const replaced = ["Amelia", "TrainHeroic", "Trello", "Square"];
@@ -64,6 +66,24 @@ const features = [
   },
 ];
 
+const whiteLabel = [
+  {
+    icon: Palette,
+    title: "Your brand on every screen",
+    body: "Your logo, your colors, your name — across the member portal, coach console, invoices and emails. Members see your business; POWA runs the plumbing.",
+  },
+  {
+    icon: Globe,
+    title: "Your own address",
+    body: "Every business gets yourclub.powa.com out of the box. Higher tiers connect a fully custom domain — train.yourclub.com — with automatic SSL.",
+  },
+  {
+    icon: Layers,
+    title: "One codebase, isolated data",
+    body: "Every tenant runs the same battle-tested platform, with row-level isolation enforced in the database — your athletes' data is yours alone.",
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="flex flex-col">
@@ -74,20 +94,21 @@ export default function LandingPage() {
         <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-4 py-20 md:grid-cols-[1.1fr_0.9fr] md:px-6 md:py-28">
           <div className="flex flex-col items-start gap-6">
             <Pill tone="brand" dot>
-              LPS Athletic · Athlete Operating System
+              POWA Coach · White-Label Athlete OS
             </Pill>
             <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
-              Remap athletes to{" "}
+              Your athletes. Your brand.{" "}
               <span className="relative whitespace-nowrap text-brand-ink">
-                dominate
+                One system
                 <span className="absolute -bottom-1 left-0 h-1 w-full rounded-full bg-brand" />
               </span>
-              . Automate the rest.
+              .
             </h1>
             <p className="max-w-xl text-pretty text-base text-muted-foreground md:text-lg">
-              The unified hub for semi-private coaching and fully individualized
-              programming. Booking, billing, coach notes, compliant messaging and the
-              coach huddle brief — one system, built for The Pro Maker™.
+              The operating system for athlete-development businesses —
+              individualized programming, frequency-aware booking, billing,
+              compliant messaging and the coach huddle brief, served under your
+              own brand on your own domain.
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <EnterDemoButton role="athlete" variant="brand" size="lg">
@@ -98,14 +119,9 @@ export default function LandingPage() {
                 Enter coach console
               </EnterDemoButton>
             </div>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <span className="text-[0.7rem]">As featured on</span>
-              {["ESPN", "TSN", "CBC", "HBO", "The Globe & Mail"].map((n) => (
-                <span key={n} className="font-display font-bold text-foreground/70">
-                  {n}
-                </span>
-              ))}
-            </div>
+            <p className="pt-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Live demo · built with LPS Athletic — The Pro Maker™
+            </p>
           </div>
 
           {/* Floating huddle preview */}
@@ -149,7 +165,7 @@ export default function LandingPage() {
             <ArrowRight className="h-5 w-5 text-muted-foreground" />
             <span className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-bold text-brand-foreground shadow-glow">
               <Sparkles className="h-4 w-4" />
-              LPS Athlete OS
+              POWA Coach
             </span>
           </div>
         </div>
@@ -179,6 +195,69 @@ export default function LandingPage() {
                 <CardContent />
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* White-label pitch */}
+      <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6 md:py-20">
+        <div className="mb-10 flex flex-col gap-3">
+          <span className="eyebrow">White label</span>
+          <h2 className="max-w-2xl text-3xl md:text-4xl">
+            Members never see POWA. They see you.
+          </h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {whiteLabel.map(({ icon: Icon, title, body }) => (
+            <Card key={title}>
+              <CardHeader className="gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand/20 bg-brand/10 text-brand-ink">
+                  <Icon className="h-5 w-5" aria-hidden />
+                </span>
+                <CardTitle className="text-base">{title}</CardTitle>
+                <CardDescription className="text-sm leading-relaxed">
+                  {body}
+                </CardDescription>
+              </CardHeader>
+              <CardContent />
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* LPS Athletic showcase */}
+      <section className="border-y border-border bg-surface/40">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6 md:py-20">
+          <div className="grid items-center gap-10 md:grid-cols-[auto_1fr]">
+            <WolfMark className="h-20 w-20 md:h-24 md:w-24" />
+            <div className="flex flex-col gap-4">
+              <span className="eyebrow">Built with the best</span>
+              <h2 className="max-w-2xl text-3xl md:text-4xl">
+                Forged on the floor at LPS Athletic — The Pro Maker™.
+              </h2>
+              <p className="max-w-2xl text-muted-foreground">
+                POWA Coach began as the operating system for LPS Athletic, the
+                North York facility whose athletes have reached the pros and
+                been featured on ESPN, TSN, CBC and HBO. Every workflow in the
+                demo — the huddle brief, CAP notes, frequency-aware booking,
+                Rule-of-Two messaging — was shaped by their coaches, round after
+                round, on a real training floor.
+              </p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <span className="text-[0.7rem]">LPS athletes featured on</span>
+                {["ESPN", "TSN", "CBC", "HBO", "The Globe & Mail"].map((n) => (
+                  <span key={n} className="font-display font-bold text-foreground/70">
+                    {n}
+                  </span>
+                ))}
+              </div>
+              <div className="pt-2">
+                <EnterDemoButton role="athlete" variant="outline" size="lg">
+                  Explore the LPS Athletic demo
+                  <ArrowRight className="h-4 w-4" />
+                </EnterDemoButton>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -259,12 +338,9 @@ export default function LandingPage() {
                 Launch the demo
                 <ArrowRight className="h-4 w-4" />
               </EnterDemoButton>
-              <Link
-                href="/pricing"
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-border px-8 text-sm font-semibold transition-colors hover:bg-accent"
-              >
-                View licensing
-              </Link>
+              <EnterDemoButton role="owner" variant="outline" size="lg">
+                Enter as the owner
+              </EnterDemoButton>
             </div>
           </div>
         </div>

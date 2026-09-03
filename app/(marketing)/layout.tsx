@@ -1,13 +1,16 @@
 import Link from "next/link";
-import type { Route } from "next";
 import type { ReactNode } from "react";
 
 import { EnterDemoButton } from "@/components/app/enter-demo";
-import { BrandLockup } from "@/components/brand/logo";
-import { AccentToggle } from "@/components/theme/accent-toggle";
+import { PowaLockup } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 
+/**
+ * POWA Coach platform surface (apex + demo hosts). The product inside stays
+ * tenant-branded — LPS Athletic on this deployment — but the storefront is
+ * the platform's own.
+ */
 export default function MarketingLayout({
   children,
 }: {
@@ -20,27 +23,11 @@ export default function MarketingLayout({
       <header className="sticky top-0 z-30 border-b border-border bg-surface/80">
         <div aria-hidden className="glass absolute inset-0 -z-10" />
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 md:px-6">
-          <Link href="/" aria-label="LPS Athletic home">
-            <BrandLockup subtitle="Athlete OS" />
+          <Link href="/" aria-label="POWA Coach home">
+            <PowaLockup subtitle="Athlete OS" />
           </Link>
 
-          <nav className="ml-6 hidden items-center gap-5 text-sm font-medium text-muted-foreground md:flex">
-            <Link href="/about" className="transition-colors hover:text-foreground">
-              About
-            </Link>
-            <Link href="/pricing" className="transition-colors hover:text-foreground">
-              Pricing
-            </Link>
-            <Link
-              href={"/style-guide" as Route}
-              className="transition-colors hover:text-foreground"
-            >
-              Design system
-            </Link>
-          </nav>
-
           <div className="ml-auto flex items-center gap-2">
-            <AccentToggle />
             <ThemeToggle />
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
               <Link href="/auth/sign-in">Sign in</Link>
@@ -58,27 +45,26 @@ export default function MarketingLayout({
         <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="max-w-sm">
-              <BrandLockup subtitle="Athlete OS" />
+              <PowaLockup subtitle="Athlete OS" />
               <p className="mt-3 text-sm text-muted-foreground">
-                The operating system for LPS Athletic — The Pro Maker™. Built for
-                semi-private coaching and individualized programming.
+                The white-label operating system for athlete-development
+                businesses — programming, booking, billing and Safe-Sport
+                messaging under your own brand.
               </p>
             </div>
             <div className="flex flex-wrap gap-12 text-sm">
               <div className="flex flex-col gap-2">
                 <span className="eyebrow">Platform</span>
-                <Link href="/about" className="text-muted-foreground hover:text-foreground">
-                  About
-                </Link>
-                <Link href="/pricing" className="text-muted-foreground hover:text-foreground">
-                  Pricing
-                </Link>
                 <Link
-                  href={"/style-guide" as Route}
+                  href="/auth/sign-in"
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Design system
+                  Sign in
                 </Link>
+                <span className="text-muted-foreground">
+                  White-label branding
+                </span>
+                <span className="text-muted-foreground">Custom domains</span>
               </div>
               <div className="flex flex-col gap-2">
                 <span className="eyebrow">Compliance</span>
@@ -89,7 +75,10 @@ export default function MarketingLayout({
             </div>
           </div>
           <div className="mt-8 flex flex-col gap-2 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-            <span>© {new Date().getFullYear()} LPS Athletic · North York, Ontario</span>
+            <span>
+              © {new Date().getFullYear()} POWA Coach · Flagship facility: LPS
+              Athletic — The Pro Maker™, North York, Ontario
+            </span>
             <span className="font-mono uppercase tracking-wider">
               Concept demo · no real payment data
             </span>
