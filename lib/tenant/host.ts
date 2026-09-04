@@ -23,9 +23,9 @@ export interface HostInfo {
   isWww?: boolean;
 }
 
-/** The platform apex. Overridable per environment; powa.com in production. */
+/** The platform apex. Overridable per environment; powa.co in production. */
 export function platformApex(): string {
-  return (process.env.NEXT_PUBLIC_PLATFORM_APEX ?? "powa.com").toLowerCase();
+  return (process.env.NEXT_PUBLIC_PLATFORM_APEX ?? "powa.co").toLowerCase();
 }
 
 /** Hosts that always run the cookie-persona demo (comma-separated env). */

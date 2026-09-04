@@ -17,7 +17,7 @@ import http from "node:http";
 import https from "node:https";
 
 const BASE = new URL(process.argv[2] ?? "http://localhost:3000");
-const APEX = process.env.PLATFORM_APEX ?? "powa.com";
+const APEX = process.env.PLATFORM_APEX ?? "powa.co";
 
 function request(path, headers = {}) {
   const mod = BASE.protocol === "https:" ? https : http;
