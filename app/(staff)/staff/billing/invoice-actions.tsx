@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  athleteProfileById,
   athletes,
   fmtDay,
   fmtFullDay,
@@ -245,66 +246,151 @@ function escHtml(s: string): string {
 }
 
 /**
- * Round 16 (Q5): "Print" opens this clean one-page summary in a popup and
- * lets the browser's print dialog take over — fully self-contained, no
- * print CSS bleeding into the app.
+ * Round 16 (Q5): "Print" opens a one-page summary in a popup and lets the
+ * browser's print dialog take over. Round 21: rebuilt on the club's real
+ * Square-invoice letterhead — logo tile, business block, brand rule,
+ * plan-name title, payment note, Customer/Invoice/Payment columns and an
+ * itemized table — matching the downloaded PDF.
  */
 interface InvoiceBrand {
   name: string;
   supportLine: string;
+  addressLines?: string[];
+  taxLine?: string;
+  emtEmail?: string;
+  /** LPS wolf tile vs a monogram tile for white-label tenants. */
+  wolf?: boolean;
 }
 
-/** Round 20: tenant-branded print/PDF output (demo values are unchanged). */
+/** The real LPS letterhead (from the club's live Square invoices). */
 const DEMO_INVOICE_BRAND: InvoiceBrand = {
   name: "LPS Athletic",
-  supportLine: "billing@lpsathletic.com — LPS Athletic, North York, ON",
+  supportLine: "train@lpsathletic.com | (416) 360-0460",
+  addressLines: ["125 Martin Ross Avenue", "Unit 12, North York, ON M3J 2L9 Canada"],
+  taxLine: "GST/HST: 841193451RT0001",
+  emtEmail: "accounts@lpsathletic.com",
+  wolf: true,
 };
+
+/** Wolf mark as inline SVG (mirrors components/brand/logo.tsx). */
+const WOLF_TILE_SVG = `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" width="30" height="30"><path d="M16 3.5 5.5 8v7.5c0 6.4 4.6 10.6 10.5 13 5.9-2.4 10.5-6.6 10.5-13V8L16 3.5Z" fill="#fff"/><path d="M16 20.5 12.5 16.2h7L16 20.5Z" fill="#111"/><path d="M11 12.2 13.4 11l.6 2.4-2.6.3-.4-1.5Z" fill="#c71a2e"/><path d="M21 12.2 18.6 11l-.6 2.4 2.6.3.4-1.5Z" fill="#c71a2e"/></svg>`;
 
 function printableInvoiceHtml(
   inv: Invoice,
   brand: InvoiceBrand = DEMO_INVOICE_BRAND,
 ): string {
-  const rows: [string, string][] = [
-    ["Billed to", inv.athleteName],
-    ["Plan", inv.plan],
-    ["Issued", fmtFullDay(inv.issuedAt)],
-    ["Due", fmtFullDay(inv.dueDate)],
-    ["Status", statusMeta[inv.status].label],
-  ];
-  if (inv.status === "partial")
-    rows.push([
-      "Received",
-      `${money2(inv.paidAmountCents ?? 0)} — ${money2(remainingCents(inv))} outstanding`,
-    ]);
-  if (inv.paidAt)
-    rows.push([
-      "Paid",
-      `${fmtFullDay(inv.paidAt)}${inv.paidMethod ? ` via ${inv.paidMethod}` : ""}`,
-    ]);
-  if (inv.refundedCents) rows.push(["Refunded", money2(inv.refundedCents)]);
-  const body = rows
-    .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`)
-    .join("");
+  const profile = athleteProfileById(inv.athleteId);
+  const received = inv.status === "partial" ? (inv.paidAmountCents ?? 0) : 0;
+  const balance =
+    inv.status === "paid" || inv.status === "refunded" || inv.status === "canceled"
+      ? 0
+      : inv.amountCents - received;
+  const first = escHtml(inv.athleteName.split(" ")[0] ?? inv.athleteName);
+
+  const note =
+    inv.status === "paid"
+      ? `This invoice for ${first}'s membership plan has been settled${inv.paidMethod ? ` via ${escHtml(inv.paidMethod)}` : ""}. Thank you for your business!`
+      : inv.status === "canceled"
+        ? `This invoice for ${first}'s membership plan was canceled — no payment is required.`
+        : `This is an invoice for ${first}'s membership plan. You may use the secure link in this invoice to pay by credit card.${brand.emtEmail ? ` Or if you prefer an Email Money Transfer (EMT), please send it to ${escHtml(brand.emtEmail)} and include the tax in your total amount.` : ""} Thank you for your business!`;
+
+  const tile = brand.wolf
+    ? `<span class="tile">${WOLF_TILE_SVG}</span>`
+    : `<span class="tile mono">${escHtml((brand.name[0] ?? "P").toUpperCase())}</span>`;
+
+  const customer = [
+    inv.athleteName,
+    ...(profile
+      ? [
+          profile.email,
+          profile.phone,
+          profile.address.street,
+          `${profile.address.city} ${profile.address.region} ${profile.address.postal}`,
+        ]
+      : []),
+  ]
+    .map((l) => escHtml(l))
+    .join("<br>");
+
+  const payment =
+    inv.status === "paid" && inv.paidAt
+      ? `Paid ${escHtml(fmtFullDay(inv.paidAt))}<br>${escHtml(money2(inv.amountCents))}`
+      : `Due ${escHtml(fmtFullDay(inv.dueDate))}<br>${escHtml(money2(balance))}`;
+
+  const extraTotals =
+    (received > 0
+      ? `<tr class="tot"><td colspan="3">Received so far</td><td class="num">-${escHtml(money2(received))}</td></tr>`
+      : "") +
+    (inv.refundedCents
+      ? `<tr class="tot"><td colspan="3">Refunded</td><td class="num">${escHtml(money2(inv.refundedCents))}</td></tr>`
+      : "");
+
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/invoice/${inv.id}`
+      : `/invoice/${inv.id}`;
+
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Invoice ${escHtml(inv.id.toUpperCase())} — ${escHtml(brand.name)}</title>
 <style>
-  body{font-family:Helvetica,Arial,sans-serif;color:#16181d;margin:48px auto;max-width:620px;padding:0 24px}
-  h1{font-size:22px;letter-spacing:.04em;margin:0}
-  .sub{color:#667085;font-size:12px;margin:2px 0 28px}
-  h2{font-size:15px;margin:0 0 12px}
-  table{border-collapse:collapse;width:100%;font-size:13px}
-  td{padding:7px 8px;border-bottom:1px solid #e4e6eb;vertical-align:top}
-  td:first-child{color:#667085;width:120px}
-  .amount{font-size:20px;font-weight:700;margin:20px 0 0}
-  .foot{color:#667085;font-size:11px;margin-top:32px}
+  body{font-family:Helvetica,Arial,sans-serif;color:#16181d;margin:40px auto;max-width:680px;padding:0 24px;font-size:13px}
+  .head{display:flex;gap:14px;align-items:flex-start}
+  .tile{width:46px;height:46px;border-radius:10px;background:#111;display:flex;align-items:center;justify-content:center;flex:none}
+  .tile.mono{color:#c71a2e;font-weight:800;font-size:24px}
+  .biz b{font-size:14px}
+  .biz div{color:#667085;font-size:11px;line-height:1.5}
+  .headr{margin-left:auto;text-align:right}
+  .headr b{font-size:13px}
+  .headr div{color:#667085;font-size:11px;margin-top:6px}
+  .rule{height:4px;background:#c71a2e;margin:20px 0 26px;border-radius:2px}
+  h1{font-size:26px;margin:0 0 12px}
+  .note{color:#667085;font-size:12.5px;line-height:1.55;margin:0 0 26px}
+  .cols{display:flex;gap:24px;margin-bottom:28px}
+  .col{flex:1;border-top:1px solid #e4e6eb;padding-top:10px}
+  .col b{font-size:12.5px}
+  .col div{color:#667085;font-size:12px;line-height:1.55;margin-top:6px}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{text-align:left;border-top:1px solid #e4e6eb;border-bottom:1px solid #e4e6eb;padding:8px 6px;font-size:12px}
+  td{padding:8px 6px;vertical-align:top}
+  .num{text-align:right}
+  th.num{text-align:right}
+  .desc{color:#98a2b3;font-size:11.5px}
+  tr.item td{border-bottom:1px solid #e4e6eb}
+  tr.tot td{padding:5px 6px}
+  .grand td{border-top:1px solid #e4e6eb;font-size:18px;font-weight:700;padding-top:14px}
+  .foot{display:flex;justify-content:space-between;color:#667085;font-size:11px;margin-top:44px;border-top:1px solid #e4e6eb;padding-top:12px}
 </style></head>
 <body>
-  <h1>${escHtml(brand.name.toUpperCase())}</h1>
-  <p class="sub">Athlete Operating System — Invoice</p>
-  <h2>Invoice ${escHtml(inv.id.toUpperCase())}</h2>
-  <table>${body}</table>
-  <p class="amount">${escHtml(money2(inv.amountCents))} <span style="font-size:12px;color:#667085;font-weight:400">CAD</span></p>
-  <p class="foot">Questions? ${escHtml(brand.supportLine)}</p>
+  <div class="head">
+    ${tile}
+    <div class="biz">
+      <b>${escHtml(brand.name)}</b>
+      <div>${(brand.addressLines ?? []).map((l) => escHtml(l)).join("<br>")}${brand.addressLines?.length ? "<br>" : ""}${escHtml(brand.supportLine)}${brand.taxLine ? `<br>${escHtml(brand.taxLine)}` : ""}</div>
+    </div>
+    <div class="headr">
+      <b>Invoice #${escHtml(inv.id.toUpperCase())}</b>
+      <div><b style="color:#16181d;font-size:11px">Issue date</b><br>${escHtml(fmtFullDay(inv.issuedAt))}</div>
+    </div>
+  </div>
+  <div class="rule"></div>
+  <h1>${escHtml(inv.plan)}</h1>
+  <p class="note">${note}</p>
+  <div class="cols">
+    <div class="col"><b>Customer</b><div>${customer}</div></div>
+    <div class="col"><b>Invoice Details</b><div>PDF created ${escHtml(fmtFullDay(new Date().toISOString()))}<br>${escHtml(money2(inv.amountCents))}<br>Status: ${escHtml(statusMeta[inv.status].label)}</div></div>
+    <div class="col"><b>Payment</b><div>${payment}</div></div>
+  </div>
+  <table>
+    <tr><th>Items</th><th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th></tr>
+    <tr class="item"><td>${escHtml(inv.plan)}<br><span class="desc">Membership plan</span></td><td class="num">1</td><td class="num">${escHtml(money2(inv.amountCents))}</td><td class="num">${escHtml(money2(inv.amountCents))}</td></tr>
+    <tr class="tot"><td colspan="3">Subtotal</td><td class="num">${escHtml(money2(inv.amountCents))}</td></tr>
+    ${extraTotals}
+    <tr class="grand"><td colspan="3">${inv.status === "paid" ? "Total Paid" : "Total Due"}</td><td class="num">${escHtml(money2(inv.status === "paid" ? inv.amountCents : balance))}</td></tr>
+  </table>
+  <div class="foot">
+    <span>${balance > 0 ? `<b>Pay online</b> — ${escHtml(shareUrl)}` : "Thank you for your business!"}</span>
+    <span>Page 1 of 1</span>
+  </div>
   <script>window.onload = function () { window.print(); };</script>
 </body></html>`;
 }
@@ -564,10 +650,24 @@ export function InvoicesPanel({
     }
   }
 
-  /** Q5 — hand-built PDF from lib/demo/invoice-pdf, saved via a blob URL. */
+  /** Q5 — hand-built letterhead PDF from lib/demo/invoice-pdf (R21). */
   function downloadPdf(inv: Invoice) {
     const url = URL.createObjectURL(
-      invoicePdfBlob(inv, { name: tenant.name, supportLine: tenant.supportLine }),
+      invoicePdfBlob(inv, {
+        // LPS letterhead by default; white-label tenants get their own
+        // name + support line on a monogram tile.
+        ...(tenant.slug !== "demo"
+          ? {
+              brand: {
+                name: tenant.name,
+                addressLines: [],
+                contactLine: tenant.supportLine,
+                wolfMark: false,
+              },
+            }
+          : {}),
+        payUrl: `${window.location.origin}/invoice/${inv.id}`,
+      }),
     );
     const a = document.createElement("a");
     a.href = url;
@@ -587,10 +687,14 @@ export function InvoicesPanel({
       return;
     }
     w.document.write(
-      printableInvoiceHtml(inv, {
-        name: tenant.name,
-        supportLine: tenant.supportLine,
-      }),
+      // LPS letterhead by default; white-label tenants print their own
+      // name + support line on a monogram tile (mirrors downloadPdf).
+      tenant.slug !== "demo"
+        ? printableInvoiceHtml(inv, {
+            name: tenant.name,
+            supportLine: tenant.supportLine,
+          })
+        : printableInvoiceHtml(inv),
     );
     w.document.close();
     w.focus();
