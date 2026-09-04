@@ -27,6 +27,7 @@ import {
   Repeat,
   Search,
   Send,
+  Trash2,
   Undo2,
   XCircle,
 } from "lucide-react";
@@ -450,7 +451,7 @@ export function InvoicesPanel({
   // B1 — row actions ask for confirmation before the status flips.
   const [confirming, setConfirming] = useState<{
     inv: Invoice;
-    action: "paid" | "cancel" | "record" | "refund" | "push" | "edit";
+    action: "paid" | "cancel" | "record" | "refund" | "push" | "edit" | "delete";
   } | null>(null);
   // Q3 — series actions that need a dialog (cancel confirm, edit).
   const [seriesAction, setSeriesAction] = useState<{
@@ -739,6 +740,24 @@ export function InvoicesPanel({
     showFlash("Duplicated — saved as a draft.");
   }
 
+  /** Round 21: drafts were never sent, so a mistake can be removed outright —
+   *  the row disappears entirely (unlike Cancel, nothing stays on the books).
+   *  Deletion is local demo state like every other row action; the guard
+   *  checks the LIVE row (not the dialog's snapshot) so a draft sent while
+   *  the confirm sat open can never be hard-deleted. */
+  function deleteDraft(inv: Invoice) {
+    setConfirming(null);
+    const live = rows.find((r) => r.id === inv.id);
+    if (!live || live.status !== "draft") {
+      showFlash("Only drafts can be deleted — this invoice was already sent.");
+      return;
+    }
+    setRows((prev) =>
+      prev.filter((r) => !(r.id === inv.id && r.status === "draft")),
+    );
+    showFlash(`Draft deleted — nothing was sent to ${inv.athleteName}.`);
+  }
+
   /** Round 17: clone a series as a fresh active one — the count resets and
    *  no invoice goes out until its first run comes around. */
   function duplicateSeries(s: RecurringSeries) {
@@ -803,6 +822,13 @@ export function InvoicesPanel({
       destructive: true,
       onSelect: () => setConfirming({ inv, action: "cancel" }),
     };
+    // Round 21 — drafts were never sent, so they can be removed outright.
+    const deleteDraftItem: RowMenuItem = {
+      label: "Delete Draft",
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      destructive: true,
+      onSelect: () => setConfirming({ inv, action: "delete" }),
+    };
     // Q5 — print/PDF work on every status; the public link skips drafts.
     const docs: RowMenuItem[] = [
       {
@@ -831,7 +857,7 @@ export function InvoicesPanel({
     }
 
     if (inv.archived) {
-      return [
+      const groups: RowMenuItem[][] = [
         [
           {
             label: "Unarchive",
@@ -841,8 +867,12 @@ export function InvoicesPanel({
         ],
         docs,
       ];
+      // An archived draft would otherwise be stuck forever — still deletable.
+      if (inv.status === "draft") groups.push([deleteDraftItem]);
+      return groups;
     }
-    if (inv.status === "draft") return [[edit, sendNowItem], docs, [archive]];
+    if (inv.status === "draft")
+      return [[edit, sendNowItem], docs, [archive], [deleteDraftItem]];
     if (inv.status === "upcoming") return [[edit, sendNowItem], docs, [cancel]];
     if (inv.status === "due" || inv.status === "overdue") {
       const workflow = [
@@ -1478,6 +1508,38 @@ export function InvoicesPanel({
               onClick={() => cancelInvoice(confirming.inv)}
             >
               Confirm
+            </Button>
+          </div>
+        </BillingDialog>
+      ) : null}
+
+      {/* Round 21 — permanently remove a draft (never sent, nothing kept). */}
+      {confirming?.action === "delete" ? (
+        <BillingDialog
+          title="Delete draft"
+          subtitle={`${confirming.inv.athleteName} · ${money2(
+            confirming.inv.amountCents,
+          )} · ${confirming.inv.plan}`}
+          onClose={() => setConfirming(null)}
+        >
+          <p className="text-sm">
+            Permanently delete this draft? It was never sent, so nothing goes
+            to the client — but the draft can&apos;t be recovered.
+          </p>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirming(null)}
+            >
+              Keep
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteDraft(confirming.inv)}
+            >
+              Delete draft
             </Button>
           </div>
         </BillingDialog>
@@ -2252,7 +2314,7 @@ function BillingHistoryDialog({
 
 /** Round 16 (Q9) — one line per status, opened from the ⓘ by the filters. */
 const STATUS_GUIDE: [string, string][] = [
-  ["Draft", "Created but not sent — edit freely, then Send now."],
+  ["Draft", "Created but not sent — edit freely, then Send now (or delete it)."],
   ["Scheduled", "Sends automatically on its date; editable until then."],
   ["Sent", "Delivered to the client and awaiting payment."],
   ["Outstanding", "Any unpaid balance — due, overdue, or partially paid."],
