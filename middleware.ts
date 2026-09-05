@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { DEMO_ROLE_COOKIE } from "@/lib/demo/personas";
 import {
   classifyHost,
+  isRedirectApexHost,
   platformApex,
   TENANT_HOST_HEADER,
   TENANT_MODE_HEADER,
@@ -65,9 +66,21 @@ async function passWithSessionRefresh(
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  const info = classifyHost(
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host"),
-  );
+  const rawHost =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+
+  // Secondary apex (e.g. powacoach.com / www.powacoach.com) → 308 to the
+  // primary apex, preserving path + query. Runs before classification so
+  // these domains never resolve as a tenant.
+  if (isRedirectApexHost(rawHost)) {
+    const url = request.nextUrl.clone();
+    url.host = platformApex();
+    url.protocol = "https:";
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
+  const info = classifyHost(rawHost);
 
   // Trusted tenant headers — always set, never pass-through.
   const requestHeaders = new Headers(request.headers);

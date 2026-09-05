@@ -35,6 +35,24 @@ function demoHosts(): string[] {
   return raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 }
 
+/** Secondary domains (and their www) that 308 to the primary apex — e.g.
+ *  powacoach.com → powa.co. Comma-separated env, apex domains only. */
+function redirectApexDomains(): string[] {
+  const raw = process.env.NEXT_PUBLIC_REDIRECT_APEX_DOMAINS ?? "powacoach.com";
+  return raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * True when the host is a secondary apex (or its www) that should be
+ * permanently redirected to the primary platform apex. Checked in the
+ * middleware BEFORE classification so these domains never resolve as tenants.
+ */
+export function isRedirectApexHost(rawHost: string | null | undefined): boolean {
+  const host = sanitizeHost(rawHost);
+  if (!host) return false;
+  return redirectApexDomains().some((d) => host === d || host === `www.${d}`);
+}
+
 /** Lowercase, strip the port, reject junk. Returns "" for invalid input. */
 export function sanitizeHost(raw: string | null | undefined): string {
   if (!raw) return "";
