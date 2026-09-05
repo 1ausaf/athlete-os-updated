@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { CheckCircle2, CreditCard, ShieldCheck } from "lucide-react";
 
@@ -7,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Pill, type PillTone } from "@/components/ui/pill";
 import { fmtDay, invoiceById, money2 } from "@/lib/demo/data";
+import { hstIncludedCents } from "@/lib/demo/invoice-pdf";
+import { qrMatrix, qrPathData } from "@/lib/demo/qr";
 import { getTenantBranding } from "@/lib/tenant/branding";
-import { requireTenantIfTenantHost } from "@/lib/tenant/context";
+import { getTenantHost, requireTenantIfTenantHost } from "@/lib/tenant/context";
 
 /**
  * Round 16 (Q5): the public "Share a Link" target — a hosted invoice view
@@ -44,6 +47,27 @@ export default async function PublicInvoicePage({
     inv.status === "paid" || inv.status === "refunded" || inv.status === "canceled"
       ? 0
       : inv.amountCents - received;
+
+  // R21.2 — QR for phone handoff: encodes this page's own absolute URL.
+  // Raw Host header (not the sanitized tenant host) so dev ports survive;
+  // charset-validated since it only feeds the QR, never trust decisions.
+  const rawHost = headers().get("x-forwarded-host") ?? headers().get("host") ?? "";
+  const host = /^[a-z0-9.-]{1,253}(:\d{1,5})?$/.test(rawHost)
+    ? rawHost
+    : getTenantHost();
+  // Dev servers are plain http: localhost names, bare IPs (LAN phone
+  // handoff), and anything with an explicit port. Production hosts
+  // (vercel.app, powa.co, custom domains) carry no port and get https.
+  const insecure =
+    host.startsWith("localhost") ||
+    host.startsWith("127.") ||
+    host.includes(".localhost") ||
+    /^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(host) ||
+    /:\d+$/.test(host);
+  const qr =
+    owing > 0 && host
+      ? qrMatrix(`${insecure ? "http" : "https"}://${host}/invoice/${inv.id}`)
+      : null;
 
   return (
     <main className="flex min-h-screen items-start justify-center bg-background px-4 py-10">
@@ -88,6 +112,13 @@ export default async function PublicInvoicePage({
                 <dd className="tnum text-lg font-bold">
                   {money2(inv.amountCents)}
                 </dd>
+                {/* LPS is HST-registered; tenant tax handling arrives with a
+                    branding-level tax field — never assume Ontario HST. */}
+                {!branding.isTenantHost ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Includes {money2(hstIncludedCents(inv.amountCents))} HST
+                  </p>
+                ) : null}
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -104,10 +135,38 @@ export default async function PublicInvoicePage({
             ) : null}
 
             {owing > 0 ? (
-              <Button variant="brand" className="w-full">
-                <CreditCard className="h-4 w-4" aria-hidden />
-                Pay {money2(owing)} online
-              </Button>
+              <div className="flex flex-col items-center gap-3">
+                <Button variant="brand" className="w-full">
+                  <CreditCard className="h-4 w-4" aria-hidden />
+                  Pay {money2(owing)} online
+                </Button>
+                {qr ? (
+                  <div className="flex items-center gap-3">
+                    <svg
+                      width={72}
+                      height={72}
+                      viewBox={`-4 -4 ${qr.length + 8} ${qr.length + 8}`}
+                      shapeRendering="crispEdges"
+                      className="rounded-md border border-border"
+                      aria-label="QR code linking to this invoice"
+                      role="img"
+                    >
+                      <rect
+                        x={-4}
+                        y={-4}
+                        width={qr.length + 8}
+                        height={qr.length + 8}
+                        fill="#fff"
+                      />
+                      <path d={qrPathData(qr)} fill="#111" />
+                    </svg>
+                    <p className="text-xs text-muted-foreground">
+                      Viewing on a computer? Scan with your phone camera to pay
+                      from your phone.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <p className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-3 text-sm font-medium">
                 <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
@@ -124,7 +183,7 @@ export default async function PublicInvoicePage({
               ) : (
                 <>
                   Prefer e-transfer, cash or cheque? Send e-transfers to
-                  billing@lpsathletic.com, or settle at the front desk — the
+                  accounts@lpsathletic.com, or settle at the front desk — the
                   staff will mark this invoice paid.
                 </>
               )}

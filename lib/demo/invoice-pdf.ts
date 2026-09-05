@@ -2,12 +2,19 @@
  * Round 21: full letterhead invoice PDF, modeled on the club's real Square
  * invoice — logo tile, business block, brand rule, plan-name title, payment
  * note, Customer/Invoice/Payment columns, itemized table, totals and a
- * pay-online footer. Still zero libraries: a hand-built single-page Letter
- * PDF with Helvetica metrics for wrapping/right-alignment and the wolf mark
- * drawn as vector path operators.
+ * pay-online footer (R21.2: with a scannable QR code and an HST-included
+ * line, like the real one). Still zero libraries: a hand-built single-page
+ * Letter PDF with Helvetica metrics for wrapping/right-alignment, the wolf
+ * mark drawn as vector path operators, and the QR from lib/demo/qr.
  */
 
 import { athleteProfileById, money2, type Invoice } from "@/lib/demo/data";
+import { qrMatrix } from "@/lib/demo/qr";
+
+/** Ontario HST portion of a tax-inclusive amount (13/113 of the total). */
+export function hstIncludedCents(amountCents: number): number {
+  return Math.round((amountCents * 13) / 113);
+}
 
 export interface InvoicePdfBrand {
   name: string;
@@ -219,6 +226,22 @@ function monogramTile(pdf: Pdf, x: number, yTop: number, size: number, letter: s
   });
 }
 
+/** QR code as filled rects (horizontal runs merged); page white = quiet zone. */
+function drawQr(pdf: Pdf, x: number, yTop: number, size: number, mat: boolean[][]): void {
+  const n = mat.length;
+  const m = size / n;
+  for (let r = 0; r < n; r++) {
+    const row = mat[r]!;
+    for (let c = 0; c < n; c++) {
+      if (!row[c]) continue;
+      let run = 1;
+      while (c + run < n && row[c + run]) run++;
+      pdf.rect(x + c * m, yTop + r * m, run * m + 0.05, m + 0.05, BLACK);
+      c += run - 1;
+    }
+  }
+}
+
 function wrap(text: string, maxWidth: number, size: number, bold = false): string[] {
   const words = fold(text).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -322,7 +345,7 @@ export function invoicePdfBlob(inv: Invoice, opts: InvoicePdfOptions = {}): Blob
     note =
       `This is an invoice for ${first}'s membership plan. You may use the secure link in this invoice to pay by credit card.` +
       (brand.emtEmail
-        ? ` Or if you prefer an Email Money Transfer (EMT), please send it to ${brand.emtEmail} and include the tax in your total amount.`
+        ? ` Or if you prefer an Email Money Transfer (EMT), please send it to ${brand.emtEmail} - HST is already included in the total.`
         : "") +
       " Thank you for your business!";
   }
@@ -395,12 +418,27 @@ export function invoicePdfBlob(inv: Invoice, opts: InvoicePdfOptions = {}): Blob
 
   /* Totals */
   let sy = tY + 82;
-  const totalRow = (label: string, value: string, opts2: { bold?: boolean; size?: number } = {}) => {
-    pdf.text(L, sy, label, { size: opts2.size ?? 9.5, bold: opts2.bold });
-    pdf.text(R, sy, value, { size: opts2.size ?? 9.5, bold: opts2.bold, align: "right" });
+  const totalRow = (
+    label: string,
+    value: string,
+    opts2: { bold?: boolean; size?: number; color?: Rgb } = {},
+  ) => {
+    pdf.text(L, sy, label, { size: opts2.size ?? 9.5, bold: opts2.bold, color: opts2.color });
+    pdf.text(R, sy, value, {
+      size: opts2.size ?? 9.5,
+      bold: opts2.bold,
+      color: opts2.color,
+      align: "right",
+    });
     sy += (opts2.size ?? 9.5) + 6;
   };
   totalRow("Subtotal", money2(inv.amountCents));
+  // R21.2 — prices are tax-inclusive; surface the HST portion (13/113).
+  if (brand.taxLine) {
+    totalRow("HST 13% (included)", money2(hstIncludedCents(inv.amountCents)), {
+      color: GREY,
+    });
+  }
   if (received > 0) totalRow("Received so far", `-${money2(received)}`);
   if (inv.refundedCents) totalRow("Refunded", money2(inv.refundedCents));
   sy += 6;
@@ -411,17 +449,33 @@ export function invoicePdfBlob(inv: Invoice, opts: InvoicePdfOptions = {}): Blob
   pdf.text(L, sy, totalLabel, { size: 15, bold: true });
   pdf.text(R, sy, money2(totalValue), { size: 15, bold: true, align: "right" });
 
-  /* Footer */
-  const fy = 726;
-  pdf.hline(L, R, fy - 14, RULE);
-  if (opts.payUrl && balance > 0) {
-    pdf.text(L, fy, "Pay online", { size: 9.5, bold: true });
-    pdf.text(L, fy + 14, `To pay your invoice go to ${opts.payUrl}`, { size: 8.5, color: GREY });
+  /* Footer — R21.2: QR code beside the pay link, like the real invoice. */
+  const qr = opts.payUrl && balance > 0 ? qrMatrix(opts.payUrl) : null;
+  if (qr && opts.payUrl) {
+    const qSize = 58;
+    const fTop = 694;
+    pdf.hline(L, R, fTop - 8, RULE);
+    drawQr(pdf, L, fTop, qSize, qr);
+    const tx = L + qSize + 14;
+    pdf.text(tx, fTop + 6, "Pay online", { size: 9.5, bold: true });
+    pdf.text(tx, fTop + 20, "Scan the code with your phone camera, or go to", {
+      size: 8.5,
+      color: GREY,
+    });
+    pdf.text(tx, fTop + 32, opts.payUrl, { size: 8.5, color: GREY });
+    pdf.text(R, fTop + 6, "Page 1 of 1", { size: 8.5, color: GREY, align: "right" });
   } else {
-    pdf.text(L, fy, brand.name, { size: 9.5, bold: true });
-    pdf.text(L, fy + 14, "Thank you for your business!", { size: 8.5, color: GREY });
+    const fy = 726;
+    pdf.hline(L, R, fy - 14, RULE);
+    if (opts.payUrl && balance > 0) {
+      pdf.text(L, fy, "Pay online", { size: 9.5, bold: true });
+      pdf.text(L, fy + 14, `To pay your invoice go to ${opts.payUrl}`, { size: 8.5, color: GREY });
+    } else {
+      pdf.text(L, fy, brand.name, { size: 9.5, bold: true });
+      pdf.text(L, fy + 14, "Thank you for your business!", { size: 8.5, color: GREY });
+    }
+    pdf.text(R, fy, "Page 1 of 1", { size: 8.5, color: GREY, align: "right" });
   }
-  pdf.text(R, fy, "Page 1 of 1", { size: 8.5, color: GREY, align: "right" });
 
   /* Assemble the file */
   const stream = pdf.stream();

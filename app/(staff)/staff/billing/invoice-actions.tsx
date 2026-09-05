@@ -60,7 +60,8 @@ import {
   type Invoice,
   type RecurringSeries,
 } from "@/lib/demo/data";
-import { invoicePdfBlob } from "@/lib/demo/invoice-pdf";
+import { hstIncludedCents, invoicePdfBlob } from "@/lib/demo/invoice-pdf";
+import { qrSvg } from "@/lib/demo/qr";
 import { useTenant } from "@/components/tenant/tenant-provider";
 import { trainingGroups } from "@/lib/demo/training";
 
@@ -293,7 +294,7 @@ function printableInvoiceHtml(
       ? `This invoice for ${first}'s membership plan has been settled${inv.paidMethod ? ` via ${escHtml(inv.paidMethod)}` : ""}. Thank you for your business!`
       : inv.status === "canceled"
         ? `This invoice for ${first}'s membership plan was canceled — no payment is required.`
-        : `This is an invoice for ${first}'s membership plan. You may use the secure link in this invoice to pay by credit card.${brand.emtEmail ? ` Or if you prefer an Email Money Transfer (EMT), please send it to ${escHtml(brand.emtEmail)} and include the tax in your total amount.` : ""} Thank you for your business!`;
+        : `This is an invoice for ${first}'s membership plan. You may use the secure link in this invoice to pay by credit card.${brand.emtEmail ? ` Or if you prefer an Email Money Transfer (EMT), please send it to ${escHtml(brand.emtEmail)} — HST is already included in the total.` : ""} Thank you for your business!`;
 
   const tile = brand.wolf
     ? `<span class="tile">${WOLF_TILE_SVG}</span>`
@@ -319,6 +320,10 @@ function printableInvoiceHtml(
       : `Due ${escHtml(fmtFullDay(inv.dueDate))}<br>${escHtml(money2(balance))}`;
 
   const extraTotals =
+    // R21.2 — prices are tax-inclusive; surface the HST portion (13/113).
+    (brand.taxLine
+      ? `<tr class="tot"><td colspan="3" class="muted">HST 13% (included)</td><td class="num muted">${escHtml(money2(hstIncludedCents(inv.amountCents)))}</td></tr>`
+      : "") +
     (received > 0
       ? `<tr class="tot"><td colspan="3">Received so far</td><td class="num">-${escHtml(money2(received))}</td></tr>`
       : "") +
@@ -330,6 +335,8 @@ function printableInvoiceHtml(
     typeof window !== "undefined"
       ? `${window.location.origin}/invoice/${inv.id}`
       : `/invoice/${inv.id}`;
+  // Empty when the URL doesn't fit a v5 QR — degrade to text like the PDF.
+  const payQr = balance > 0 ? qrSvg(shareUrl, 84) : "";
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Invoice ${escHtml(inv.id.toUpperCase())} — ${escHtml(brand.name)}</title>
@@ -359,7 +366,12 @@ function printableInvoiceHtml(
   tr.item td{border-bottom:1px solid #e4e6eb}
   tr.tot td{padding:5px 6px}
   .grand td{border-top:1px solid #e4e6eb;font-size:18px;font-weight:700;padding-top:14px}
-  .foot{display:flex;justify-content:space-between;color:#667085;font-size:11px;margin-top:44px;border-top:1px solid #e4e6eb;padding-top:12px}
+  .muted{color:#98a2b3}
+  .foot{display:flex;justify-content:space-between;align-items:flex-start;color:#667085;font-size:11px;margin-top:44px;border-top:1px solid #e4e6eb;padding-top:12px}
+  .pay{display:flex;gap:12px;align-items:flex-start}
+  .pay svg{flex:none;border:1px solid #e4e6eb;border-radius:6px}
+  .pay b{color:#16181d;font-size:12px}
+  .pay div{margin-top:3px;line-height:1.5}
 </style></head>
 <body>
   <div class="head">
@@ -389,7 +401,13 @@ function printableInvoiceHtml(
     <tr class="grand"><td colspan="3">${inv.status === "paid" ? "Total Paid" : "Total Due"}</td><td class="num">${escHtml(money2(inv.status === "paid" ? inv.amountCents : balance))}</td></tr>
   </table>
   <div class="foot">
-    <span>${balance > 0 ? `<b>Pay online</b> — ${escHtml(shareUrl)}` : "Thank you for your business!"}</span>
+    ${
+      balance > 0
+        ? payQr
+          ? `<span class="pay">${payQr}<span><b>Pay online</b><div>Scan the code with your phone camera,<br>or go to ${escHtml(shareUrl)}</div></span></span>`
+          : `<span><b>Pay online</b> — ${escHtml(shareUrl)}</span>`
+        : `<span>Thank you for your business!</span>`
+    }
     <span>Page 1 of 1</span>
   </div>
   <script>window.onload = function () { window.print(); };</script>
