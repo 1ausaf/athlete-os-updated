@@ -17,6 +17,11 @@ import {
 } from "@/lib/tenant/branding";
 import { requireTenantIfTenantHost } from "@/lib/tenant/context";
 
+// Per-request tenant resolution (x-powa-host) — never statically prerender, or
+// a hostless build render bakes a "workspace not found" 404 into the Full Route
+// Cache. See app/(auth)/layout.tsx for the full note.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   return tenantMetadata();
 }

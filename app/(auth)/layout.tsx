@@ -13,6 +13,13 @@ import {
 } from "@/lib/tenant/branding";
 import { requireTenantIfTenantHost } from "@/lib/tenant/context";
 
+// Tenant identity is resolved per-request from the trusted x-powa-host header
+// (lib/tenant/context). This route must never be statically prerendered: a
+// build-time render has no request host, so tenant resolution returns null and
+// requireTenantIfTenantHost() throws notFound() — which Next would otherwise
+// freeze into the Full Route Cache and serve as a permanent 404 on every host.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   return tenantMetadata();
 }
