@@ -77,8 +77,15 @@ async function fetchTenantByHost(host: string): Promise<ResolvedTenant | null> {
   };
 }
 
+// Cache-key version. Vercel's Data Cache persists across deployments, so a
+// null cached under a host key (e.g. from a build-time render before the
+// domain's DB row was matchable) would survive redeploys and pin that host to
+// a permanent 404. Bump this to abandon every prior entry and force a fresh
+// resolve. (force-dynamic on the tenant layouts stops builds re-poisoning it.)
+const CACHE_VERSION = "v2";
+
 const cachedFetch = (host: string) =>
-  unstable_cache(() => fetchTenantByHost(host), ["tenant-host", host], {
+  unstable_cache(() => fetchTenantByHost(host), ["tenant-host", CACHE_VERSION, host], {
     tags: [`tenant:${host}`],
     revalidate: 300,
   })();
